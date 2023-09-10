@@ -1,0 +1,16 @@
+**/.#*
+**/*~
+**/*.kate-swp
+**/*.o
+**/*.hi
+**/*.o_dyn
+**/.directory
+**/*.drv
+/dist
+/dist-newstyle
+/result
+/tmp
+/.envrc
+/public/**
+/node_modules
+/.cache/**

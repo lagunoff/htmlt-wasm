@@ -1,0 +1,6 @@
+CWD=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
+CABAL_CARGS=$($CWD/cabal-cargs.hs)
+OUTPUT_DIR=$CWD/../dist/build/ghc-wasm-bridge/ghc-tmp/
+
+echo "Calling GHC"
+wasm32-wasi-ghc $CABAL_CARGS -j -outputdir=$OUTPUT_DIR -O0 $@

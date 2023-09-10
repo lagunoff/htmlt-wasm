@@ -1,0 +1,3 @@
+import Protocol
+
+main = return ()
