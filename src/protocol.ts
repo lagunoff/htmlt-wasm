@@ -1,17 +1,17 @@
-type HaskellPointer = number;
+export  type HaskellPointer = number;
 
-type JSValueRef = number;
+export type JSValueRef = number;
 
-type JSFunctionName = string;
+export type JSFunctionName = string;
 
-type HaskellExports = {
+export type HaskellExports = {
   hs_malloc: (size: number) => HaskellPointer;
   hs_free: (ptr: HaskellPointer) => void;
   app: (input: HaskellPointer) => HaskellPointer;
   memory: WebAssembly.Memory;
 };
 
-type HaskellIstance = {
+export type HaskellIstance = {
   exports: HaskellExports;
 };
 
@@ -71,6 +71,7 @@ export type Decoder<A> =
   | RecordDecoder<A>
   | OneOfDecoder<A>
   | RecursiveDecoder<A>
+  | TupleDecoder<A>
 ;
 
 export class Int8Decoder<A> extends DecoderBase<A> {
@@ -101,7 +102,11 @@ export class RecursiveDecoder<A> extends DecoderBase<A> {
     public _self: Decoder<any>,
   ) { super(); }
 }
-
+export class TupleDecoder<A> extends DecoderBase<A> {
+  constructor(
+    readonly _tuple: Decoder<any>[],
+  ) { super(); }
+}
 export function computeSize<A>(
   decoder: Decoder<A>,
   value: A
@@ -142,6 +147,10 @@ export function computeSize<A>(
   }
   if (decoder instanceof RecursiveDecoder) {
     return computeSize(decoder._self, value);
+  }
+  if (decoder instanceof TupleDecoder) {
+    const tupleVal = value as any as any[];
+    return decoder._tuple.reduce((acc, v, i) => acc + computeSize(v, tupleVal[i]), 0);
   }
   return absurd(decoder);
 }
@@ -231,6 +240,15 @@ export function runDecoder<A>(
   }
   if (decoder instanceof RecursiveDecoder) {
     return runDecoder(decoder._self, mem, ptr);
+  }
+  if (decoder instanceof TupleDecoder) {
+    let jx = ptr;
+    const resultTup = decoder._tuple.map(dec => {
+      const [val, newIx] = runDecoder(dec, mem, jx);
+      jx = newIx;
+      return val;
+    });
+    return [resultTup as any as A, jx];
   }
   return absurd(decoder);
 }
@@ -323,6 +341,14 @@ export function runEncoder<A>(
   if (decoder instanceof RecursiveDecoder) {
     return runEncoder(decoder._self, mem, ptr, value);
   }
+  if (decoder instanceof TupleDecoder) {
+    const tupleVal = value as any[];
+    let jx = ptr;
+    decoder._tuple.forEach((dec, i) => {
+      jx = runEncoder(dec, mem, jx, tupleVal[i]);
+    });
+    return jx;
+  }
   return absurd(decoder);
 }
 
@@ -333,6 +359,12 @@ export function evalExpr(exp: Expr): unknown {
     }
     case ExprTag.Str: {
       return exp[0];
+    }
+    case ExprTag.Arr: {
+      return exp[0].map(evalExpr);
+    }
+    case ExprTag.Obj: {
+      return Object.fromEntries(exp[0].map(([k, e]) => [k, evalExpr(e)]));
     }
     case ExprTag.Dot: {
       const lhs = evalExpr(exp[0]) as any;
@@ -410,6 +442,10 @@ export function discriminate<Descriptor extends Record<string|number, Decoder<an
   return new OneOfDecoder(record);
 }
 
+export function tuple<Args extends Decoder<unknown>[]>(...args: Args): TupleDecoder<{[k in keyof Args]: Args[k]['_A'] }>  {
+  return new TupleDecoder(args);
+}
+
 export function recursive<A>(f: (self: Decoder<any>) => Decoder<A>): Decoder<A> {
   const self = new RecursiveDecoder<A>(undefined as any);
   const result = f(self);
@@ -420,6 +456,8 @@ export function recursive<A>(f: (self: Decoder<any>) => Decoder<A>): Decoder<A> 
 export enum ExprTag {
   Num,
   Str,
+  Arr,
+  Obj,
   Dot,
   Add,
   Subtract,
@@ -434,6 +472,8 @@ export enum ExprTag {
 export type Expr =
   | { tag: ExprTag.Num, 0: number }
   | { tag: ExprTag.Str, 0: string }
+  | { tag: ExprTag.Arr, 0: Expr[] }
+  | { tag: ExprTag.Obj, 0: [string, Expr][] }
   | { tag: ExprTag.Dot, 0: Expr, 1: string }
   | { tag: ExprTag.Add, 0: Expr, 1: Expr }
   | { tag: ExprTag.Subtract, 0: Expr, 1: Expr  }
@@ -448,6 +488,8 @@ export type Expr =
 export const expr = recursive<Expr>(self => discriminate({
   [ExprTag.Num]: record({ 0: int64 }),
   [ExprTag.Str]: record({ 0: string }),
+  [ExprTag.Arr]: record({ 0: array(self) }),
+  [ExprTag.Obj]: record({ 0: array(tuple(string, self)) }),
   [ExprTag.Dot]: record({ 0: self, 1: string }),
   [ExprTag.Add]: record({ 0: self, 1: self }),
   [ExprTag.Subtract]: record({ 0: self, 1: self }),
@@ -462,21 +504,25 @@ export const expr = recursive<Expr>(self => discriminate({
 export enum UpCommandTag {
   Assign,
   Eval,
+  Free,
+  Exit,
 }
 
 export const upCmd = discriminate({
   [UpCommandTag.Assign]: record({ expr: expr, result: int64 }),
   [UpCommandTag.Eval]: record({ expr: expr }),
+  [UpCommandTag.Free]: record({ ref: int64 }),
+  [UpCommandTag.Exit]: record({ }),
 });
 
 export enum DownCmdTag {
   Start,
-  Completed,
+  Return,
 }
 
 export const downCmd = discriminate({
   [DownCmdTag.Start]: record({}),
-  [DownCmdTag.Completed]: record({}),
+  [DownCmdTag.Return]: record({ 0: expr }),
 });
 
 export type UpCmd = typeof upCmd['_A'];
@@ -491,7 +537,14 @@ export function haskellApp(inst: HaskellIstance, down: DownCmd = { tag: DownCmdT
       return;
     }
     case UpCommandTag.Eval: {
-      console.log('result', evalExpr(upCmd.expr));
+      const result = evalExpr(upCmd.expr);
+      console.log('result', result);
+      return haskellApp(inst, { tag: DownCmdTag.Return, 0: { tag: ExprTag.Str, 0: "" } });
+    }
+    case UpCommandTag.Free: {
+      return;
+    }
+    case UpCommandTag.Exit: {
       return;
     }
   }
@@ -521,7 +574,13 @@ function interactWithHaskell(inst: HaskellIstance, down: DownCmd): UpCmd {
 // console.log(upCmd.decode(upCmd.encode(t02)));
 // console.log(downCmd.encode({ tag: DownCmdTag.Start }));
 // console.log(downCmd.decode(downCmd.encode({ tag: DownCmdTag.Start })));
-const t_01: UpCmd = { tag: UpCommandTag.Eval, expr: { tag: ExprTag.Apply, 0: { tag: ExprTag.Var, 0: "log" }, 1: [{ tag: ExprTag.Str, 0: "Fuck, this is really working!"}]} }
+const t_01: UpCmd = {
+  tag: UpCommandTag.Eval,
+  expr: { tag: ExprTag.Obj, 0: [
+    ["0", { tag: ExprTag.Str, 0: "0"}],
+    ["1", { tag: ExprTag.Str, 0: "1"}],
+  ]}
+};
 const t_01_0 = upCmd.encode(t_01);
 console.log(t_01_0);
 console.log(upCmd.decode(t_01_0));

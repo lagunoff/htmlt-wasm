@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+
+CWD=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
+OUTPUT_DIR=$CWD/../dist/build/ghc-wasm-bridge/ghc-tmp/
+
+ghc --interactive -isrc -Wall -Wno-missing-signatures -Wno-name-shadowing -Wno-type-defaults -funbox-strict-fields -j -outputdir=$OUTPUT_DIR $@

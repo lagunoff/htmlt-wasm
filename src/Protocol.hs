@@ -1,58 +1,51 @@
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE UnboxedTuples #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StrictData #-}
+{-# LANGUAGE TypeApplications #-}
 module Protocol where
-import Control.Concurrent
+
+import Data.Binary (Binary)
+import Data.Binary qualified  as Binary
 import Data.ByteString as BS
-import Data.ByteString.Unsafe as BS
+import Data.Int
 import Data.String
 import Data.Word
 import Foreign.Marshal.Utils
+import Foreign.Ptr
 import Foreign.Storable
 import GHC.Generics
-import GHC.Prim
-import System.Exit
-import System.IO
-import System.IO.Unsafe
 import Text.Printf
 import qualified Data.ByteString.Char8 as Char8
-import qualified Data.ByteString.Internal as BSI
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Unsafe as BSU
 import qualified Foreign.Marshal.Alloc as Alloc
 
-import Data.Binary (Binary)
-import qualified Data.Binary as Binary
-import Data.Int
-
-import Foreign.C.Types
-import Foreign.C.String
-import Foreign.Ptr
-
-
 data UpCmd
   = Assign { expr :: Expr, result :: JSValueRef }
   | Eval { expr :: Expr }
+  | Free { ref :: JSValueRef }
+  | Exit
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
 data DownCmd
   = Start
-  | Completed
+  | Return Expr
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
 data Expr
-  = Num Double
+  = Num Int64
   | Str ByteString
+  | Arr [Expr]
+  | Obj [(ByteString, Expr)]
   | Dot Expr ByteString
   | Add Expr Expr
   | Subtract Expr Expr
@@ -70,26 +63,6 @@ newtype JSFunctionName = JSFunctionName { unJSFunctionName :: ByteString }
 
 newtype JSValueRef = JSValueRef { unJSValueRef :: Int64 }
   deriving newtype (Show, Num, Binary)
-
-foreign export ccall app :: Ptr Word8 -> IO (Ptr Word8)
-
-app :: Ptr Word8 -> IO (Ptr Word8)
-app p = do
-  downCmd <- Binary.decode . BSL.fromStrict <$> loadByteString p
-  print @DownCmd downCmd
---  storeByteString (BSL.toStrict $ Binary.encode (Eval (Call (Dot (Var "console") "log") [Str "'Fuck, this is really working!'"])) )
-  case downCmd of
-    Start -> do
-      storeByteString $ BSL.toStrict $ Binary.encode $ Eval $
-        Call (Var "console") "log" [Str "It's started!"]
-    _ -> do
-      storeByteString $ BSL.toStrict $ Binary.encode $ Eval $
-        Call (Var "document") "createElement" [Str "div"]
-
-foreign export ccall hs_malloc :: Int -> IO (Ptr a)
-hs_malloc = Alloc.callocBytes
-foreign export ccall hs_free :: Ptr a -> IO ()
-hs_free = Alloc.free
 
 storeByteString :: ByteString -> IO (Ptr a)
 storeByteString bs = do
@@ -119,4 +92,8 @@ byteStringToHex :: ByteString -> ByteString
 byteStringToHex =
   Char8.intercalate " " . fmap (\c -> Char8.pack $ printf "%d" c) . Char8.unpack
 
-t_01 = byteStringToHex . BSL.toStrict . Binary.encode $ Eval (Apply (Var "log") [Str "Fuck, this is really working!"])
+byteStringToHex1 :: ByteString -> [ByteString]
+byteStringToHex1 =
+  fmap (\c -> Char8.pack $ printf "%d" c) . Char8.unpack
+
+t_01 = byteStringToHex1 . BSL.toStrict . Binary.encode $ Eval $ Obj [("0", Num 0), ("1", Num 1)]

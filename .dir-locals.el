@@ -10,10 +10,6 @@
            (file-name-directory
              (let ((d (dir-locals-find-file ".")))
                (if (stringp d) d (car d))))
-         haskell-process-path-ghci (concat nix-bins/proj-dir "bin/ghci-emacs")
-         haskell-hoogle-server-command (lambda (port)
-           (list (concat nix-bins/proj-dir "bin/hoogle") "server"
-             "--local"
-             "-p" (number-to-string port))))
-     )
+         haskell-process-path-ghci (concat nix-bins/proj-dir "bin/ghci")
+     ))
    ))
