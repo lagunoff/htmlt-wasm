@@ -10,6 +10,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 import Control.Monad.Reader
 import Data.IORef
 import Data.Word
@@ -31,29 +32,31 @@ continuationsRef = unsafePerformIO $ newIORef []
 app :: Ptr Word8 -> IO (Ptr Word8)
 app p = do
   downCmd <- Binary.decode . BSL.fromStrict <$> loadByteString p
-  case downCmd of
-    Start -> do
-      result <- runTillInterruption jsmContext jsmMain
-      case result of
-        Left upCmd -> do
-          storeByteString $ BSL.toStrict $ Binary.encode upCmd
-        Right () -> do
-          storeByteString $ BSL.toStrict $ Binary.encode Exit
-    Return exp -> do
-      tipCont <- atomicModifyIORef' continuationsRef \case
-        [] -> ([], Nothing)
-        x:xs -> (xs, Just x)
-      case tipCont of
-        Nothing -> storeByteString $ BSL.toStrict $ Binary.encode Exit
-        Just c -> do
-          result <- runTillInterruption jsmContext (JSM (ReaderT (const (c exp))))
-          case result of
-            Left upCmd -> do
-              storeByteString $ BSL.toStrict $ Binary.encode upCmd
-            Right _ -> do
-              storeByteString $ BSL.toStrict $ Binary.encode Exit
+  upCmd <- handleCommand downCmd
+  storeByteString $ BSL.toStrict $ Binary.encode upCmd
+
+handleCommand :: DownCmd -> IO UpCmd
+handleCommand = \case
+  Start -> do
+    result <- runTillInterruption jsmContext jsmMain
+    case result of
+      Left upCmd -> return upCmd
+      Right () -> return Exit
+  Return exp -> do
+    tipCont <- atomicModifyIORef' continuationsRef \case
+      [] -> ([], Nothing)
+      x:xs -> (xs, Just x)
+    case tipCont of
+      Nothing ->
+        return $ UncaughtException "Protocol violation: continuation is missing"
+      Just c -> do
+        result <- runTillInterruption jsmContext (JSM (ReaderT (const (c exp))))
+        case result of
+          Left upCmd -> return upCmd
+          Right _ -> return Exit
   where
-    jsmContext = JSM.Context continuationsRef
+    jsmContext = JSM.Context continuationsRef (DomBuilderId 0)
+
 
 foreign export ccall hs_malloc :: Int -> IO (Ptr a)
 hs_malloc = Alloc.callocBytes
@@ -64,9 +67,8 @@ main = return ()
 
 jsmMain :: JSM ()
 jsmMain = do
-  liftCMD (Eval (Call (Var "console") "log" [Obj [("Fuck!!", Str "Yeah!!")]]))
-  liftCMD (Eval createH1)
+  domBuilderId <- asks (.dom_builder_id)
+  el "div" [("className", "root-div")] do
+    el "h1" [("className", "root-h1")] (pure ())
+    el "button" [("className", "root-button")] (text "Click me!")
   return ()
-  where
-    createH1 = Call (Var "document" `Dot` "body") "appendChild"
-      [Call (Var "document") "createElement" [Str "H1"]]

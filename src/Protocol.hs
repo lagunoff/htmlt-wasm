@@ -28,9 +28,12 @@ import qualified Data.ByteString.Unsafe as BSU
 import qualified Foreign.Marshal.Alloc as Alloc
 
 data UpCmd
-  = Assign { expr :: Expr, result :: JSValueRef }
-  | Eval { expr :: Expr }
-  | Free { ref :: JSValueRef }
+  = Eval { expr :: Expr }
+  | NewScope
+  | FreeScope { ref :: ScopeId }
+  | NewDomBuilder
+  | FinalizeDomBuilder DomBuilderId
+  | UncaughtException ByteString
   | Exit
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
@@ -47,6 +50,7 @@ data Expr
   | Arr [Expr]
   | Obj [(ByteString, Expr)]
   | Dot Expr ByteString
+  | Assign Expr ByteString Expr
   | Add Expr Expr
   | Subtract Expr Expr
   | Multiply Expr Expr
@@ -54,14 +58,25 @@ data Expr
   | Var ByteString
   | Apply Expr [Expr]
   | Call Expr ByteString [Expr]
-  | Ref JSValueRef
+  | Ref ScopeId VarId
+  | Let ScopeId VarId Expr Expr
+  | Seq Expr Expr
+  | El DomBuilderId ByteString [(ByteString, Expr)]
+  | Text DomBuilderId ByteString
+  | PopDomBuilder DomBuilderId
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
 newtype JSFunctionName = JSFunctionName { unJSFunctionName :: ByteString }
   deriving newtype (Show, IsString, Binary)
 
-newtype JSValueRef = JSValueRef { unJSValueRef :: Int64 }
+newtype ScopeId = ScopeId { unScopeId :: Int64 }
+  deriving newtype (Show, Num, Binary)
+
+newtype VarId = VarId { unVarId :: Int64 }
+  deriving newtype (Show, Num, Binary)
+
+newtype DomBuilderId = DomBuilderId { unDomBuilderId :: Int64 }
   deriving newtype (Show, Num, Binary)
 
 storeByteString :: ByteString -> IO (Ptr a)
@@ -86,14 +101,3 @@ storeBinary =
 loadBinary :: Binary a => Ptr a -> IO a
 loadBinary =
   fmap (Binary.decode . BSL.fromStrict) . loadByteString
-
--- Function to convert a ByteString to its hexadecimal representation
-byteStringToHex :: ByteString -> ByteString
-byteStringToHex =
-  Char8.intercalate " " . fmap (\c -> Char8.pack $ printf "%d" c) . Char8.unpack
-
-byteStringToHex1 :: ByteString -> [ByteString]
-byteStringToHex1 =
-  fmap (\c -> Char8.pack $ printf "%d" c) . Char8.unpack
-
-t_01 = byteStringToHex1 . BSL.toStrict . Binary.encode $ Eval $ Obj [("0", Num 0), ("1", Num 1)]

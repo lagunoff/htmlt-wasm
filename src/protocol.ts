@@ -1,6 +1,12 @@
+import * as html from './html';
+
 export  type HaskellPointer = number;
 
-export type JSValueRef = number;
+export type JSValueRef = [number, number];
+
+export type Scope = unknown[];
+
+export type Context = Map<number, Scope>;
 
 export type JSFunctionName = string;
 
@@ -370,6 +376,12 @@ export function evalExpr(exp: Expr): unknown {
       const lhs = evalExpr(exp[0]) as any;
       return lhs[exp[1]];
     }
+    case ExprTag.Assign: {
+      const rhs = evalExpr(exp[2]);
+      const obj = evalExpr(exp[0]) as any;
+      obj[exp[1]] = rhs;
+      return rhs;
+    }
     case ExprTag.Add: {
       const lhs = evalExpr(exp[0]) as number;
       const rhs = evalExpr(exp[1]) as number;
@@ -404,9 +416,42 @@ export function evalExpr(exp: Expr): unknown {
       return fn.apply(lhs, exp[2].map(evalExpr));
     }
     case ExprTag.Ref: {
-      throw new Error('unimplemented');
+      return context.get(exp[0])![exp[1]];
+    }
+    case ExprTag.Let: {
+      context.get(exp.scopeId)![exp.varId] = evalExpr(exp.rhs);
+      return evalExpr(exp.body);
+    }
+    case ExprTag.Seq: {
+      evalExpr(exp.first);
+      return evalExpr(exp.second);
+    }
+    case ExprTag.El: {
+      const builderStack = context.get(exp.builderId)! as Element[];
+      const attrs = Object.fromEntries(exp.attrs.map(([k, e]) => [k, evalExpr(e)]));
+      const stackTip = builderStack[builderStack.length - 1];
+      const newElm = html.el(exp.tagName, attrs, {});
+      builderStack.push(newElm);
+      if (stackTip) stackTip.appendChild(newElm);
+      return newElm;
+    }
+    case ExprTag.Text: {
+      const builderStack = context.get(exp.builderId)! as Element[];
+      const stackTip = builderStack[builderStack.length - 1];
+      const newTextNode = new Text(exp.contents);
+      if (stackTip) stackTip.appendChild(newTextNode);
+      return newTextNode;
+    }
+    case ExprTag.PopDomBuilder: {
+      const builderStack = context.get(exp.builderId)! as Element[];
+      const stackTip = builderStack.pop();
+      if (builderStack.length == 0) {
+        document.body.appendChild(stackTip as HTMLElement);
+      }
+      return stackTip;
     }
   }
+  absurd(exp);
 }
 
 // TODO: complete implementation
@@ -459,6 +504,7 @@ export enum ExprTag {
   Arr,
   Obj,
   Dot,
+  Assign,
   Add,
   Subtract,
   Multiply,
@@ -467,6 +513,11 @@ export enum ExprTag {
   Apply,
   Call,
   Ref,
+  Let,
+  Seq,
+  El,
+  Text,
+  PopDomBuilder,
 }
 
 export type Expr =
@@ -475,14 +526,20 @@ export type Expr =
   | { tag: ExprTag.Arr, 0: Expr[] }
   | { tag: ExprTag.Obj, 0: [string, Expr][] }
   | { tag: ExprTag.Dot, 0: Expr, 1: string }
+  | { tag: ExprTag.Assign, 0: Expr, 1: string, 2: Expr }
   | { tag: ExprTag.Add, 0: Expr, 1: Expr }
   | { tag: ExprTag.Subtract, 0: Expr, 1: Expr  }
   | { tag: ExprTag.Multiply, 0: Expr, 1: Expr  }
   | { tag: ExprTag.Divide, 0: Expr, 1: Expr  }
   | { tag: ExprTag.Var, 0: string }
   | { tag: ExprTag.Apply, 0: Expr, 1: Expr[] }
-  | { tag: ExprTag.Call, 0: Expr, 1: string, 2: Expr[] }
-  | { tag: ExprTag.Ref, 0: number }
+  | { tag: ExprTag.Call, 0: Expr, 1: JSFunctionName, 2: Expr[] }
+  | { tag: ExprTag.Ref, 0: number, 1: number }
+  | { tag: ExprTag.Let, scopeId: number, varId: number, rhs: Expr, body: Expr }
+  | { tag: ExprTag.Seq, first: Expr, second: Expr }
+  | { tag: ExprTag.El, builderId: number, tagName: string, attrs: [string, Expr][] }
+  | { tag: ExprTag.Text, builderId: number, contents: string }
+  | { tag: ExprTag.PopDomBuilder, builderId: number }
 ;
 
 export const expr = recursive<Expr>(self => discriminate({
@@ -491,6 +548,7 @@ export const expr = recursive<Expr>(self => discriminate({
   [ExprTag.Arr]: record({ 0: array(self) }),
   [ExprTag.Obj]: record({ 0: array(tuple(string, self)) }),
   [ExprTag.Dot]: record({ 0: self, 1: string }),
+  [ExprTag.Assign]: record({ 0: self, 1: string, 2: self }),
   [ExprTag.Add]: record({ 0: self, 1: self }),
   [ExprTag.Subtract]: record({ 0: self, 1: self }),
   [ExprTag.Multiply]: record({ 0: self, 1: self }),
@@ -498,20 +556,31 @@ export const expr = recursive<Expr>(self => discriminate({
   [ExprTag.Var]: record({ 0: string }),
   [ExprTag.Apply]: record({ 0: self, 1: array(self) }),
   [ExprTag.Call]: record({ 0: self, 1: string, 2: array(self) }),
-  [ExprTag.Ref]: record({ 0: int64 }),
+  [ExprTag.Ref]: record({ 0: int64, 1: int64 }),
+  [ExprTag.Let]: record({ scopeId: int64, varId: int64, rhs: self, body: self }),
+  [ExprTag.Seq]: record({ first: self, second: self }),
+  [ExprTag.El]: record({ builderId: int64, tagName: string, attrs: array(tuple(string, self)) }),
+  [ExprTag.Text]: record({ builderId: int64, contents: string }),
+  [ExprTag.PopDomBuilder]: record({ builderId: int64 }),
 }));
 
 export enum UpCommandTag {
-  Assign,
   Eval,
-  Free,
+  NewScope,
+  FreeScope,
+  NewDomBuilder,
+  FinalizeDomBuilder,
+  UncaughtException,
   Exit,
 }
 
 export const upCmd = discriminate({
-  [UpCommandTag.Assign]: record({ expr: expr, result: int64 }),
   [UpCommandTag.Eval]: record({ expr: expr }),
-  [UpCommandTag.Free]: record({ ref: int64 }),
+  [UpCommandTag.NewScope]: record({}),
+  [UpCommandTag.FreeScope]: record({ ref: int64 }),
+  [UpCommandTag.NewDomBuilder]: record({}),
+  [UpCommandTag.FinalizeDomBuilder]: record({ ref: int64 }),
+  [UpCommandTag.UncaughtException]: record({ 0: string }),
   [UpCommandTag.Exit]: record({ }),
 });
 
@@ -528,35 +597,63 @@ export const downCmd = discriminate({
 export type UpCmd = typeof upCmd['_A'];
 export type DownCmd = typeof downCmd['_A'];
 
+export const context: Context = new Map([[0, []]]);
+
 export function haskellApp(inst: HaskellIstance, down: DownCmd = { tag: DownCmdTag.Start }) {
+  // TODO: Replace recursion with a loop
   const upCmd = interactWithHaskell(inst, down);
-  console.log(upCmd);
+  // console.log(upCmd);
   switch (upCmd.tag) {
-    case UpCommandTag.Assign: {
-      console.log('result', evalExpr(upCmd.expr));
-      return;
-    }
     case UpCommandTag.Eval: {
       const result = evalExpr(upCmd.expr);
-      console.log('result', result);
-      return haskellApp(inst, { tag: DownCmdTag.Return, 0: { tag: ExprTag.Str, 0: "" } });
+      // console.log('result', result);
+      return haskellApp(inst, { tag: DownCmdTag.Return, 0: { tag: ExprTag.Num, 0: 0 } });
     }
-    case UpCommandTag.Free: {
+    case UpCommandTag.NewScope: {
+      const scopeId = lookupMininumFreeScope(context);
+      context.set(scopeId, []);
+      return haskellApp(inst, { tag: DownCmdTag.Return, 0: { tag: ExprTag.Num, 0: scopeId } });
+    }
+    case UpCommandTag.FreeScope: {
+      context.delete(upCmd.ref);
+      return haskellApp(inst, { tag: DownCmdTag.Return, 0: { tag: ExprTag.Num, 0: 0 } });
+    }
+    case UpCommandTag.NewDomBuilder: {
+      const scopeId = lookupMininumFreeScope(context);
+      context.set(scopeId, []);
+      return haskellApp(inst, { tag: DownCmdTag.Return, 0: { tag: ExprTag.Num, 0: scopeId } });
+    }
+    case UpCommandTag.FinalizeDomBuilder: {
+      const builder = context.get(upCmd.ref);
+      context.delete(upCmd.ref);
+      if (builder) {
+        const rootElm = builder[builder.length - 1] as HTMLElement;
+        document.body.appendChild(rootElm);
+      }
+      return haskellApp(inst, { tag: DownCmdTag.Return, 0: { tag: ExprTag.Num, 0: 0 } });
+    }
+    case UpCommandTag.UncaughtException: {
+      console.error(upCmd[0]);
       return;
     }
     case UpCommandTag.Exit: {
       return;
     }
   }
-  return absurd(upCmd);
+  absurd(upCmd);
 }
 
 function interactWithHaskell(inst: HaskellIstance, down: DownCmd): UpCmd {
   const downBuf = downCmd.encode(down);
   const downPtr = storeBuffer(inst, downBuf);
   const upBuf = loadBuffer(inst, inst.exports.app(downPtr));
-  console.log('received', upBuf);
   return upCmd.decode(upBuf);
+}
+
+function lookupMininumFreeScope(c: Context): number {
+  for(let i = 0;;i++) {
+    if (!c.has(i)) return i;
+  }
 }
 
 // const t01: Expr = {
@@ -574,13 +671,13 @@ function interactWithHaskell(inst: HaskellIstance, down: DownCmd): UpCmd {
 // console.log(upCmd.decode(upCmd.encode(t02)));
 // console.log(downCmd.encode({ tag: DownCmdTag.Start }));
 // console.log(downCmd.decode(downCmd.encode({ tag: DownCmdTag.Start })));
-const t_01: UpCmd = {
-  tag: UpCommandTag.Eval,
-  expr: { tag: ExprTag.Obj, 0: [
-    ["0", { tag: ExprTag.Str, 0: "0"}],
-    ["1", { tag: ExprTag.Str, 0: "1"}],
-  ]}
-};
-const t_01_0 = upCmd.encode(t_01);
-console.log(t_01_0);
-console.log(upCmd.decode(t_01_0));
+// const t_01: UpCmd = {
+//   tag: UpCommandTag.Eval,
+//   expr: { tag: ExprTag.Obj, 0: [
+//     ["0", { tag: ExprTag.Str, 0: "0"}],
+//     ["1", { tag: ExprTag.Str, 0: "1"}],
+//   ]}
+// };
+// const t_01_0 = upCmd.encode(t_01);
+// console.log(t_01_0);
+// console.log(upCmd.decode(t_01_0));
