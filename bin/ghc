@@ -1,5 +1,7 @@
-CWD=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
-CABAL_CARGS=$($CWD/cabal-cargs.hs)
-OUTPUT_DIR=$CWD/../dist/build/ghc-wasm-bridge/ghc-tmp/
+#!/usr/bin/env cached-nix-shell
+#!nix-shell ../default.nix -A shell.native -i sh
 
-wasm32-wasi-ghc $CABAL_CARGS -j -outputdir=$OUTPUT_DIR $@
+CWD=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
+OUTPUT_DIR=$CWD/../dist/ghc-tmp/
+
+ghc $CABAL_CARGS -j -outputdir=$OUTPUT_DIR $@

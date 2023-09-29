@@ -1,10 +1,11 @@
 #!/usr/bin/env runghc
 
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE DeriveGeneric           #-}
-{-# LANGUAGE LambdaCase              #-}
-{-# LANGUAGE NamedFieldPuns          #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE StrictData #-}
 
 -- TODO: Make sure existence of Wno-ambiguous-fields always correlates
 -- with following condition
@@ -32,6 +33,7 @@ import Distribution.Types.UnqualComponentName
 import Distribution.Version (Version, withinRange)
 import GHC.Generics (Generic)
 import System.Directory
+import System.Environment
 import System.Exit (exitFailure, exitSuccess)
 import System.FilePath.Posix
 import System.IO (hPutStrLn, stderr)
@@ -55,15 +57,28 @@ buildInfoSourceDirs = fmap getSymbolicPath . PD.hsSourceDirs
 buildInfoSourceDirs = PD.hsSourceDirs
 #endif
 
-main = do
-  spec <- runExceptT $ fromCabalFile "./ghc-wasm-bridge.cabal"
-  case spec of
-    Right spec_ -> do
-      putStr . L.intercalate " " . format . fromSpec $ spec_
-      exitSuccess
-    Left error -> do
-      hPutStrLn stderr ("cabal-cargs: " ++ error)
-      exitSuccess
+main = error $ unlines
+  [ "Usage: ghc ./cabal-cargs.hs -e \"printGhcArgs "
+  , "(FromCabalFile \"./mylibrary.cabal\" Nothing)"
+  ]
+
+data GhcArgsOptions
+  = FromCabalFile
+    { fcbf_cabal_file :: FilePath
+    , fcbf_sections :: Maybe [Section]
+    }
+  deriving (Show)
+
+printGhcArgs :: GhcArgsOptions -> IO ()
+printGhcArgs = \case
+  FromCabalFile {fcbf_cabal_file, fcbf_sections} -> do
+    espec <- runExceptT $ fromCabalFile fcbf_cabal_file
+    spec <- case espec of
+      Right spec -> return $ maybe spec (\s -> spec {sections = s}) fcbf_sections
+      Left e -> fail e
+    putStr . L.intercalate " " . (defaultFlags<>) . format . fromSpec $ spec
+  where
+    defaultFlags = ["-hide-all-packages"]
 
 data Spec = Spec
    { sections      :: [Section]              -- ^ the sections used for collecting the compiler args
@@ -100,12 +115,13 @@ data CondVars = CondVars
    } deriving (Show)
 
 fromDefaults :: GenericPackageDescription -> CondVars
-fromDefaults pkgDescrp = CondVars { flags           = flags
-                                  , os              = S.buildOS
-                                  , arch            = S.buildArch
-                                  , compilerFlavor  = buildCompilerFlavor
-                                  , compilerVersion = Nothing
-                                  }
+fromDefaults pkgDescrp = CondVars
+  { flags           = flags
+  , os              = S.buildOS
+  , arch            = S.buildArch
+  , compilerFlavor  = buildCompilerFlavor
+  , compilerVersion = Nothing
+  }
    where
       flags = HM.fromList $ map nameWithDflt (PD.genPackageFlags pkgDescrp)
 
@@ -115,19 +131,20 @@ fromDefaults pkgDescrp = CondVars { flags           = flags
 type FlagMap  = HM.Map String Bool
 
 -- | A section of the cabal file.
-data Section = Library
-             | Executable String
-             | TestSuite String
-             | Benchmark String
-             deriving (Show, Eq)
+data Section
+  = Library
+  | Executable String
+  | TestSuite String
+  | Benchmark String
+  deriving (Show, Eq)
 
 allSections :: GenericPackageDescription -> [Section]
-allSections pkgDescr =
-   concat [ maybe [] (const [Library]) (PD.condLibrary pkgDescr)
-          , map (Executable . unUnqualComponentName . fst) (PD.condExecutables pkgDescr)
-          , map (TestSuite . unUnqualComponentName . fst) (PD.condTestSuites pkgDescr)
-          , map (Benchmark . unUnqualComponentName . fst) (PD.condBenchmarks pkgDescr)
-          ]
+allSections pkgDescr = concat
+  [ maybe [] (const [Library]) (PD.condLibrary pkgDescr)
+  , map (Executable . unUnqualComponentName . fst) (PD.condExecutables pkgDescr)
+  , map (TestSuite . unUnqualComponentName . fst) (PD.condTestSuites pkgDescr)
+  , map (Benchmark . unUnqualComponentName . fst) (PD.condBenchmarks pkgDescr)
+  ]
 
 data Field = Hs_Source_Dirs
            | Ghc_Options
@@ -272,13 +289,14 @@ fromSpec spec =
 -- | A traversal for the 'Dependency' of 'Section' that match 'CondVars'.
 dependencyIfToList :: CondVars -> Section -> GenericPackageDescription -> [Dependency]
 dependencyIfToList condVars section = case section of
+  Library ->
+    maybe [] (traverseDependencyIf condVars) . PD.condLibrary
   Executable name ->
     maybe [] (traverseDependencyIf condVars) . findExecutableByName name . PD.condExecutables
--- dependencyIf = undefined
--- dependencyIf condVars Library           = condLibraryL . _Just . traverseDependencyIf condVars
--- dependencyIf condVars (Executable name) = condExecutablesL . traverse . having name . _2 . traverseDependencyIf condVars
--- dependencyIf condVars (TestSuite name)  = condTestSuitesL . traverse . having name . _2 . traverseDependencyIf condVars
--- dependencyIf condVars (Benchmark name)  = condBenchmarksL . traverse . having name . _2 . traverseDependencyIf condVars
+  TestSuite name ->
+    maybe [] (traverseDependencyIf condVars) . findExecutableByName name . PD.condTestSuites
+  Benchmark name ->
+    maybe [] (traverseDependencyIf condVars) . findExecutableByName name . PD.condBenchmarks
   where
 
     traverseDependencyIf :: CondVars -> CondTree' dat -> [Dependency]
@@ -295,12 +313,15 @@ type CondTree' a = PD.CondTree PD.ConfVar [Dependency] a
 
 -- | A traversal for the 'BuildInfo' of 'Section' that match 'CondVars'.
 collectBuildInfoIf :: CondVars -> Section -> GenericPackageDescription -> [PD.BuildInfo]
-collectBuildInfoIf condVars (Executable name) =
-  fmap PD.buildInfo . maybe [] (traverseDataIf condVars) . findExecutableByName name . PD.condExecutables
-  -- PD.condExecutables . traverse . having name . _2 . traverseDataIf condVars . buildInfoL
--- buildInfoIf condVars Library           = condLibraryL . _Just . traverseDataIf condVars . libBuildInfoL
--- buildInfoIf condVars (TestSuite name)  = condTestSuitesL . traverse . having name . _2 . traverseDataIf condVars . testBuildInfoL
--- buildInfoIf condVars (Benchmark name)  = condBenchmarksL . traverse . having name . _2 . traverseDataIf condVars . benchmarkBuildInfoL
+collectBuildInfoIf condVars section = case section of
+  Library ->
+    fmap PD.libBuildInfo . maybe [] (traverseDataIf condVars) . PD.condLibrary
+  Executable name ->
+    fmap PD.buildInfo . maybe [] (traverseDataIf condVars) . findExecutableByName name . PD.condExecutables
+  TestSuite name ->
+    fmap PD.testBuildInfo . maybe [] (traverseDataIf condVars) . findExecutableByName name . PD.condTestSuites
+  Benchmark name ->
+    fmap PD.benchmarkBuildInfo . maybe [] (traverseDataIf condVars) . findExecutableByName name . PD.condBenchmarks
   where
     traverseDataIf :: CondVars -> CondTree' dat -> [dat]
     traverseDataIf condVars (PD.CondNode dat constr comps) =

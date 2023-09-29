@@ -1,6 +1,7 @@
-#!/usr/bin/env sh
+#!/usr/bin/env cached-nix-shell
+#!nix-shell ../default.nix -A shell.native -i sh
 
 CWD=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
-OUTPUT_DIR=$CWD/../dist/build/ghc-wasm-bridge/ghc-tmp/
-
-ghc --interactive -isrc -Wall -Wno-missing-signatures -Wno-name-shadowing -Wno-type-defaults -funbox-strict-fields -j -outputdir=$OUTPUT_DIR $@
+OUTPUT_DIR=$CWD/../dist/ghc-tmp/
+echo $CABAL_CARGS
+ghc --interactive $CABAL_CARGS -j -outputdir=$OUTPUT_DIR $@
