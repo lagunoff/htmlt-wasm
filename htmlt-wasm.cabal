@@ -23,6 +23,8 @@ executable todomvc
 
   other-modules:
     HtmlT.Wasm.Types
+    HtmlT.Wasm.Protocol
+    HtmlT.WASM
   build-depends:
     base,
     binary,
@@ -56,6 +58,7 @@ executable todomvc
     TupleSections
     ConstraintKinds
     PatternGuards
+    BangPatterns
     
 executable server-app
   if arch(wasm32)
@@ -100,3 +103,4 @@ executable server-app
     TupleSections
     ConstraintKinds
     PatternGuards
+    BangPatterns

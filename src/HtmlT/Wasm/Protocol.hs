@@ -23,13 +23,13 @@ data UpCmd
 data DownCmd
   = Start
   | Return Expr
-  | ExecCallback Expr ScopeId CallbackId
-  | ExecCallbackVar Expr CallbackId
+  | ExecCallback Expr CallbackId
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
 data Expr
-  = Num Int64
+  = Null
+  | Num Int64
   | Str ByteString
   | Arr [Expr]
   | Obj [(ByteString, Expr)]
@@ -42,18 +42,16 @@ data Expr
   | Var ByteString
   | Apply Expr [Expr]
   | Call Expr ByteString [Expr]
-  | Ref ScopeId VarId
-  | Let ScopeId VarId Expr Expr
-  | Seq Expr Expr
-  | El DomBuilderId ByteString [(ByteString, Expr)] [(ByteString, (ScopeId, CallbackId))]
-  | Text DomBuilderId ByteString
-  | PopDomBuilder DomBuilderId
-  | HsCallback ScopeId CallbackId
+  | RevSeq [Expr]
+  -- ^ Sequence of the expressions is in reverse order! It starts
+  -- evaluating from the end of the list to the beggining. Returns
+  -- whatever the last expression evaluetes into (last being the
+  -- expression from the tip of the list)
 
-  | HsCallbackVar CallbackId
+  | HsCallback CallbackId
   | LAssign LhsExpr Expr
-  | FreeVar StoreId
-  | RVar StoreId
+  | FreeVar VarId
+  | RVar VarId
   | Ix Expr Int64
 
   | ElPush ElBuilder ByteString
@@ -64,11 +62,14 @@ data Expr
   | ElPop ElBuilder
 
   | UncaughtException ByteString
+
+  | ReadLhs LhsExpr
+  | ClearBoundary VarId
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
 data LhsExpr
-  = LVar StoreId
+  = LVar VarId
   | LIx LhsExpr Int64
   | LProp LhsExpr ByteString
   deriving stock (Generic, Show)
@@ -77,20 +78,11 @@ data LhsExpr
 newtype JSFunctionName = JSFunctionName { unJSFunctionName :: ByteString }
   deriving newtype (Show, IsString, Binary)
 
-newtype ScopeId = ScopeId { unScopeId :: Int64 }
-  deriving newtype (Show, Num, Binary, Ord, Eq)
-
 newtype VarId = VarId { unVarId :: Int64 }
-  deriving newtype (Show, Num, Binary)
-
-newtype DomBuilderId = DomBuilderId { unDomBuilderId :: Int64 }
-  deriving newtype (Show, Num, Binary)
+  deriving newtype (Show, Num, Binary, Enum, Ord, Eq)
 
 newtype CallbackId = CallbackId { unCallbackId :: Int64 }
   deriving newtype (Show, Num, Binary, Ord, Eq)
-
-newtype StoreId = StoreId { unStoreId :: Int64 }
-  deriving newtype (Show, Num, Binary, Ord, Eq, Enum)
 
 newtype ElBuilder = ElBuilder { unElBuilder :: LhsExpr }
   deriving newtype (Show, Binary)

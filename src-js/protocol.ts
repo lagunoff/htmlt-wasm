@@ -358,6 +358,9 @@ export function runEncoder<A>(
 
 export function evalExpr(inst: HaskellIstance, exp: Expr): unknown {
   switch(exp.tag) {
+    case ExprTag.Null: {
+       return null;
+    }
     case ExprTag.Num: {
        return exp[0];
     }
@@ -413,61 +416,13 @@ export function evalExpr(inst: HaskellIstance, exp: Expr): unknown {
       const fn = lhs[exp[1]];
       return fn.apply(lhs, exp[2].map(evalExpr.bind(undefined, inst)));
     }
-    case ExprTag.Ref: {
-      return context.get(exp[0])![exp[1]];
-    }
-    case ExprTag.Let: {
-      context.get(exp.scopeId)![exp.varId] = evalExpr(inst, exp.rhs);
-      return evalExpr(inst, exp.body);
-    }
     case ExprTag.Seq: {
-      evalExpr(inst, exp.first);
-      return evalExpr(inst, exp.second);
-    }
-    case ExprTag.El: {
-      const builderStack = context.get(exp.builderId)! as Element[];
-      const newElm = document.createElement(exp.tagName);
-      exp.attrs.forEach(([k, v]) => {
-        (newElm as any)[k] = evalExpr(inst, v);
-      });
-      exp.events.forEach(([k, [scopeId, callbackId]]) => {
-        const eventName = k as keyof HTMLElementEventMap;
-        const listenerFn = evalExpr(inst, { tag: ExprTag.HsCallback, scopeId, callbackId }) as () => any;
-        newElm.addEventListener(eventName, listenerFn);
-      });
-      const stackTip = builderStack[builderStack.length - 1];
-      builderStack.push(newElm);
-      if (stackTip) stackTip.appendChild(newElm);
-      return newElm;
-    }
-    case ExprTag.Text: {
-      const builderStack = context.get(exp.builderId)! as Element[];
-      const stackTip = builderStack[builderStack.length - 1];
-      const newTextNode = new Text(exp.contents);
-      if (stackTip) stackTip.appendChild(newTextNode);
-      return newTextNode;
-    }
-    case ExprTag.PopDomBuilder: {
-      const builderStack = context.get(exp.builderId)! as Element[];
-      const stackTip = builderStack.pop();
-      if (builderStack.length == 0) {
-        document.body.appendChild(stackTip as HTMLElement);
-      }
-      return stackTip;
+      return exp.exprs.reduceRight<unknown>((_, e) => evalExpr(inst, e), null);
     }
     case ExprTag.HsCallback: {
-      const {scopeId, callbackId} = exp
       return () => haskellApp(inst, {
         tag: DownCmdTag.ExecCallback,
-        arg: { tag: ExprTag.Num, 0: 0 },
-        scopeId, callbackId
-      });
-    }
-
-    case ExprTag.HsCallbackVar: {
-      return () => haskellApp(inst, {
-        tag: DownCmdTag.ExecCallbackVar,
-        arg: { tag: ExprTag.Num, 0: 0 },
+        arg: { tag: ExprTag.Null },
         callbackId: exp.varId
       });
     }
@@ -518,6 +473,14 @@ export function evalExpr(inst: HaskellIstance, exp: Expr): unknown {
     }
     case ExprTag.UncaughtException: {
       throw new Error(exp.message);
+    }
+    case ExprTag.ReadLhs: {
+      return evalLhs(exp.lhs);
+    }
+    case ExprTag.ClearBoundary: {
+      const boundary = storage.get(exp.boundaryId) as Element;
+      boundary.innerHTML = "";
+      return null;
     }
   }
   absurd(exp);
@@ -627,6 +590,7 @@ export const lhsExpr = recursive<LhsExpr>(self => discriminate({
 }));
 
 export enum ExprTag {
+  Null,
   Num,
   Str,
   Arr,
@@ -640,15 +604,9 @@ export enum ExprTag {
   Var,
   Apply,
   Call,
-  Ref,
-  Let,
   Seq,
-  El,
-  Text,
-  PopDomBuilder,
-  HsCallback,
 
-  HsCallbackVar,
+  HsCallback,
   LAssign,
   FreeVar,
   RVar,
@@ -662,9 +620,13 @@ export enum ExprTag {
   ElPop,
 
   UncaughtException,
+
+  ReadLhs,
+  ClearBoundary,
 }
 
 export type Expr =
+  | { tag: ExprTag.Null }
   | { tag: ExprTag.Num, 0: number }
   | { tag: ExprTag.Str, 0: string }
   | { tag: ExprTag.Arr, 0: Expr[] }
@@ -678,15 +640,9 @@ export type Expr =
   | { tag: ExprTag.Var, 0: string }
   | { tag: ExprTag.Apply, 0: Expr, 1: Expr[] }
   | { tag: ExprTag.Call, 0: Expr, 1: JSFunctionName, 2: Expr[] }
-  | { tag: ExprTag.Ref, 0: number, 1: number }
-  | { tag: ExprTag.Let, scopeId: number, varId: number, rhs: Expr, body: Expr }
-  | { tag: ExprTag.Seq, first: Expr, second: Expr }
-  | { tag: ExprTag.El, builderId: number, tagName: string, attrs: [string, Expr][], events: [string, [number, number]][] }
-  | { tag: ExprTag.Text, builderId: number, contents: string }
-  | { tag: ExprTag.PopDomBuilder, builderId: number }
-  | { tag: ExprTag.HsCallback, scopeId: number, callbackId: number }
+  | { tag: ExprTag.Seq, exprs: Expr[] }
 
-  | { tag: ExprTag.HsCallbackVar, varId: number }
+  | { tag: ExprTag.HsCallback, varId: number }
   | { tag: ExprTag.LAssign, lhs: LhsExpr, rhs: Expr }
   | { tag: ExprTag.FreeVar, varId: number }
   | { tag: ExprTag.RVar, varId: number }
@@ -700,9 +656,13 @@ export type Expr =
   | { tag: ExprTag.ElPop, builder: LhsExpr }
 
   | { tag: ExprTag.UncaughtException, message: string }
+
+  | { tag: ExprTag.ReadLhs, lhs: LhsExpr }
+  | { tag: ExprTag.ClearBoundary, boundaryId: number }
 ;
 
 export const expr = recursive<Expr>(self => discriminate({
+  [ExprTag.Null]: record({}),
   [ExprTag.Num]: record({ 0: int64 }),
   [ExprTag.Str]: record({ 0: string }),
   [ExprTag.Arr]: record({ 0: array(self) }),
@@ -716,15 +676,9 @@ export const expr = recursive<Expr>(self => discriminate({
   [ExprTag.Var]: record({ 0: string }),
   [ExprTag.Apply]: record({ 0: self, 1: array(self) }),
   [ExprTag.Call]: record({ 0: self, 1: string, 2: array(self) }),
-  [ExprTag.Ref]: record({ 0: int64, 1: int64 }),
-  [ExprTag.Let]: record({ scopeId: int64, varId: int64, rhs: self, body: self }),
-  [ExprTag.Seq]: record({ first: self, second: self }),
-  [ExprTag.El]: record({ builderId: int64, tagName: string, attrs: array(tuple(string, self)), events: array(tuple(string, tuple(int64, int64))) }),
-  [ExprTag.Text]: record({ builderId: int64, contents: string }),
-  [ExprTag.PopDomBuilder]: record({ builderId: int64 }),
-  [ExprTag.HsCallback]: record({ scopeId: int64, callbackId: int64 }),
+  [ExprTag.Seq]: record({ exprs: array(self) }),
 
-  [ExprTag.HsCallbackVar]: record({ varId: int64 }),
+  [ExprTag.HsCallback]: record({ varId: int64 }),
   [ExprTag.LAssign]: record({ lhs: lhsExpr, rhs: self }),
   [ExprTag.FreeVar]: record({ varId: int64 }),
   [ExprTag.RVar]: record({ varId: int64 }),
@@ -738,6 +692,9 @@ export const expr = recursive<Expr>(self => discriminate({
   [ExprTag.ElPop]: record({ builder: lhsExpr }),
 
   [ExprTag.UncaughtException]: record({ message: string }),
+
+  [ExprTag.ReadLhs]: record({ lhs: lhsExpr }),
+  [ExprTag.ClearBoundary]: record({ boundaryId: int64 }),
 }));
 
 export enum UpCommandTag {
@@ -754,14 +711,12 @@ export enum DownCmdTag {
   Start,
   Return,
   ExecCallback,
-  ExecCallbackVar,
 }
 
 export const downCmd = discriminate({
   [DownCmdTag.Start]: record({}),
   [DownCmdTag.Return]: record({ 0: expr }),
-  [DownCmdTag.ExecCallback]: record({ arg: expr, scopeId: int64, callbackId: int64 }),
-  [DownCmdTag.ExecCallbackVar]: record({ arg: expr, callbackId: int64 }),
+  [DownCmdTag.ExecCallback]: record({ arg: expr, callbackId: int64 }),
 });
 
 export type UpCmd = typeof upCmd['_A'];
@@ -779,7 +734,7 @@ export function haskellApp(inst: HaskellIstance, down: DownCmd = { tag: DownCmdT
     case UpCommandTag.Eval: {
       const result = evalExpr(inst, upCmd.expr);
       // console.log('result', result);
-      return haskellApp(inst, { tag: DownCmdTag.Return, 0: { tag: ExprTag.Num, 0: 0 } });
+      return haskellApp(inst, { tag: DownCmdTag.Return, 0: { tag: ExprTag.Null } });
     }
     case UpCommandTag.Exit: {
       return;
