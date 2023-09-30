@@ -24,7 +24,8 @@ executable todomvc
   other-modules:
     HtmlT.Wasm.Types
     HtmlT.Wasm.Protocol
-    HtmlT.WASM
+    HtmlT.Wasm.Base
+    HtmlT.Wasm.Html
   build-depends:
     base,
     binary,
@@ -64,9 +65,9 @@ executable server-app
   if arch(wasm32)
     buildable: False
   ghc-options:
-    -Wall -Wno-missing-signatures -Wno-name-shadowing
-    -Wno-unused-do-bind -Wno-partial-type-signatures -Wno-missing-home-modules
-    -static -with-rtsopts=-T
+    -Wall -Wno-missing-signatures -Wno-name-shadowing -Wno-unused-do-bind
+    -Wno-partial-type-signatures -Wno-missing-home-modules -static
+    -with-rtsopts=-T
   main-is: server.hs
   hs-source-dirs: src
 

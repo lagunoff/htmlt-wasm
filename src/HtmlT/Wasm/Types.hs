@@ -37,12 +37,11 @@ data WASMEnv = WASMEnv
   }
 
 data WASMState = WASMState
-  { callbacks :: Map CallbackId (Expr -> WASM ())
-  , storage :: Set VarId
-  , command_queue :: [Expr]
+  { var_storage :: Set VarId
+  , evaluation_queue :: [Expr]
   , subscriptions :: Map EventId [(SubscriptionId, Any -> WASM ())]
   , finalizers :: Map FinalizerKey FinalizerValue
-  , id_generator :: QueueId
+  , id_supply :: QueueId
   , transaction_queue :: Map QueueId (WASM ())
   }
 

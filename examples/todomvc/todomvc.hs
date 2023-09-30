@@ -6,8 +6,8 @@ import Foreign.Ptr
 import Control.Monad.Reader
 import Data.Functor
 
-import "this" HtmlT.WASM
 import "this" HtmlT.Wasm.Base
+import "this" HtmlT.Wasm.Html
 import "this" HtmlT.Wasm.Protocol
 import "this" HtmlT.Wasm.Types
 import "this" HtmlT.Wasm.Event

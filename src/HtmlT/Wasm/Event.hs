@@ -48,8 +48,8 @@ newtype Modifier a = Modifier
   -- the DOM
   }
 
-unsafeSubscribe :: EventId -> (a -> WASM ()) -> WASM ()
-unsafeSubscribe eventId k = modify \old ->
+unsafeSubscribe :: EventId -> (a -> WASM ()) -> WASMState -> WASMState
+unsafeSubscribe eventId k old =
   let
     (subId, new1) = nextQueueId old
     newSubscription = (SubscriptionId subId, k . unsafeCoerce)
@@ -71,20 +71,20 @@ unsafeTrigger eventId a = defer (unEventId eventId) do
   forM_ callbacks $ ($ unsafeCoerce @_ @Any a) . snd
 
 nextQueueId :: WASMState -> (QueueId, WASMState)
-nextQueueId old =
-  (old.id_generator, old {id_generator = succ old.id_generator})
+nextQueueId s =
+  (s.id_supply, s {id_supply = succ s.id_supply})
 
 -- | Defers a computation (typically an event firing) until the end of
 -- the current reactive transaction. This allows for the avoidance of
 -- double firing of events constructed from multiple other events.
 defer :: QueueId -> WASM () -> WASM ()
-defer k act =
-  modify \s -> s {transaction_queue = Map.insert k act s.transaction_queue}
+defer k act = modify \s ->
+  s {transaction_queue = Map.insert k act s.transaction_queue}
 
 newEvent :: WASM (Event a, a -> WASM ())
 newEvent = do
   eventId <- EventId <$> state nextQueueId
-  return (Event (unsafeSubscribe eventId), unsafeTrigger eventId)
+  return (Event (modify . unsafeSubscribe eventId), unsafeTrigger eventId)
 
 newRef :: a -> WASM (DynRef a)
 newRef initial = do
