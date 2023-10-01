@@ -440,47 +440,89 @@ export function evalExpr(inst: HaskellIstance, exp: Expr): unknown {
       const rhs: any = evalExpr(inst, exp.exp);
       return rhs[exp.ix];
     }
+    case ExprTag.ElInitBuilder: {
+      const element: HTMLElement = evalExpr(inst, exp.element) as any;
+      const newBuilder = new ElementBuilder(null, element);
+      return assignLhs(exp.builder, newBuilder);
+    }
+    case ExprTag.ElDestroyBuilder: {
+      const builder: DomBuilder = evalLhs(exp.builder) as any;
+      if (builder instanceof BoundaryBuilder) {
+        clearBoundary(builder);
+        builder._begin.parentElement!.removeChild(builder._begin);
+        builder._end.parentElement!.removeChild(builder._end);
+      }
+      // storage.delete(exp.builder.varId)
+      return null;
+    }
     case ExprTag.ElPush: {
-      const builder: Element = evalLhs(exp.builder) as any;
-      const newElm = document.createElement(exp.tagName);
-      builder.appendChild(newElm);
-      return assignLhs(exp.builder, newElm);
+      const builder: DomBuilder = evalLhs(exp.builder) as any;
+      const newBuilder = insertElement(builder, exp.tagName)
+      return assignLhs(exp.builder, newBuilder);
     }
     case ExprTag.ElNoPush: {
-      const builder: Element = evalLhs(exp.builder) as any;
+      const builder: DomBuilder = evalLhs(exp.builder) as any;
       const newElm = document.createElement(exp.tagName);
-      return builder.appendChild(newElm);
+      insertIntoBuilder(builder, newElm);
+      return null;
     }
     case ExprTag.ElProp: {
-      const builder: any = evalLhs(exp.builder) as any;
+      const builder: DomBuilder = evalLhs(exp.builder) as any;
       const propVal = evalExpr(inst, exp.val);
-      builder[exp.prop] = propVal;
-      return;
+      applyProperty(builder, exp.prop, propVal);
+      return null;
     }
     case ExprTag.ElEvent: {
-      const builder: Element = evalLhs(exp.builder) as any;
+      const builder: DomBuilder = evalLhs(exp.builder) as any;
       const callback = evalExpr(inst, exp.callback) as any;
-      return builder.addEventListener(exp.name, callback);
+      addEventListener(builder, exp.name, callback);
+      return null;
     }
     case ExprTag.ElText: {
-      const builder: Element = evalLhs(exp.builder) as any;
+      const builder: DomBuilder = evalLhs(exp.builder) as any;
       const textNode = document.createTextNode(exp.content);
-      return builder.appendChild(textNode);
+      insertIntoBuilder(builder, textNode);
+      return null;
+    }
+    case ExprTag.ElTextSave: {
+      const builder: DomBuilder = evalLhs(exp.builder) as any;
+      const textNode = document.createTextNode(exp.content);
+      insertIntoBuilder(builder, textNode);
+      storage.set(exp.varId, textNode);
+      return null;
+    }
+    case ExprTag.ElAssignTextContent: {
+      const textNode = storage.get(exp.varId) as Text;
+      textNode.nodeValue = exp.content;
+      return null;
     }
     case ExprTag.ElPop: {
-      const builder: Element = evalLhs(exp.builder) as any;
-      return assignLhs(exp.builder, builder.parentElement);
+      const builder: DomBuilder = evalLhs(exp.builder) as any;
+      if (builder instanceof ElementBuilder) {
+        return assignLhs(exp.builder, builder._parent);
+      } else if (builder instanceof BoundaryBuilder) {
+        return assignLhs(exp.builder, builder._parent);
+      }
+      return absurd(builder);
+    }
+    case ExprTag.ElInsertBoundary: {
+      const builder: DomBuilder = evalLhs(exp.builder) as any;
+      const newBuilder = insertBoundary(builder);
+      return assignLhs(exp.builder, newBuilder);
+    }
+    case ExprTag.ElClearBoundary: {
+      const builder: DomBuilder = evalLhs(exp.builder) as any;
+      if (builder instanceof BoundaryBuilder) {
+        clearBoundary(builder);
+        return null;
+      }
+      return null;
     }
     case ExprTag.UncaughtException: {
       throw new Error(exp.message);
     }
     case ExprTag.ReadLhs: {
       return evalLhs(exp.lhs);
-    }
-    case ExprTag.ClearBoundary: {
-      const boundary = storage.get(exp.boundaryId) as Element;
-      boundary.innerHTML = "";
-      return null;
     }
   }
   absurd(exp);
@@ -612,17 +654,22 @@ export enum ExprTag {
   RVar,
   Ix,
 
+  ElInitBuilder,
+  ElDestroyBuilder,
   ElPush,
   ElNoPush,
   ElProp,
   ElEvent,
   ElText,
+  ElTextSave,
+  ElAssignTextContent,
   ElPop,
+  ElInsertBoundary,
+  ElClearBoundary,
 
   UncaughtException,
 
   ReadLhs,
-  ClearBoundary,
 }
 
 export type Expr =
@@ -648,17 +695,22 @@ export type Expr =
   | { tag: ExprTag.RVar, varId: number }
   | { tag: ExprTag.Ix, exp: Expr, ix: number }
 
+  | { tag: ExprTag.ElInitBuilder, builder: LhsExpr, element: Expr }
+  | { tag: ExprTag.ElDestroyBuilder, builder: LhsExpr }
   | { tag: ExprTag.ElPush, builder: LhsExpr, tagName: string }
   | { tag: ExprTag.ElNoPush, builder: LhsExpr, tagName: string }
   | { tag: ExprTag.ElProp, builder: LhsExpr, prop: string, val: Expr }
   | { tag: ExprTag.ElEvent, builder: LhsExpr, name: string, callback: Expr }
   | { tag: ExprTag.ElText, builder: LhsExpr, content: string }
+  | { tag: ExprTag.ElTextSave, builder: LhsExpr, content: string, varId: number }
+  | { tag: ExprTag.ElAssignTextContent, varId: number, content: string }
   | { tag: ExprTag.ElPop, builder: LhsExpr }
+  | { tag: ExprTag.ElInsertBoundary, builder: LhsExpr }
+  | { tag: ExprTag.ElClearBoundary, builder: LhsExpr }
 
   | { tag: ExprTag.UncaughtException, message: string }
 
   | { tag: ExprTag.ReadLhs, lhs: LhsExpr }
-  | { tag: ExprTag.ClearBoundary, boundaryId: number }
 ;
 
 export const expr = recursive<Expr>(self => discriminate({
@@ -684,17 +736,22 @@ export const expr = recursive<Expr>(self => discriminate({
   [ExprTag.RVar]: record({ varId: int64 }),
   [ExprTag.Ix]: record({ exp: self, ix: int64 }),
 
+  [ExprTag.ElInitBuilder]: record({ builder: lhsExpr, element: self }),
+  [ExprTag.ElDestroyBuilder]: record({ builder: lhsExpr }),
   [ExprTag.ElPush]: record({ builder: lhsExpr, tagName: string }),
   [ExprTag.ElNoPush]: record({ builder: lhsExpr, tagName: string }),
   [ExprTag.ElProp]: record({ builder: lhsExpr, prop: string, val: self }),
   [ExprTag.ElEvent]: record({ builder: lhsExpr, name: string, callback: self }),
   [ExprTag.ElText]: record({ builder: lhsExpr, content: string }),
+  [ExprTag.ElTextSave]: record({ builder: lhsExpr, content: string, varId: int64 }),
+  [ExprTag.ElAssignTextContent]: record({ varId: int64, content: string }),
   [ExprTag.ElPop]: record({ builder: lhsExpr }),
+  [ExprTag.ElInsertBoundary]: record({ builder: lhsExpr }),
+  [ExprTag.ElClearBoundary]: record({ builder: lhsExpr }),
 
   [ExprTag.UncaughtException]: record({ message: string }),
 
   [ExprTag.ReadLhs]: record({ lhs: lhsExpr }),
-  [ExprTag.ClearBoundary]: record({ boundaryId: int64 }),
 }));
 
 export enum UpCommandTag {
@@ -749,6 +806,82 @@ function interactWithHaskell(inst: HaskellIstance, down: DownCmd): UpCmd {
   const upBuf = loadBuffer(inst, inst.exports.app(downPtr));
 //  console.log(upBuf);
   return upCmd.decode(upBuf);
+}
+
+export type DomBuilder = ElementBuilder | BoundaryBuilder;
+
+export class ElementBuilder {
+  constructor(
+    readonly _parent: DomBuilder|null,
+    readonly _element: HTMLElement,
+  ) {}
+}
+
+export class BoundaryBuilder {
+  constructor(
+    readonly _parent: DomBuilder,
+    readonly _begin: Comment,
+    readonly _end: Comment,
+  ) {}
+}
+
+export function insertElement(builder: DomBuilder, tagName: string): ElementBuilder {
+  const newElm = document.createElement(tagName);
+  insertIntoBuilder(builder, newElm);
+  return new ElementBuilder(builder, newElm);
+}
+
+export function insertBoundary(builder: DomBuilder): BoundaryBuilder {
+  const begin = document.createComment('ContentBoundary {{');
+  const end = document.createComment('}}');
+  insertIntoBuilder(builder, begin);
+  insertIntoBuilder(builder, end);
+  return new BoundaryBuilder(builder, begin, end);
+}
+
+export function clearBoundary(boundary: BoundaryBuilder) {
+  const [begin, end] = [boundary._begin, boundary._end];
+  for (;;){
+    if (!end.previousSibling
+      || !end.previousSibling.parentNode
+      || end.previousSibling === begin
+    ) break;
+    end.previousSibling.parentNode.removeChild(end.previousSibling);
+  }
+}
+
+export function insertIntoBuilder(builder: DomBuilder, child: Node) {
+  if (builder instanceof ElementBuilder) {
+    builder._element.appendChild(child);
+    return;
+  } else if (builder instanceof BoundaryBuilder) {
+    const parent = builder._end.parentElement!;
+    parent.insertBefore(child, builder._end);
+    return;
+  }
+  return absurd(builder);
+}
+
+export function applyProperty(builder: DomBuilder, propName: string, propVal: unknown) {
+  if (builder instanceof ElementBuilder) {
+    (builder._element as any)[propName] = propVal;
+    return;
+  } else if (builder instanceof BoundaryBuilder) {
+    (builder._end.parentElement as any)[propName] = propVal;
+    return;
+  }
+  return absurd(builder);
+}
+
+export function addEventListener(builder: DomBuilder, eventName: string, listener: EventListener) {
+  if (builder instanceof ElementBuilder) {
+    builder._element.addEventListener(eventName, listener);
+    return;
+  } else if (builder instanceof BoundaryBuilder) {
+    builder._end.parentElement!.addEventListener(eventName, listener);
+    return;
+  }
+  return absurd(builder);
 }
 
 // const t01: Expr = {

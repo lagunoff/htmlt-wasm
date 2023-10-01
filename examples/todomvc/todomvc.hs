@@ -50,16 +50,24 @@ initialEmployeeList =
 wasmMain :: WASM ()
 wasmMain = do
   domBuilderId <- asks (.dom_builder_id)
-  schedExp $ LAssign (unElBuilder domBuilderId) (Var "document" `Dot` "body")
+  schedExp $ ElInitBuilder domBuilderId (Var "document" `Dot` "body")
+  listRef <- newRef initialEmployeeList
   el "ul" do
-    listRef <- newRef initialEmployeeList
-    simpleList listRef.dynref_value \_ix itemRef -> do
-      employe <- readRef itemRef
+    simpleList listRef.dynref_value \ix itemRef -> do
       el "li" do
-        el "span" (text employe.employeeName)
-        el "b" (text employe.employeeRole)
-        el "i" (text (Char8.pack (show employe.employeeSalary)))
-
+        el "span" $ dynText $ fmap (.employeeName) itemRef.dynref_value
+        el "b" $ dynText $ fmap (.employeeRole) itemRef.dynref_value
+        el "i" $ dynText $ fmap (Char8.pack . show . (.employeeSalary)) itemRef.dynref_value
+        el "button" do
+          text "X"
+          let
+            deleteAt _ [] = []
+            deleteAt 0 (_:xs) = xs
+            deleteAt n (x:xs) = x : deleteAt (n - 1) xs
+          on_ "click" $ modifyRef listRef $ deleteAt ix
+  el "button" do
+    text "reset list"
+    on_ "click" $ writeRef listRef initialEmployeeList
   tabRef <- newRef Foo
   tabRef2 <- newRef Foo
   el "div" $ dyn $ fromRef tabRef <&> \case

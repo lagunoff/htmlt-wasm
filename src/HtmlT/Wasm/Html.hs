@@ -42,6 +42,15 @@ text contents = do
   domBuilderId <- asks (.dom_builder_id)
   schedExp (ElText domBuilderId contents)
 
+dynText :: Dynamic ByteString -> WASM ()
+dynText dynContent = do
+  domBuilderId <- asks (.dom_builder_id)
+  textNodeVar <- newVar
+  initialContent <- readDyn dynContent
+  schedExp (ElTextSave domBuilderId initialContent textNodeVar)
+  subscribe (updates dynContent) $
+    schedExp . ElAssignTextContent textNodeVar
+
 dyn :: Dynamic (WASM ()) -> WASM ()
 dyn d = do
   boundary <- insertBoundary
@@ -66,6 +75,7 @@ simpleList
   -> WASM ()
 simpleList listDyn h = do
   internalStateRef <- liftIO $ newIORef ([] :: [ElemEnv a])
+  boundary <- insertBoundary
   let
     setup :: Int -> [a] -> [ElemEnv a] -> WASM [ElemEnv a]
     setup idx new existing = case (existing, new) of
@@ -81,7 +91,7 @@ simpleList listDyn h = do
       (r:rs, []) -> do
         finalizeElems True (r:rs)
         return []
-      -- Update child elements along the way
+      -- Update existing elements along the way
       (r:rs, y:ys) -> do
         writeRef r.ee_dyn_ref y
         fmap (r:) $ setup (idx + 1) ys rs
@@ -94,12 +104,15 @@ simpleList listDyn h = do
     finalizeElems :: Bool -> [ElemEnv a] -> WASM ()
     finalizeElems remove = mapM_ \ee -> do
       finalizeNamespace ee.ee_namespace
-      when remove $ clearBoundary ee.ee_boundary
+      when remove $ destroyBoundary ee.ee_boundary
     updateList new = do
       eenvs <- liftIO $ readIORef internalStateRef
       newEenvs <- setup 0 new eenvs
       liftIO $ writeIORef internalStateRef newEenvs
-  performDyn $ fmap updateList listDyn
+    applyBoundary e = e
+      { dom_builder_id = ElBuilder (LVar boundary)
+      }
+  performDyn $ fmap (local applyBoundary . updateList) listDyn
   return ()
 
 data ElemEnv a = ElemEnv
@@ -135,7 +148,18 @@ insertBoundary = do
   domBuilderId <- asks (.dom_builder_id)
   boundary <- newVar
   schedExp (LAssign (LVar boundary) (ReadLhs (unElBuilder domBuilderId)))
+  schedExp (ElInsertBoundary (ElBuilder (LVar boundary)))
   return boundary
 
+cloneBuilder :: WASM ElBuilder
+cloneBuilder = do
+  domBuilderId <- asks (.dom_builder_id)
+  newBuilder <- newVar
+  schedExp (LAssign (LVar newBuilder) (ReadLhs (unElBuilder domBuilderId)))
+  return (ElBuilder (LVar newBuilder))
+
 clearBoundary :: VarId -> WASM ()
-clearBoundary boundary = schedExp (ClearBoundary boundary)
+clearBoundary boundary = schedExp (ElClearBoundary (ElBuilder (LVar boundary)))
+
+destroyBoundary :: VarId -> WASM ()
+destroyBoundary boundary = schedExp (ElDestroyBuilder (ElBuilder (LVar boundary)))

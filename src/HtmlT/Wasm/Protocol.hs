@@ -54,17 +54,21 @@ data Expr
   | RVar VarId
   | Ix Expr Int64
 
+  | ElInitBuilder ElBuilder Expr
+  | ElDestroyBuilder ElBuilder
   | ElPush ElBuilder ByteString
   | ElNoPush ElBuilder ByteString
   | ElProp ElBuilder ByteString Expr
   | ElEvent ElBuilder ByteString Expr
   | ElText ElBuilder ByteString
+  | ElTextSave ElBuilder ByteString VarId
+  | ElAssignTextContent VarId ByteString
   | ElPop ElBuilder
+  | ElInsertBoundary ElBuilder
+  | ElClearBoundary ElBuilder
 
   | UncaughtException ByteString
-
   | ReadLhs LhsExpr
-  | ClearBoundary VarId
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
