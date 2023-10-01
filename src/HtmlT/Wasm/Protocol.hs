@@ -61,7 +61,6 @@ data Expr
   | ElProp ElBuilder ByteString Expr
   | ElEvent ElBuilder ByteString Expr
   | ElText ElBuilder ByteString
-  | ElTextSave ElBuilder ByteString VarId
   | ElAssignTextContent VarId ByteString
   | ElPop ElBuilder
   | ElInsertBoundary ElBuilder

@@ -50,7 +50,7 @@ initialEmployeeList =
 wasmMain :: WASM ()
 wasmMain = do
   domBuilderId <- asks (.dom_builder_id)
-  schedExp $ ElInitBuilder domBuilderId (Var "document" `Dot` "body")
+  queueExp $ ElInitBuilder domBuilderId (Var "document" `Dot` "body")
   listRef <- newRef initialEmployeeList
   el "ul" do
     simpleList listRef.dynref_value \ix itemRef -> do
@@ -98,6 +98,9 @@ wasmMain = do
     el "button" do
       on_ "click" $ writeRef tabRef Baz
       text "Baz"
+  -- el "style" $ text "\
+  --   \.root button { background: red; color: white; border: none; }\
+  --   \ "
   el "div" do
     prop "className" "root"
     el "h1" do prop "className" "h1-wrapper"

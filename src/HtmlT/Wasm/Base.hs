@@ -6,6 +6,7 @@ import Control.Exception
 import Control.Monad.State
 import Data.ByteString.Char8 qualified as Char8
 import Data.IORef
+import Data.Maybe
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import GHC.Exts
@@ -17,23 +18,18 @@ import "this" HtmlT.Wasm.Event
 import "this" HtmlT.Wasm.Protocol
 
 newVar :: WASM VarId
-newVar = state \s ->
+newVar = reactive \e s0 ->
   let
-    newVarId = maybe 0 succ (Set.lookupMax s.var_storage)
-    newState = s { var_storage = Set.insert newVarId s.var_storage}
+    newVarId = maybe 0 succ (Set.lookupMax s0.var_storage)
+    var_storage = Set.insert newVarId s0.var_storage
+    (_, s1) = installFinalizer1 (CustomFinalizer (freeVar newVarId)) e s0
   in
-    (newVarId, newState)
+    (newVarId, s1 {var_storage})
 
 freeVar :: VarId -> WASM ()
 freeVar varId = do
   modify \s -> s { var_storage = Set.delete varId s.var_storage}
-  schedExp $ FreeVar varId
-
-withVar :: (VarId -> WASM a) -> WASM a
-withVar f = do
-  varId <- newVar
-  result <- f varId
-  result <$ freeVar varId
+  queueExp $ FreeVar varId
 
 newCallbackEvent :: (Expr -> WASM ()) -> WASM CallbackId
 newCallbackEvent k = reactive \e s0 ->
@@ -43,12 +39,21 @@ newCallbackEvent k = reactive \e s0 ->
   in
     (CallbackId (unQueueId queueId), s2)
 
+installFinalizer1 :: FinalizerValue -> WASMEnv -> WASMState -> (FinalizerKey, WASMState)
+installFinalizer1 fin e s0 =
+  let
+    (finalizerId, s1) = nextQueueId s0
+    finalizerKey = FinalizerCustomId finalizerId
+    finalizers = Map.alter (Just . Map.insert finalizerKey fin . fromMaybe Map.empty) e.finalizer_ns s1.finalizers
+  in
+    (finalizerKey, s1 {finalizers})
+
 evalExp :: Expr -> WASM Expr
 evalExp e = WASM \_ s -> return (s, Cmd e)
 
-schedExp :: Expr -> WASM ()
-schedExp e = WASM \_ s -> return
-  (s {evaluation_queue = e : s.evaluation_queue}, Pure ())
+queueExp :: Expr -> WASM ()
+queueExp e = modify \s ->
+  s {evaluation_queue = e : s.evaluation_queue}
 
 continuationsRef :: IORef [Expr -> WASM Any]
 continuationsRef = unsafePerformIO $ newIORef []

@@ -2,13 +2,10 @@ module HtmlT.Wasm.Html where
 
 import Control.Monad
 import Control.Monad.Reader
-import Control.Monad.State
 import Data.ByteString
 import Data.IORef
 import Data.Maybe
-import Data.Map (Map)
 import Data.Map qualified as Map
-import GHC.Exts
 
 import "this" HtmlT.Wasm.Types
 import "this" HtmlT.Wasm.Types qualified as WAS (WASMState(..))
@@ -19,15 +16,15 @@ import "this" HtmlT.Wasm.Event
 el :: ByteString -> WASM a -> WASM a
 el tagName child = do
   domBuilderId <- asks (.dom_builder_id)
-  schedExp (ElPush domBuilderId tagName)
+  queueExp (ElPush domBuilderId tagName)
   result <- child
-  schedExp (ElPop domBuilderId)
+  queueExp (ElPop domBuilderId)
   return result
 
 prop :: ByteString -> ByteString -> WASM ()
 prop propName propVal = do
   domBuilderId <- asks (.dom_builder_id)
-  schedExp (ElProp domBuilderId propName (Str propVal))
+  queueExp (ElProp domBuilderId propName (Str propVal))
 
 -- | Due to a design flaw, subscription-like operations inside the
 -- callback will lead to memory leaks!
@@ -35,21 +32,21 @@ on_ :: ByteString -> WASM () -> WASM ()
 on_ eventName k = do
   e <- ask
   callbackId <- newCallbackEvent (local (const e) . const k)
-  schedExp (ElEvent e.dom_builder_id eventName (HsCallback callbackId))
+  queueExp (ElEvent e.dom_builder_id eventName (HsCallback callbackId))
 
 text :: ByteString -> WASM ()
 text contents = do
   domBuilderId <- asks (.dom_builder_id)
-  schedExp (ElText domBuilderId contents)
+  queueExp (ElText domBuilderId contents)
 
 dynText :: Dynamic ByteString -> WASM ()
 dynText dynContent = do
   domBuilderId <- asks (.dom_builder_id)
-  textNodeVar <- newVar
   initialContent <- readDyn dynContent
-  schedExp (ElTextSave domBuilderId initialContent textNodeVar)
+  textNodeVar <- newVar
+  queueExp (LAssign (LVar textNodeVar) (ElText domBuilderId initialContent))
   subscribe (updates dynContent) $
-    schedExp . ElAssignTextContent textNodeVar
+    queueExp . ElAssignTextContent textNodeVar
 
 dyn :: Dynamic (WASM ()) -> WASM ()
 dyn d = do
@@ -57,8 +54,8 @@ dyn d = do
   finalizerNs <- newNamespace
   let
     setup wasm = do
-      finalizeNamespace finalizerNs
       clearBoundary boundary
+      finalizeNamespace finalizerNs
       wasm
     applyBoundary e = e
       { dom_builder_id = ElBuilder (LVar boundary)
@@ -103,8 +100,8 @@ simpleList listDyn h = do
       return ElemEnv {..}
     finalizeElems :: Bool -> [ElemEnv a] -> WASM ()
     finalizeElems remove = mapM_ \ee -> do
-      finalizeNamespace ee.ee_namespace
       when remove $ destroyBoundary ee.ee_boundary
+      finalizeNamespace ee.ee_namespace
     updateList new = do
       eenvs <- liftIO $ readIORef internalStateRef
       newEenvs <- setup 0 new eenvs
@@ -122,7 +119,7 @@ data ElemEnv a = ElemEnv
   }
 
 consoleLog :: Expr -> WASM ()
-consoleLog e = schedExp (Call (Var "console") "log" [e])
+consoleLog e = queueExp (Call (Var "console") "log" [e])
 
 -- | Run an action before the current node is detached from the DOM
 installFinalizer :: WASM () -> WASM FinalizerKey
@@ -130,16 +127,9 @@ installFinalizer fin = reactive \e s0 ->
   let
     (finalizerId, s1) = nextQueueId s0
     finalizerKey = FinalizerCustomId finalizerId
-    finalizers = Map.alter (Just . Map.insert finalizerKey (CustomFinalizer fin) . fromMaybe Map.empty) e.finalizer_ns s1.finalizers
-  in
-    (finalizerKey, s1 {WAS.finalizers})
-
-installFinalizer1 :: FinalizerValue -> WASM FinalizerKey
-installFinalizer1 fin = reactive \e s0 ->
-  let
-    (finalizerId, s1) = nextQueueId s0
-    finalizerKey = FinalizerCustomId finalizerId
-    finalizers = Map.alter (Just . Map.insert finalizerKey fin . fromMaybe Map.empty) e.finalizer_ns s1.finalizers
+    finalizers = Map.alter
+      (Just . Map.insert finalizerKey (CustomFinalizer fin) . fromMaybe Map.empty
+      ) e.finalizer_ns s1.finalizers
   in
     (finalizerKey, s1 {WAS.finalizers})
 
@@ -147,19 +137,12 @@ insertBoundary :: WASM VarId
 insertBoundary = do
   domBuilderId <- asks (.dom_builder_id)
   boundary <- newVar
-  schedExp (LAssign (LVar boundary) (ReadLhs (unElBuilder domBuilderId)))
-  schedExp (ElInsertBoundary (ElBuilder (LVar boundary)))
+  queueExp (LAssign (LVar boundary) (ReadLhs (unElBuilder domBuilderId)))
+  queueExp (ElInsertBoundary (ElBuilder (LVar boundary)))
   return boundary
 
-cloneBuilder :: WASM ElBuilder
-cloneBuilder = do
-  domBuilderId <- asks (.dom_builder_id)
-  newBuilder <- newVar
-  schedExp (LAssign (LVar newBuilder) (ReadLhs (unElBuilder domBuilderId)))
-  return (ElBuilder (LVar newBuilder))
-
 clearBoundary :: VarId -> WASM ()
-clearBoundary boundary = schedExp (ElClearBoundary (ElBuilder (LVar boundary)))
+clearBoundary boundary = queueExp (ElClearBoundary (ElBuilder (LVar boundary)))
 
 destroyBoundary :: VarId -> WASM ()
-destroyBoundary boundary = schedExp (ElDestroyBuilder (ElBuilder (LVar boundary)))
+destroyBoundary boundary = queueExp (ElDestroyBuilder (ElBuilder (LVar boundary)))

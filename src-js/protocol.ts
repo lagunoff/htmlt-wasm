@@ -482,14 +482,7 @@ export function evalExpr(inst: HaskellIstance, exp: Expr): unknown {
       const builder: DomBuilder = evalLhs(exp.builder) as any;
       const textNode = document.createTextNode(exp.content);
       insertIntoBuilder(builder, textNode);
-      return null;
-    }
-    case ExprTag.ElTextSave: {
-      const builder: DomBuilder = evalLhs(exp.builder) as any;
-      const textNode = document.createTextNode(exp.content);
-      insertIntoBuilder(builder, textNode);
-      storage.set(exp.varId, textNode);
-      return null;
+      return textNode;
     }
     case ExprTag.ElAssignTextContent: {
       const textNode = storage.get(exp.varId) as Text;
@@ -661,7 +654,6 @@ export enum ExprTag {
   ElProp,
   ElEvent,
   ElText,
-  ElTextSave,
   ElAssignTextContent,
   ElPop,
   ElInsertBoundary,
@@ -702,7 +694,6 @@ export type Expr =
   | { tag: ExprTag.ElProp, builder: LhsExpr, prop: string, val: Expr }
   | { tag: ExprTag.ElEvent, builder: LhsExpr, name: string, callback: Expr }
   | { tag: ExprTag.ElText, builder: LhsExpr, content: string }
-  | { tag: ExprTag.ElTextSave, builder: LhsExpr, content: string, varId: number }
   | { tag: ExprTag.ElAssignTextContent, varId: number, content: string }
   | { tag: ExprTag.ElPop, builder: LhsExpr }
   | { tag: ExprTag.ElInsertBoundary, builder: LhsExpr }
@@ -743,7 +734,6 @@ export const expr = recursive<Expr>(self => discriminate({
   [ExprTag.ElProp]: record({ builder: lhsExpr, prop: string, val: self }),
   [ExprTag.ElEvent]: record({ builder: lhsExpr, name: string, callback: self }),
   [ExprTag.ElText]: record({ builder: lhsExpr, content: string }),
-  [ExprTag.ElTextSave]: record({ builder: lhsExpr, content: string, varId: int64 }),
   [ExprTag.ElAssignTextContent]: record({ varId: int64, content: string }),
   [ExprTag.ElPop]: record({ builder: lhsExpr }),
   [ExprTag.ElInsertBoundary]: record({ builder: lhsExpr }),
