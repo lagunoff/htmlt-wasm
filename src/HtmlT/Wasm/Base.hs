@@ -36,10 +36,10 @@ withVar f = do
   result <$ freeVar varId
 
 newCallbackEvent :: (Expr -> WASM ()) -> WASM CallbackId
-newCallbackEvent k = state \s0 ->
+newCallbackEvent k = reactive \e s0 ->
   let
     (queueId, s1) = nextQueueId s0
-    s2 = unsafeSubscribe (EventId queueId) k s1
+    s2 = unsafeSubscribe (EventId queueId) k e s1
   in
     (CallbackId (unQueueId queueId), s2)
 
@@ -91,7 +91,7 @@ handleCommand wasmMain = \case
       Left exp -> return $ Eval exp
       Right _ -> return Exit
   where
-    wasmEnv = WASMEnv (ElBuilder (LVar (VarId (0))))
+    wasmEnv = WASMEnv (ElBuilder (LVar (VarId (0)))) (-1)
 
 runTillInterruption :: forall a. WASMEnv -> WASM a -> IO (Either Expr a)
 runTillInterruption e wasm = do

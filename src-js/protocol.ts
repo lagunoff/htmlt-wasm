@@ -747,7 +747,7 @@ function interactWithHaskell(inst: HaskellIstance, down: DownCmd): UpCmd {
   const downBuf = downCmd.encode(down);
   const downPtr = storeBuffer(inst, downBuf);
   const upBuf = loadBuffer(inst, inst.exports.app(downPtr));
-  console.log(upBuf);
+//  console.log(upBuf);
   return upCmd.decode(upBuf);
 }
 

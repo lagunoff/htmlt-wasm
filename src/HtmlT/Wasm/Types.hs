@@ -8,6 +8,7 @@ import Control.Monad.Fix
 import Control.Monad.State
 import Data.ByteString.Char8 qualified as Char8
 import Data.IORef
+import Data.Typeable
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Set (Set)
@@ -34,13 +35,14 @@ newtype WASM a = WASM
 
 data WASMEnv = WASMEnv
   { dom_builder_id :: ElBuilder
+  , finalizer_ns :: FinalizerNs
   }
 
 data WASMState = WASMState
   { var_storage :: Set VarId
   , evaluation_queue :: [Expr]
   , subscriptions :: Map EventId [(SubscriptionId, Any -> WASM ())]
-  , finalizers :: Map FinalizerKey FinalizerValue
+  , finalizers :: Map FinalizerNs (Map FinalizerKey FinalizerValue)
   , id_supply :: QueueId
   , transaction_queue :: Map QueueId (WASM ())
   }
@@ -57,14 +59,16 @@ newtype SubscriptionId = SubscriptionId { unSubscriptionId :: QueueId }
 data FinalizerKey
   = FinalizerEventId EventId
   | FinalizerCustomId QueueId
-  | FinalizerFingerprintId Fingerprint
   deriving (Eq, Ord, Generic)
 
 data FinalizerValue
   = SubscriptionSet (Set SubscriptionId)
-  | NestedFinalizer (Map FinalizerKey FinalizerValue)
   | CustomFinalizer (WASM ())
-  deriving Generic
+  | NamespaceFinalizer FinalizerNs
+  | ParentNamespace FinalizerNs
+
+newtype FinalizerNs = FinalizerNs {unFinalizerNs :: QueueId}
+  deriving newtype (Eq, Ord, Num)
 
 bindWasmResult :: forall a b. WASMResult a -> (a -> WASM b) -> WASMEnv -> WASMState -> IO (WASMState, WASMResult b)
 bindWasmResult r cont e s = case r of
@@ -79,6 +83,13 @@ bindWasmResult r cont e s = case r of
         (s', r') <- unWasm (c2 exp) e s
         bindWasmResult r' cont e s'
     return (s, Interrupt cmd cont')
+
+class MonadReactive m where
+  reactive :: (WASMEnv -> WASMState -> (a, WASMState)) -> m a
+
+reactive_ :: MonadReactive m => (WASMEnv -> WASMState -> WASMState) -> m ()
+reactive_ f = reactive \e s -> ((), f e s)
+{-# INLINE reactive_ #-}
 
 instance Functor WASM where
   fmap f (WASM g) = WASM \e s -> fmap h (g e s)
@@ -122,3 +133,7 @@ instance MonadFix WASM where
       extractPure _ = error
         "Asynchronous commands in conjunction with MonadFix not supported"
   {-# INLINE mfix #-}
+
+instance MonadReactive WASM where
+  reactive f = WASM \e s -> let (a, s') = f e s in return (s', Pure a)
+  {-# INLINE reactive #-}

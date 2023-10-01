@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 module HtmlT.Wasm.Event where
 
 import Control.Monad
@@ -48,21 +49,23 @@ newtype Modifier a = Modifier
   -- the DOM
   }
 
-unsafeSubscribe :: EventId -> (a -> WASM ()) -> WASMState -> WASMState
-unsafeSubscribe eventId k old =
+unsafeSubscribe :: EventId -> (a -> WASM ()) -> WASMEnv -> WASMState -> WASMState
+unsafeSubscribe eventId k e s0 =
   let
-    (subId, new1) = nextQueueId old
+    (subId, s1) = nextQueueId s0
     newSubscription = (SubscriptionId subId, k . unsafeCoerce)
     f (SubscriptionSet s1) (SubscriptionSet s2) = SubscriptionSet (s1 <> s2)
     -- Unreacheable because FinalizerEventId always should map into
     -- SubscriptionSet
     f _ s = s
     subscriptions = Map.alter (Just . (newSubscription :) . fromMaybe [])
-      eventId new1.subscriptions
-    finalizers = Map.insertWith f (FinalizerEventId eventId)
-      (SubscriptionSet (Set.singleton (SubscriptionId subId))) new1.finalizers
+      eventId s1.subscriptions
+    finalizers = Map.alter (Just .
+      (Map.insertWith f (FinalizerEventId eventId)
+        (SubscriptionSet (Set.singleton (SubscriptionId subId)))
+      ) . fromMaybe Map.empty) e.finalizer_ns s1.finalizers
   in
-    new1 {subscriptions, finalizers}
+    s1 {subscriptions, finalizers}
 
 unsafeTrigger :: EventId -> a -> WASM ()
 unsafeTrigger eventId a = defer (unEventId eventId) do
@@ -82,9 +85,13 @@ defer k act = modify \s ->
   s {transaction_queue = Map.insert k act s.transaction_queue}
 
 newEvent :: WASM (Event a, a -> WASM ())
-newEvent = do
-  eventId <- EventId <$> state nextQueueId
-  return (Event (modify . unsafeSubscribe eventId), unsafeTrigger eventId)
+newEvent = state \s0 ->
+  let
+    (eventId, s1) = nextQueueId s0
+    event = Event (reactive_ . unsafeSubscribe (EventId eventId))
+    trig = unsafeTrigger (EventId eventId)
+  in
+    ((event, trig), s1)
 
 newRef :: a -> WASM (DynRef a)
 newRef initial = do
@@ -167,31 +174,57 @@ performDyn d = do
 
 type Subscriptions = Map EventId [(SubscriptionId, Any -> WASM ())]
 
-applyFinalizer :: Map FinalizerKey FinalizerValue -> WASM ()
-applyFinalizer finalizers = do
-  let finList = Map.toList finalizers
-  modify \s -> s { subscriptions = unsubscribe finList s.subscriptions }
-  runCustomFinalizers finList
+type Finalizers = Map FinalizerNs (Map FinalizerKey FinalizerValue)
+
+finalizeNamespace :: FinalizerNs -> WASM ()
+finalizeNamespace ns = do
+  removedList <- state \s ->
+    let
+      (removed, finalizers0) = Map.alterF (,Nothing) ns $ s.finalizers
+      removedList = maybe [] Map.toList removed
+      subscriptions = unsubscribe removedList s.subscriptions
+      finalizers = removeFinalizer removedList finalizers0
+    in
+      (removedList, s { subscriptions, finalizers })
+  runCustomFinalizers removedList
   where
-    deleteSubs _ss [] = []
-    deleteSubs ss ((s, c):xs)
-      | Set.member s ss = xs
-      | otherwise = (s, c) : deleteSubs ss xs
     unsubscribe :: [(FinalizerKey, FinalizerValue)] -> Subscriptions -> Subscriptions
     unsubscribe [] !s = s
     unsubscribe ((FinalizerEventId e, SubscriptionSet u) : xs) !s =
       unsubscribe xs $
         Map.alter (mfilter (not . List.null) . Just . deleteSubs u . fromMaybe []) e s
-    unsubscribe ((_, NestedFinalizer n) : xs) !s =
-      unsubscribe xs $ unsubscribe (Map.toList n) s
     unsubscribe (_ : xs) !s = unsubscribe xs s
+
+    removeFinalizer :: [(FinalizerKey, FinalizerValue)] -> Finalizers -> Finalizers
+    removeFinalizer [] !s = s
+    removeFinalizer ((_, ParentNamespace p) : _) !s = -- Expecting at most one ParentNamespace
+      Map.alter (fmap (Map.delete (FinalizerCustomId (unFinalizerNs p)))) p s
+    removeFinalizer (_ : xs) !s = removeFinalizer xs s
 
     runCustomFinalizers :: [(FinalizerKey, FinalizerValue)] -> WASM ()
     runCustomFinalizers [] = return ()
     runCustomFinalizers ((_, CustomFinalizer w) : xs) = w *> runCustomFinalizers xs
-    runCustomFinalizers ((_, NestedFinalizer n) : xs) =
-      runCustomFinalizers (Map.toList n) *> runCustomFinalizers xs
+    runCustomFinalizers ((_, NamespaceFinalizer n) : xs) = do
+      finalizeNamespace n *> runCustomFinalizers xs
     runCustomFinalizers ((_, _) : xs) = runCustomFinalizers xs
+
+    deleteSubs _ss [] = []
+    deleteSubs ss ((s, c):xs)
+      | Set.member s ss = xs
+      | otherwise = (s, c) : deleteSubs ss xs
+
+newNamespace :: WASM FinalizerNs
+newNamespace = reactive \e s0 ->
+  let
+    (namespaceId, s1) = nextQueueId s0
+    finalizerKey = FinalizerCustomId namespaceId
+    namespace = FinalizerNs namespaceId
+    finalizers = Map.alter
+      (Just . Map.insert finalizerKey
+        (NamespaceFinalizer namespace) . fromMaybe Map.empty
+      ) e.finalizer_ns s1.finalizers
+  in
+    (namespace, s1 {finalizers})
 
 -- | Run a reactive transaction.
 dynStep :: WASM a -> WASM a
@@ -202,8 +235,8 @@ dynStep act = loop0 act where
     loop1 =<< gets (.transaction_queue)
     return r
   loop1 :: Map QueueId (WASM ()) -> WASM ()
-  loop1 queue =
-    case Map.minViewWithKey queue of
+  loop1 q =
+    case Map.minViewWithKey q of
       Nothing -> return ()
       Just ((_, newAct), newQueue) -> do
         modify \s -> s {transaction_queue = newQueue}
