@@ -48,14 +48,14 @@ installFinalizer1 fin e s0 =
   in
     (finalizerKey, s1 {finalizers})
 
-evalExp :: Expr -> WASM Expr
+evalExp :: Expr -> WASM JValue
 evalExp e = WASM \_ s -> return (s, Cmd e)
 
 queueExp :: Expr -> WASM ()
 queueExp e = modify \s ->
   s {evaluation_queue = e : s.evaluation_queue}
 
-continuationsRef :: IORef [Expr -> WASM Any]
+continuationsRef :: IORef [JValue -> WASM Any]
 continuationsRef = unsafePerformIO $ newIORef []
 
 wasmStateRef :: IORef WASMState
@@ -75,7 +75,7 @@ handleCommand wasmMain = \case
     case result of
       Left exp -> return $ Eval exp
       Right () -> return Exit
-  Return exp -> do
+  Return jval -> do
     tipCont <- atomicModifyIORef' continuationsRef \case
       [] -> ([], Nothing)
       x:xs -> (xs, Just x)
@@ -83,7 +83,7 @@ handleCommand wasmMain = \case
       Nothing ->
         return $ Eval $ UncaughtException "Protocol violation: continuation is missing"
       Just c -> do
-        result <- runTillInterruption wasmEnv (c exp)
+        result <- runTillInterruption wasmEnv (c jval)
         case result of
           Left exp -> return $ Eval exp
           Right _ -> return Exit
@@ -122,7 +122,7 @@ runTillInterruption e wasm = do
     Right a
       | [] <- s1.evaluation_queue -> return $ Right a
       | otherwise -> do
-        let cont (_::Expr) = return (unsafeCoerce a)
+        let cont (_::JValue) = return (unsafeCoerce a)
         modifyIORef' continuationsRef (cont:)
         return $ Left $ RevSeq s1.evaluation_queue
   where

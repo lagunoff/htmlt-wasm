@@ -24,8 +24,8 @@ import "this" HtmlT.Wasm.Protocol
 
 data WASMResult a where
   Pure :: a -> WASMResult a
-  Cmd :: Expr -> WASMResult Expr
-  Interrupt :: Expr -> (Expr -> WASM b) -> WASMResult b
+  Cmd :: Expr -> WASMResult JValue
+  Interrupt :: Expr -> (JValue -> WASM b) -> WASMResult b
   FMap :: (a -> b) -> WASMResult a -> WASMResult b
 
 -- | A computation capable of interacting with JavaScript.

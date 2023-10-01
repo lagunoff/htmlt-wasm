@@ -361,6 +361,9 @@ export function evalExpr(inst: HaskellIstance, exp: Expr): unknown {
     case ExprTag.Null: {
        return null;
     }
+    case ExprTag.Boolean: {
+       return exp[0] != 0;
+    }
     case ExprTag.Num: {
        return exp[0];
     }
@@ -472,6 +475,11 @@ export function evalExpr(inst: HaskellIstance, exp: Expr): unknown {
       applyProperty(builder, exp.prop, propVal);
       return null;
     }
+    case ExprTag.ElAttr: {
+      const builder: DomBuilder = evalLhs(exp.builder) as any;
+      applyAttribute(builder, exp.attr, exp.val);
+      return null;
+    }
     case ExprTag.ElEvent: {
       const builder: DomBuilder = evalLhs(exp.builder) as any;
       const callback = evalExpr(inst, exp.callback) as any;
@@ -509,6 +517,11 @@ export function evalExpr(inst: HaskellIstance, exp: Expr): unknown {
         clearBoundary(builder);
         return null;
       }
+      return null;
+    }
+    case ExprTag.ElToggleClass: {
+      const builder: DomBuilder = evalLhs(exp.builder) as any;
+      toggleClass(builder, exp.className, exp.enable != 0);
       return null;
     }
     case ExprTag.UncaughtException: {
@@ -558,6 +571,30 @@ export function assignLhs(exp: LhsExpr, value: unknown) {
     }
   }
 }
+
+function unknownToJValue(inp: unknown): JValue {
+  if (typeof(inp) === 'boolean') {
+    return { tag: JValueTag.JBool, 0: inp ? 1 : 0 };
+  }
+  if (typeof(inp) === 'number') {
+    return { tag: JValueTag.JNum, 0: inp };
+  }
+  if (typeof(inp) === 'string') {
+    return { tag: JValueTag.JStr, 0: inp };
+  }
+  if (Array.isArray(inp)) {
+    return { tag: JValueTag.JArr, 0: inp.map(unknownToJValue) };
+  }
+  if (inp === null || inp === undefined) {
+    return { tag: JValueTag.JNull };
+  }
+  const entries = Object.entries(inp)
+    .map(([k, v]) => [k, unknownToJValue(v)] as KV);
+
+  return { tag: JValueTag.JObj, 0: entries }
+}
+
+type KV = [string, JValue];
 
 function discriminatorSize(numAlernatives: number): number {
   return Math.ceil(Math.log2(numAlernatives) / 8);
@@ -624,8 +661,37 @@ export const lhsExpr = recursive<LhsExpr>(self => discriminate({
   [LhsExprTag.LProp]: record({ lhs: self, prop: string }),
 }));
 
+export enum JValueTag {
+  JNull,
+  JBool,
+  JNum,
+  JStr,
+  JArr,
+  JObj,
+}
+
+export type JValue =
+  | { tag: JValueTag.JNull }
+  | { tag: JValueTag.JBool, 0: number }
+  | { tag: JValueTag.JNum, 0: number }
+  | { tag: JValueTag.JStr, 0: string }
+  | { tag: JValueTag.JArr, 0: JValue[] }
+  | { tag: JValueTag.JObj, 0: [string, JValue][] }
+;
+
+export const jvalue = recursive<JValue>(self => discriminate({
+  [JValueTag.JNull]: record({ }),
+  [JValueTag.JBool]: record({ 0: int8 }),
+  [JValueTag.JNum]: record({ 0: int64 }),
+  [JValueTag.JStr]: record({ 0: string }),
+  [JValueTag.JArr]: record({ 0: array(self) }),
+  [JValueTag.JObj]: record({ 0: array(tuple(string, self)) }),
+}));
+
+
 export enum ExprTag {
   Null,
+  Boolean,
   Num,
   Str,
   Arr,
@@ -652,12 +718,14 @@ export enum ExprTag {
   ElPush,
   ElNoPush,
   ElProp,
+  ElAttr,
   ElEvent,
   ElText,
   ElAssignTextContent,
   ElPop,
   ElInsertBoundary,
   ElClearBoundary,
+  ElToggleClass,
 
   UncaughtException,
 
@@ -666,6 +734,7 @@ export enum ExprTag {
 
 export type Expr =
   | { tag: ExprTag.Null }
+  | { tag: ExprTag.Boolean, 0: number }
   | { tag: ExprTag.Num, 0: number }
   | { tag: ExprTag.Str, 0: string }
   | { tag: ExprTag.Arr, 0: Expr[] }
@@ -692,12 +761,14 @@ export type Expr =
   | { tag: ExprTag.ElPush, builder: LhsExpr, tagName: string }
   | { tag: ExprTag.ElNoPush, builder: LhsExpr, tagName: string }
   | { tag: ExprTag.ElProp, builder: LhsExpr, prop: string, val: Expr }
+  | { tag: ExprTag.ElAttr, builder: LhsExpr, attr: string, val: string }
   | { tag: ExprTag.ElEvent, builder: LhsExpr, name: string, callback: Expr }
   | { tag: ExprTag.ElText, builder: LhsExpr, content: string }
   | { tag: ExprTag.ElAssignTextContent, varId: number, content: string }
   | { tag: ExprTag.ElPop, builder: LhsExpr }
   | { tag: ExprTag.ElInsertBoundary, builder: LhsExpr }
   | { tag: ExprTag.ElClearBoundary, builder: LhsExpr }
+  | { tag: ExprTag.ElToggleClass, builder: LhsExpr, className: string, enable: number }
 
   | { tag: ExprTag.UncaughtException, message: string }
 
@@ -706,6 +777,7 @@ export type Expr =
 
 export const expr = recursive<Expr>(self => discriminate({
   [ExprTag.Null]: record({}),
+  [ExprTag.Boolean]: record({ 0: int8 }),
   [ExprTag.Num]: record({ 0: int64 }),
   [ExprTag.Str]: record({ 0: string }),
   [ExprTag.Arr]: record({ 0: array(self) }),
@@ -732,12 +804,14 @@ export const expr = recursive<Expr>(self => discriminate({
   [ExprTag.ElPush]: record({ builder: lhsExpr, tagName: string }),
   [ExprTag.ElNoPush]: record({ builder: lhsExpr, tagName: string }),
   [ExprTag.ElProp]: record({ builder: lhsExpr, prop: string, val: self }),
+  [ExprTag.ElAttr]: record({ builder: lhsExpr, attr: string, val: string }),
   [ExprTag.ElEvent]: record({ builder: lhsExpr, name: string, callback: self }),
   [ExprTag.ElText]: record({ builder: lhsExpr, content: string }),
   [ExprTag.ElAssignTextContent]: record({ varId: int64, content: string }),
   [ExprTag.ElPop]: record({ builder: lhsExpr }),
   [ExprTag.ElInsertBoundary]: record({ builder: lhsExpr }),
   [ExprTag.ElClearBoundary]: record({ builder: lhsExpr }),
+  [ExprTag.ElToggleClass]: record({ builder: lhsExpr, className: string, enable: int8 }),
 
   [ExprTag.UncaughtException]: record({ message: string }),
 
@@ -762,7 +836,7 @@ export enum DownCmdTag {
 
 export const downCmd = discriminate({
   [DownCmdTag.Start]: record({}),
-  [DownCmdTag.Return]: record({ 0: expr }),
+  [DownCmdTag.Return]: record({ 0: jvalue }),
   [DownCmdTag.ExecCallback]: record({ arg: expr, callbackId: int64 }),
 });
 
@@ -780,8 +854,8 @@ export function haskellApp(inst: HaskellIstance, down: DownCmd = { tag: DownCmdT
   switch (upCmd.tag) {
     case UpCommandTag.Eval: {
       const result = evalExpr(inst, upCmd.expr);
-      // console.log('result', result);
-      return haskellApp(inst, { tag: DownCmdTag.Return, 0: { tag: ExprTag.Null } });
+      const jvalue = unknownToJValue(result);
+      return haskellApp(inst, { tag: DownCmdTag.Return, 0: jvalue });
     }
     case UpCommandTag.Exit: {
       return;
@@ -863,6 +937,35 @@ export function applyProperty(builder: DomBuilder, propName: string, propVal: un
   return absurd(builder);
 }
 
+export function applyAttribute(builder: DomBuilder, attr: string, value: string) {
+  if (builder instanceof ElementBuilder) {
+    builder._element.setAttribute(attr, value)
+    return;
+  } else if (builder instanceof BoundaryBuilder) {
+    builder._end.parentElement!.setAttribute(attr, value);
+    return;
+  }
+  return absurd(builder);
+}
+
+export function toggleClass(builder: DomBuilder, className: string, enabled: boolean) {
+  if (builder instanceof ElementBuilder) {
+    if (enabled) {
+      builder._element.classList.add(className);
+    } else {
+      builder._element.classList.remove(className);
+    }
+    return;
+  } else if (builder instanceof BoundaryBuilder) {
+    if (enabled) {
+      builder._end.parentElement!.classList.add(className);
+    } else {
+      builder._end.parentElement!.classList.remove(className);
+    }
+    return;
+  }
+  return absurd(builder);
+}
 export function addEventListener(builder: DomBuilder, eventName: string, listener: EventListener) {
   if (builder instanceof ElementBuilder) {
     builder._element.addEventListener(eventName, listener);

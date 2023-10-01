@@ -22,6 +22,9 @@ executable todomvc
       -optl-Wl,--export=hs_init,--export=app,--export=hs_malloc,--export=hs_free
 
   other-modules:
+    Utils
+    TodoList
+    TodoItem
     HtmlT.Wasm.Types
     HtmlT.Wasm.Protocol
     HtmlT.Wasm.Base
@@ -60,6 +63,7 @@ executable todomvc
     ConstraintKinds
     PatternGuards
     BangPatterns
+    FlexibleInstances
     
 executable server-app
   if arch(wasm32)
@@ -105,3 +109,4 @@ executable server-app
     ConstraintKinds
     PatternGuards
     BangPatterns
+    FlexibleInstances

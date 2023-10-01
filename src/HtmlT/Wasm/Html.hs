@@ -1,16 +1,19 @@
 module HtmlT.Wasm.Html where
 
+import Data.ByteString.Char8 qualified as Char8
 import Control.Monad
 import Control.Monad.Reader
 import Data.ByteString
 import Data.IORef
 import Data.Maybe
+import Data.String
 import Data.Map qualified as Map
 
 import "this" HtmlT.Wasm.Types
 import "this" HtmlT.Wasm.Types qualified as WAS (WASMState(..))
 import "this" HtmlT.Wasm.Base
 import "this" HtmlT.Wasm.Protocol
+import "this" HtmlT.Wasm.Marshal
 import "this" HtmlT.Wasm.Event
 
 el :: ByteString -> WASM a -> WASM a
@@ -21,10 +24,35 @@ el tagName child = do
   queueExp (ElPop domBuilderId)
   return result
 
-prop :: ByteString -> ByteString -> WASM ()
+prop :: ToJSVal v => ByteString -> v -> WASM ()
 prop propName propVal = do
   domBuilderId <- asks (.dom_builder_id)
-  queueExp (ElProp domBuilderId propName (Str propVal))
+  queueExp (ElProp domBuilderId propName (fromJValue (toJSVal propVal)))
+
+dynProp :: ToJSVal v => ByteString -> Dynamic v -> WASM ()
+dynProp propName valueDyn = do
+  domBuilderVar <- newVar
+  domBuilderId <- asks (.dom_builder_id)
+  initialVal <- readDyn valueDyn
+  queueExp (LAssign (LVar domBuilderVar) (ReadLhs (unElBuilder domBuilderId)))
+  queueExp (ElProp domBuilderId propName (fromJValue (toJSVal initialVal)))
+  subscribe (updates valueDyn) $
+    queueExp . ElProp (ElBuilder (LVar domBuilderVar)) propName . fromJValue . toJSVal
+
+toggleClass :: ByteString -> Dynamic Bool -> WASM ()
+toggleClass className enableDyn = do
+  domBuilderVar <- newVar
+  domBuilderId <- asks (.dom_builder_id)
+  initialVal <- readDyn enableDyn
+  queueExp (LAssign (LVar domBuilderVar) (ReadLhs (unElBuilder domBuilderId)))
+  queueExp (ElToggleClass domBuilderId className initialVal)
+  subscribe (updates enableDyn) $
+    queueExp . ElToggleClass (ElBuilder (LVar domBuilderVar)) className
+
+attr :: ByteString -> ByteString -> WASM ()
+attr attrName attrVal = do
+  domBuilderId <- asks (.dom_builder_id)
+  queueExp (ElAttr domBuilderId attrName attrVal)
 
 -- | Due to a design flaw, subscription-like operations inside the
 -- callback will lead to memory leaks!
@@ -146,3 +174,6 @@ clearBoundary boundary = queueExp (ElClearBoundary (ElBuilder (LVar boundary)))
 
 destroyBoundary :: VarId -> WASM ()
 destroyBoundary boundary = queueExp (ElDestroyBuilder (ElBuilder (LVar boundary)))
+
+instance a ~ () => IsString (WASM a) where
+  fromString = text . Char8.pack

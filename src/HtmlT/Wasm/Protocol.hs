@@ -22,13 +22,14 @@ data UpCmd
 
 data DownCmd
   = Start
-  | Return Expr
+  | Return JValue
   | ExecCallback Expr CallbackId
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
 data Expr
   = Null
+  | Boolean Bool
   | Num Int64
   | Str ByteString
   | Arr [Expr]
@@ -59,17 +60,38 @@ data Expr
   | ElPush ElBuilder ByteString
   | ElNoPush ElBuilder ByteString
   | ElProp ElBuilder ByteString Expr
+  | ElAttr ElBuilder ByteString ByteString
   | ElEvent ElBuilder ByteString Expr
   | ElText ElBuilder ByteString
   | ElAssignTextContent VarId ByteString
   | ElPop ElBuilder
   | ElInsertBoundary ElBuilder
   | ElClearBoundary ElBuilder
+  | ElToggleClass ElBuilder ByteString Bool
 
   | UncaughtException ByteString
   | ReadLhs LhsExpr
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
+
+data JValue
+  = JNull
+  | JBool Bool
+  | JNum Int64
+  | JStr ByteString
+  | JArr [JValue]
+  | JObj [(ByteString, JValue)]
+  deriving stock (Generic, Show)
+  deriving anyclass (Binary)
+
+fromJValue :: JValue -> Expr
+fromJValue = \case
+  JNull -> Null
+  JBool a -> Boolean a
+  JNum a -> Num a
+  JStr a -> Str a
+  JArr xs -> Arr $ fmap fromJValue xs
+  JObj kv -> Obj $ fmap (\(k, v) -> (k, fromJValue v)) kv
 
 data LhsExpr
   = LVar VarId
