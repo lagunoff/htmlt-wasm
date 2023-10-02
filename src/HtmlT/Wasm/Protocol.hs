@@ -23,7 +23,7 @@ data UpCmd
 data DownCmd
   = Start
   | Return JValue
-  | ExecCallback Expr CallbackId
+  | ExecCallback JValue CallbackId
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
@@ -41,6 +41,7 @@ data Expr
   | Multiply Expr Expr
   | Divide Expr Expr
   | Var ByteString
+  | Lam [ByteString] Expr
   | Apply Expr [Expr]
   | Call Expr ByteString [Expr]
   | RevSeq [Expr]

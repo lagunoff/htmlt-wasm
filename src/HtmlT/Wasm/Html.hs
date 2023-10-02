@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 module HtmlT.Wasm.Html where
 
 import Data.ByteString.Char8 qualified as Char8
@@ -7,6 +9,9 @@ import Data.ByteString
 import Data.IORef
 import Data.Maybe
 import Data.String
+import Data.Kind
+import Data.Proxy
+import GHC.TypeLits
 import Data.Map qualified as Map
 
 import "this" HtmlT.Wasm.Types
@@ -54,13 +59,38 @@ attr attrName attrVal = do
   domBuilderId <- asks (.dom_builder_id)
   queueExp (ElAttr domBuilderId attrName attrVal)
 
--- | Due to a design flaw, subscription-like operations inside the
--- callback will lead to memory leaks!
 on_ :: ByteString -> WASM () -> WASM ()
 on_ eventName k = do
   e <- ask
   callbackId <- newCallbackEvent (local (const e) . const k)
   queueExp (ElEvent e.dom_builder_id eventName (HsCallback callbackId))
+
+on :: forall eventName. IsEventName eventName => EventListener eventName -> WASM ()
+on k = do
+  e <- ask
+  let eventName = Char8.pack (symbolVal (Proxy @eventName))
+  callbackId <- newCallbackEvent (local (const e) . mkEventListener @eventName k)
+  queueExp (ElEvent e.dom_builder_id eventName (HsCallback callbackId))
+
+class KnownSymbol eventName => IsEventName eventName where
+  type EventListener eventName :: Type
+  mkEventListener :: EventListener eventName -> JValue -> WASM ()
+
+instance IsEventName "click" where
+  type EventListener "click" = WASM ()
+  mkEventListener k _j = k
+
+instance IsEventName "dblclick" where
+  type EventListener "dblclick" = WASM ()
+  mkEventListener k _j = k
+
+instance IsEventName "input" where
+  type EventListener "input" = ByteString -> WASM ()
+  mkEventListener k j = forM_ (fromJSVal j) k
+
+instance IsEventName "blur" where
+  type EventListener "blur" = ByteString -> WASM ()
+  mkEventListener k j = forM_ (fromJSVal j) k
 
 text :: ByteString -> WASM ()
 text contents = do

@@ -31,7 +31,7 @@ freeVar varId = do
   modify \s -> s { var_storage = Set.delete varId s.var_storage}
   queueExp $ FreeVar varId
 
-newCallbackEvent :: (Expr -> WASM ()) -> WASM CallbackId
+newCallbackEvent :: (JValue -> WASM ()) -> WASM CallbackId
 newCallbackEvent k = reactive \e s0 ->
   let
     (queueId, s1) = nextQueueId s0

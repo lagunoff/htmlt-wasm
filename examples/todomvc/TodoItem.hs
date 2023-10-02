@@ -34,7 +34,8 @@ html cfg = li_ do
   toggleClass "editing" editingDyn
   toggleClass "hidden" cfg.is_hidden_dyn
   div_ [class_ "view"] do
-    -- on "dblclick" $ decodeEvent (propDecoder "target") $
+    on @"dblclick" $ return ()
+    -- decodeEvent (propDecoder "target") $
     --   eval . DoubleClickAction cfg
     input_ [class_ "toggle", type_ "checkbox"] do
       dynChecked $ (.completed) <$> fromRef cfg.state_ref

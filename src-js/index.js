@@ -1,5 +1,5 @@
 import { WASI, File, OpenFile, PreopenDirectory } from "@bjorn3/browser_wasi_shim";
-import * as proto from './protocol';
+import * as reactor from './reactor';
 
 let args = ["bin", "arg1", "arg2"];
 let env = ["FOO=bar"];
@@ -26,14 +26,14 @@ wasi.inst = inst;
 
 inst.exports.hs_init(0, 0);
 
-proto.haskellApp(inst);
+reactor.haskellApp(inst);
 
 function haskellApp(buf) {
-  const ptrBuf = proto.storeBuffer(inst, buf);
-  return proto.loadBuffer(inst, inst.exports.app(ptrBuf));
+  const ptrBuf = reactor.storeBuffer(inst, buf);
+  return reactor.loadBuffer(inst, inst.exports.app(ptrBuf));
 }
 
 function haskellAppString(str) {
-  const ptrBuf = proto.storeBuffer(inst, new TextEncoder("utf8").encode(str));
-  return new TextDecoder("utf8").decode(proto.loadBuffer(inst, inst.exports.app(ptrBuf)));
+  const ptrBuf = reactor.storeBuffer(inst, new TextEncoder("utf8").encode(str));
+  return new TextDecoder("utf8").decode(reactor.loadBuffer(inst, inst.exports.app(ptrBuf)));
 }
