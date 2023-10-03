@@ -9,9 +9,11 @@ import Data.ByteString
 import Data.IORef
 import Data.Maybe
 import Data.String
+import Data.List qualified as List
 import Data.Kind
 import Data.Proxy
 import GHC.TypeLits
+import GHC.Int
 import Data.Map qualified as Map
 
 import "this" HtmlT.Wasm.Types
@@ -46,51 +48,63 @@ dynProp propName valueDyn = do
 
 toggleClass :: ByteString -> Dynamic Bool -> WASM ()
 toggleClass className enableDyn = do
-  domBuilderVar <- newVar
   domBuilderId <- asks (.dom_builder_id)
   initialVal <- readDyn enableDyn
+  domBuilderVar <- newVar
   queueExp (LAssign (LVar domBuilderVar) (ReadLhs (unElBuilder domBuilderId)))
   queueExp (ElToggleClass domBuilderId className initialVal)
   subscribe (updates enableDyn) $
     queueExp . ElToggleClass (ElBuilder (LVar domBuilderVar)) className
+  return ()
 
 attr :: ByteString -> ByteString -> WASM ()
 attr attrName attrVal = do
   domBuilderId <- asks (.dom_builder_id)
   queueExp (ElAttr domBuilderId attrName attrVal)
 
-on_ :: ByteString -> WASM () -> WASM ()
-on_ eventName k = do
-  e <- ask
-  callbackId <- newCallbackEvent (local (const e) . const k)
-  queueExp (ElEvent e.dom_builder_id eventName (HsCallback callbackId))
-
 on :: forall eventName. IsEventName eventName => EventListener eventName -> WASM ()
 on k = do
   e <- ask
-  let eventName = Char8.pack (symbolVal (Proxy @eventName))
+  let
+    symbolStr = Char8.pack $ (symbolVal (Proxy @eventName))
+    eventName = fromMaybe symbolStr . listToMaybe . List.reverse . Char8.split '/' $ symbolStr
   callbackId <- newCallbackEvent (local (const e) . mkEventListener @eventName k)
-  queueExp (ElEvent e.dom_builder_id eventName (HsCallback callbackId))
+  queueExp (ElEvent e.dom_builder_id eventName (mkEventListener1 @eventName callbackId))
 
 class KnownSymbol eventName => IsEventName eventName where
   type EventListener eventName :: Type
   mkEventListener :: EventListener eventName -> JValue -> WASM ()
+  mkEventListener1 :: CallbackId -> Expr
 
 instance IsEventName "click" where
   type EventListener "click" = WASM ()
   mkEventListener k _j = k
+  mkEventListener1 callbackId = Lam ["e"] (ExecCallback callbackId (Var "e"))
 
 instance IsEventName "dblclick" where
   type EventListener "dblclick" = WASM ()
   mkEventListener k _j = k
+  mkEventListener1 callbackId = Lam ["e"] (ExecCallback callbackId (Var "e"))
 
 instance IsEventName "input" where
   type EventListener "input" = ByteString -> WASM ()
   mkEventListener k j = forM_ (fromJSVal j) k
+  mkEventListener1 callbackId = Lam ["e"] (ExecCallback callbackId (Var "e" `Dot` "target" `Dot` "value"))
 
 instance IsEventName "blur" where
   type EventListener "blur" = ByteString -> WASM ()
   mkEventListener k j = forM_ (fromJSVal j) k
+  mkEventListener1 callbackId = Lam ["e"] (ExecCallback callbackId (Var "e" `Dot` "target" `Dot` "value"))
+
+instance IsEventName "keydown" where
+  type EventListener "keydown" = Int64 -> WASM ()
+  mkEventListener k j = forM_ (fromJSVal j) k
+  mkEventListener1 callbackId = Lam ["e"] (ExecCallback callbackId (Var "e" `Dot` "keyCode"))
+
+instance IsEventName "checkbox/change" where
+  type EventListener "checkbox/change" = Bool -> WASM ()
+  mkEventListener k j = forM_ (fromJSVal j) k
+  mkEventListener1 callbackId = Lam ["e"] (ExecCallback callbackId (Var "e" `Dot` "target" `Dot` "checked"))
 
 text :: ByteString -> WASM ()
 text contents = do
@@ -152,10 +166,11 @@ simpleList listDyn h = do
         fmap (r:) $ setup (idx + 1) ys rs
     newElemEnv :: a -> WASM (ElemEnv a)
     newElemEnv a = do
-      ee_dyn_ref <- newRef a
-      ee_boundary <- insertBoundary
       ee_namespace <- newNamespace
-      return ElemEnv {..}
+      local (\e -> e {finalizer_ns = ee_namespace}) do
+        ee_dyn_ref <- newRef a
+        ee_boundary <- insertBoundary
+        return ElemEnv {..}
     finalizeElems :: Bool -> [ElemEnv a] -> WASM ()
     finalizeElems remove = mapM_ \ee -> do
       when remove $ destroyBoundary ee.ee_boundary

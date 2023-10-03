@@ -1,6 +1,6 @@
 import { absurd } from './lib';
 import * as p from './protocol';
-import { UpCmd, DownCmd, DownCmdTag, UpCommandTag } from './protocol';
+import { UpCmd, DownCmd, DownCmdTag, UpCommandTag, Bindings, List } from './protocol';
 
 export  type HaskellPointer = number;
 
@@ -52,7 +52,7 @@ export function haskellApp(inst: HaskellIstance, down: DownCmd = { tag: DownCmdT
   // console.log(upCmd);
   switch (upCmd.tag) {
     case UpCommandTag.Eval: {
-      const result = p.evalExpr(inst, upCmd.expr);
+      const result = p.evalExpr(globalContext, inst, upCmd.expr);
       const jvalue = p.unknownToJValue(result);
       return haskellApp(inst, { tag: DownCmdTag.Return, 0: jvalue });
     }
@@ -62,6 +62,8 @@ export function haskellApp(inst: HaskellIstance, down: DownCmd = { tag: DownCmdT
   }
   absurd(upCmd);
 }
+
+const globalContext: List<Bindings> = [window as any, null]
 
 function interactWithHaskell(inst: HaskellIstance, down: DownCmd): UpCmd {
   const downBuf = p.downCmd.encode(down);

@@ -15,7 +15,20 @@ export type List<T> = null | Cons<T>;
 
 export type Cons<T> = { 0: T, 1: List<T> };
 
-export function evalExpr(inst: HaskellIstance, exp: Expr): unknown {
+export function Cons<T>(x: T, xs: List<T>): List<T> {
+  return [x, xs];
+}
+
+export function car<T>(pair: Cons<T>): T {
+  return pair[0];
+}
+
+export function cdr<T>(pair: Cons<T>): List<T> {
+  return pair[1];
+}
+
+
+export function evalExpr(ctx: List<Bindings>, inst: HaskellIstance, exp: Expr): unknown {
   switch(exp.tag) {
     case ExprTag.Null: {
        return null;
@@ -30,70 +43,81 @@ export function evalExpr(inst: HaskellIstance, exp: Expr): unknown {
       return exp[0];
     }
     case ExprTag.Arr: {
-      return exp[0].map(evalExpr.bind(undefined, inst));
+      return exp[0].map(evalExpr.bind(undefined, ctx, inst));
     }
     case ExprTag.Obj: {
-      return Object.fromEntries(exp[0].map(([k, e]) => [k, evalExpr(inst, e)]));
+      return Object.fromEntries(exp[0].map(([k, e]) => [k, evalExpr(ctx, inst, e)]));
     }
     case ExprTag.Dot: {
-      const lhs = evalExpr(inst, exp[0]) as any;
+      const lhs = evalExpr(ctx, inst, exp[0]) as any;
       return lhs[exp[1]];
     }
     case ExprTag.Assign: {
-      const rhs = evalExpr(inst, exp[2]);
-      const obj = evalExpr(inst, exp[0]) as any;
+      const rhs = evalExpr(ctx, inst, exp[2]);
+      const obj = evalExpr(ctx, inst, exp[0]) as any;
       obj[exp[1]] = rhs;
       return rhs;
     }
     case ExprTag.Add: {
-      const lhs = evalExpr(inst, exp[0]) as number;
-      const rhs = evalExpr(inst, exp[1]) as number;
+      const lhs = evalExpr(ctx, inst, exp[0]) as number;
+      const rhs = evalExpr(ctx, inst, exp[1]) as number;
       return lhs + rhs;
     }
     case ExprTag.Subtract: {
-      const lhs = evalExpr(inst, exp[0]) as number;
-      const rhs = evalExpr(inst, exp[1]) as number;
+      const lhs = evalExpr(ctx, inst, exp[0]) as number;
+      const rhs = evalExpr(ctx, inst, exp[1]) as number;
       return lhs - rhs;
     }
     case ExprTag.Multiply: {
-      const lhs = evalExpr(inst, exp[0]) as number;
-      const rhs = evalExpr(inst, exp[1]) as number;
+      const lhs = evalExpr(ctx, inst, exp[0]) as number;
+      const rhs = evalExpr(ctx, inst, exp[1]) as number;
       return lhs * rhs;
     }
     case ExprTag.Divide: {
-      const lhs = evalExpr(inst, exp[0]) as number;
-      const rhs = evalExpr(inst, exp[1]) as number;
+      const lhs = evalExpr(ctx, inst, exp[0]) as number;
+      const rhs = evalExpr(ctx, inst, exp[1]) as number;
       return lhs / rhs;
     }
     case ExprTag.Var: {
-      const globalEnv = window as any;
-      return globalEnv[exp[0]];
+      const ident = exp[0];
+      for (let iter = ctx; iter; iter = cdr(iter)) {
+        const bindings = car(iter);
+        if (ident in bindings) {
+          // Found bound value
+          return bindings[ident];
+        }
+      }
+      throw new Error('Variable not in scope: ' + exp[0]);
     }
     case ExprTag.Lam: {
-
-      throw new Error("unimplemented!");
+      const argsNames = exp.args;
+      return (...argValues: any[]) => {
+        const bindings = argsNames.reduce<Bindings>((acc, name, idx) => (acc[name] = argValues[idx], acc), {});
+        return evalExpr(Cons(bindings, ctx), inst, exp.body);
+      };
     }
     case ExprTag.Apply: {
-      const lhs = evalExpr(inst, exp[0]) as Function;
-      return lhs.apply(undefined, exp[1].map(evalExpr.bind(undefined, inst)));
+      const lhs = evalExpr(ctx, inst, exp[0]) as Function;
+      return lhs.apply(undefined, exp[1].map(evalExpr.bind(undefined, ctx, inst)));
     }
     case ExprTag.Call: {
-      const lhs = evalExpr(inst, exp[0]) as any;
+      const lhs = evalExpr(ctx, inst, exp[0]) as any;
       const fn = lhs[exp[1]];
-      return fn.apply(lhs, exp[2].map(evalExpr.bind(undefined, inst)));
+      return fn.apply(lhs, exp[2].map(evalExpr.bind(undefined, ctx, inst)));
     }
     case ExprTag.Seq: {
-      return exp.exprs.reduceRight<unknown>((_, e) => evalExpr(inst, e), null);
+      return exp.exprs.reduceRight<unknown>((_, e) => evalExpr(ctx, inst, e), null);
     }
-    case ExprTag.HsCallback: {
-      return (e:unknown) => reactor.haskellApp(inst, {
+    case ExprTag.ExecCallback: {
+      const arg = evalExpr(ctx, inst, exp.arg);
+      return reactor.haskellApp(inst, {
         tag: DownCmdTag.ExecCallback,
-        arg: unknownToJValue(e),
-        callbackId: exp.varId
+        arg: unknownToJValue(arg),
+        callbackId: exp.callbackId
       });
     }
     case ExprTag.LAssign: {
-      const rhs = evalExpr(inst, exp.rhs);
+      const rhs = evalExpr(ctx, inst, exp.rhs);
       return assignLhs(exp.lhs, rhs);
     }
     case ExprTag.FreeVar: {
@@ -103,11 +127,11 @@ export function evalExpr(inst: HaskellIstance, exp: Expr): unknown {
       return storage.get(exp.varId);
     }
     case ExprTag.Ix: {
-      const rhs: any = evalExpr(inst, exp.exp);
+      const rhs: any = evalExpr(ctx, inst, exp.exp);
       return rhs[exp.ix];
     }
     case ExprTag.ElInitBuilder: {
-      const element: HTMLElement = evalExpr(inst, exp.element) as any;
+      const element: HTMLElement = evalExpr(ctx, inst, exp.element) as any;
       const newBuilder = new ElementBuilder(null, element);
       return assignLhs(exp.builder, newBuilder);
     }
@@ -134,7 +158,7 @@ export function evalExpr(inst: HaskellIstance, exp: Expr): unknown {
     }
     case ExprTag.ElProp: {
       const builder: DomBuilder = evalLhs(exp.builder) as any;
-      const propVal = evalExpr(inst, exp.val);
+      const propVal = evalExpr(ctx, inst, exp.val);
       applyProperty(builder, exp.prop, propVal);
       return null;
     }
@@ -145,7 +169,7 @@ export function evalExpr(inst: HaskellIstance, exp: Expr): unknown {
     }
     case ExprTag.ElEvent: {
       const builder: DomBuilder = evalLhs(exp.builder) as any;
-      const callback = evalExpr(inst, exp.callback) as any;
+      const callback = evalExpr(ctx, inst, exp.callback) as any;
       addEventListener(builder, exp.name, callback);
       return null;
     }
@@ -184,7 +208,13 @@ export function evalExpr(inst: HaskellIstance, exp: Expr): unknown {
     }
     case ExprTag.ElToggleClass: {
       const builder: DomBuilder = evalLhs(exp.builder) as any;
-      toggleClass(builder, exp.className, exp.enable != 0);
+      // TODO: Remove the defensive test and inverstigate the bug.
+      // The 'builder' supposed to be a valid reference, but when a
+      // 'simpleList' element gets deleted, this gets called with
+      // previously freed 'builder'!
+      if (builder) {
+        toggleClass(builder, exp.className, exp.enable != 0);
+      }
       return null;
     }
     case ExprTag.UncaughtException: {
@@ -324,7 +354,7 @@ export enum ExprTag {
   Call,
   Seq,
 
-  HsCallback,
+  ExecCallback,
   LAssign,
   FreeVar,
   RVar,
@@ -368,7 +398,7 @@ export type Expr =
   | { tag: ExprTag.Call, 0: Expr, 1: JSFunctionName, 2: Expr[] }
   | { tag: ExprTag.Seq, exprs: Expr[] }
 
-  | { tag: ExprTag.HsCallback, varId: number }
+  | { tag: ExprTag.ExecCallback, callbackId: number, arg: Expr }
   | { tag: ExprTag.LAssign, lhs: LhsExpr, rhs: Expr }
   | { tag: ExprTag.FreeVar, varId: number }
   | { tag: ExprTag.RVar, varId: number }
@@ -412,7 +442,7 @@ export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.Call]: b.record({ 0: self, 1: b.string, 2: b.array(self) }),
   [ExprTag.Seq]: b.record({ exprs: b.array(self) }),
 
-  [ExprTag.HsCallback]: b.record({ varId: b.int64 }),
+  [ExprTag.ExecCallback]: b.record({ callbackId: b.int64, arg: self }),
   [ExprTag.LAssign]: b.record({ lhs: lhsExpr, rhs: self }),
   [ExprTag.FreeVar]: b.record({ varId: b.int64 }),
   [ExprTag.RVar]: b.record({ varId: b.int64 }),

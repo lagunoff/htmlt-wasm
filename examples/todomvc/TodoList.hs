@@ -3,8 +3,11 @@ module TodoList where
 
 import Control.Monad
 import Data.ByteString (ByteString)
+import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as Char8
 import Data.Maybe
+import Data.List qualified as List
+import GHC.Int
 import HtmlT.Wasm.Types
 import HtmlT.Wasm.Base
 import HtmlT.Wasm.Element
@@ -31,15 +34,55 @@ data TodoListState = TodoListState
 data Filter = All | Active | Completed
   deriving (Show, Eq)
 
+data TodoListAction a where
+  InitAction :: TodoListAction (DynRef TodoListState)
+  ToggleAllAction :: TodoListConfig -> Bool -> TodoListAction ()
+  InputAction :: TodoListConfig -> ByteString -> TodoListAction ()
+  CommitAction :: TodoListConfig -> TodoListAction ()
+  KeydownAction :: TodoListConfig -> Int64 -> TodoListAction ()
+  DeleteItemAction :: TodoListConfig -> Int -> TodoListAction ()
+  ClearCompletedAction :: TodoListConfig -> TodoListAction ()
 
-init :: WASM (DynRef TodoListState)
-init = do
-  items <- fromMaybe [] <$> readLocalStorage "todo-items"
-  newRef TodoListState
-    { title = ""
-    , items = items
-    , filter = All
-    }
+eval :: TodoListAction a -> WASM a
+eval = \case
+  InitAction -> do
+    items <- fromMaybe [] <$> readLocalStorage "todo-items"
+    newRef TodoListState
+      { title = ""
+      , items = items
+      , filter = All
+      }
+  ToggleAllAction cfg isChecked ->
+    modifyRef cfg.state_ref \s -> s
+      { items =
+        fmap (\i -> i {TodoItem.completed = isChecked}) s.items
+      }
+  InputAction cfg newVal -> do
+    modifyRef cfg.state_ref \s -> s {title = newVal}
+  CommitAction cfg -> do
+    title <- {-BS.strip .-} (.title) <$> readRef cfg.state_ref
+    case title of
+      "" -> return ()
+      t -> modifyRef cfg.state_ref \s -> s
+        { items = s.items <> [mkNewItem t]
+        , title = ""
+        }
+  KeydownAction cfg key -> case key of
+    13 {- Enter -} -> eval (CommitAction cfg)
+    _ -> return ()
+  DeleteItemAction cfg itemIx ->
+    modifyRef cfg.state_ref \s -> s {items = deleteIx itemIx s.items}
+  ClearCompletedAction cfg ->
+    modifyRef cfg.state_ref \s -> s
+      {items = (List.filter (not . TodoItem.completed)) s.items}
+  where
+    deleteIx :: Int -> [a] -> [a]
+    deleteIx _ []     = []
+    deleteIx i (a:as)
+      | i == 0    = as
+      | otherwise = a : deleteIx (i-1) as
+    mkNewItem t =
+      TodoItem.emptyTodoItemState {TodoItem.title = t}
 
 html :: TodoListConfig -> WASM ()
 html cfg = do
@@ -54,16 +97,12 @@ html cfg = do
       h1_ (text "todos")
       input_ [class_ "new-todo", placeholder_ "What needs to be done?", autofocus_ True] do
         dynValue $ (.title) <$> fromRef cfg.state_ref
-        -- on "input" $ decodeEvent valueDecoder $
-        --   eval . InputAction cfg
-        -- on "keydown" $ decodeEvent keyCodeDecoder $
-        --   eval . KeydownAction cfg
+        on @"input" $ eval . InputAction cfg
+        on @"keydown" $ eval . KeydownAction cfg
     mainWidget = section_ [class_ "main"] do
       toggleClass "hidden" hiddenDyn
       input_ [id_ "toggle-all", class_ "toggle-all", type_ "checkbox"] do
-        return ()
-        -- on "click" $ decodeEvent checkedDecoder $
-        --   eval . ToggleAllAction cfg
+        on @"checkbox/change" $ eval . ToggleAllAction cfg
       label_ do
         attr "for" "toggle-all"
         text "Mark all as completed"
@@ -75,7 +114,7 @@ html cfg = do
               }
             , TodoItem.is_hidden_dyn =
               isTodoItemHidden <$> fromRef cfg.state_ref <*> fromRef todoRef
-            , TodoItem.ask_delete_item = return () -- eval (DeleteItemAction cfg idx)
+            , TodoItem.ask_delete_item = eval (DeleteItemAction cfg idx)
             }
     footerWidget = footer_ [class_ "footer"] do
       toggleClass "hidden" hiddenDyn
@@ -85,7 +124,7 @@ html cfg = do
       ul_ [class_ "filters"] do
         forM_ [All, Active, Completed] filterWidget
       button_ [class_ "clear-completed"] do
-        -- on_ "click" $ eval (ClearCompletedAction cfg)
+        on @"click" $ eval (ClearCompletedAction cfg)
         text "Clear completed"
     footerInfoWidget = footer_ [class_ "info"] do
       p_ "Double-click to edit a todo"
@@ -158,4 +197,4 @@ todoItemModifier cfg idx elemModifier = Modifier \upd f -> do
     overIx :: Int -> (a -> a) -> [a] -> [a]
     overIx 0 f (x:xs) = f x : xs
     overIx n f (x:xs) = x : overIx (pred n) f xs
-    overIx n _ [] = []
+    overIx _ _ [] = []

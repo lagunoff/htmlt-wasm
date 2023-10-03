@@ -3,6 +3,7 @@ module TodoItem where
 import Data.ByteString (ByteString)
 import Data.List qualified as List
 import Data.Maybe
+import GHC.Int
 import HtmlT.Wasm.Types
 import HtmlT.Wasm.Html
 import HtmlT.Wasm.Element
@@ -24,6 +25,39 @@ data TodoItemState = TodoItemState
   , editing :: Maybe ByteString
   } deriving stock (Show, Eq)
 
+data TodoItemAction a where
+  CancelAction :: TodoItemConfig -> TodoItemAction ()
+  CommitAction :: TodoItemConfig -> TodoItemAction ()
+  InputAction :: TodoItemConfig -> ByteString -> TodoItemAction ()
+  DoubleClickAction :: TodoItemConfig -> TodoItemAction ()
+  CheckedAction :: TodoItemConfig -> Bool -> TodoItemAction ()
+  KeydownAction :: TodoItemConfig -> Int64 -> TodoItemAction ()
+
+eval :: TodoItemAction a -> WASM a
+eval = \case
+  CancelAction cfg ->
+    modifyRef cfg.state_ref \s -> s{editing=Nothing}
+  CommitAction cfg -> do
+    state <- readRef cfg.state_ref
+    case state.editing of
+      Just "" ->
+        cfg.ask_delete_item
+      Just t ->
+        modifyRef cfg.state_ref \s -> s {editing=Nothing, title = t}
+      Nothing ->
+        pure ()
+  InputAction cfg newVal ->
+    modifyRef cfg.state_ref \s -> s{editing = Just newVal}
+  DoubleClickAction cfg -> do
+    modifyRef cfg.state_ref \s -> s {editing = Just s.title}
+--    liftIO $ js_todoItemInputFocus targetEl
+  CheckedAction cfg isChecked -> do
+    modifyRef cfg.state_ref \s -> s{completed = isChecked}
+  KeydownAction cfg key -> case key of
+    13 {- Enter -} -> eval (CommitAction cfg)
+    27 {- Escape -} -> eval (CancelAction cfg)
+    _ -> return ()
+
 html :: TodoItemConfig -> WASM ()
 html cfg = li_ do
   let
@@ -34,25 +68,21 @@ html cfg = li_ do
   toggleClass "editing" editingDyn
   toggleClass "hidden" cfg.is_hidden_dyn
   div_ [class_ "view"] do
-    on @"dblclick" $ return ()
-    -- decodeEvent (propDecoder "target") $
-    --   eval . DoubleClickAction cfg
+    on @"dblclick" $ eval $ DoubleClickAction cfg
     input_ [class_ "toggle", type_ "checkbox"] do
       dynChecked $ (.completed) <$> fromRef cfg.state_ref
-      -- on "change" $ decodeEvent checkedDecoder $
-      --   eval . CheckedAction cfg
+      on @"checkbox/change" $ eval . CheckedAction cfg
     label_ $ dynText $ (.title) <$> fromRef cfg.state_ref
     button_ [class_ "destroy"] do
-      on_ "click" cfg.ask_delete_item
+      on @"click" cfg.ask_delete_item
   input_ [class_ "edit", type_ "text"] do
     dynValue valueDyn
-    -- on "input" $ decodeEvent valueDecoder $
-    --   eval . InputAction cfg
-    -- on "keydown" $ decodeEvent keyCodeDecoder $
-    --   eval . KeydownAction cfg
-    -- on_ "blur" $
-    --   eval (CommitAction cfg)
+    on @"input" $ eval . InputAction cfg
+    on @"keydown" $ eval . KeydownAction cfg
+    on @"blur" $ const $ eval (CommitAction cfg)
 
+emptyTodoItemState :: TodoItemState
+emptyTodoItemState = TodoItemState "" False Nothing
 
 instance ToJSVal TodoItemState where
   toJSVal s = JObj

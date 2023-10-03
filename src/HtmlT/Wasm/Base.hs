@@ -87,7 +87,7 @@ handleCommand wasmMain = \case
         case result of
           Left exp -> return $ Eval exp
           Right _ -> return Exit
-  ExecCallback arg callbackId -> do
+  ExecCallbackCommand arg callbackId -> do
     let
       eventId = EventId (QueueId (unCallbackId callbackId))
       wasm = unsafeTrigger eventId arg

@@ -23,7 +23,7 @@ data UpCmd
 data DownCmd
   = Start
   | Return JValue
-  | ExecCallback JValue CallbackId
+  | ExecCallbackCommand JValue CallbackId
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
@@ -50,7 +50,7 @@ data Expr
   -- whatever the last expression evaluetes into (last being the
   -- expression from the tip of the list)
 
-  | HsCallback CallbackId
+  | ExecCallback CallbackId Expr
   | LAssign LhsExpr Expr
   | FreeVar VarId
   | RVar VarId
