@@ -5,11 +5,13 @@ module HtmlT.Wasm.Html where
 import Data.ByteString.Char8 qualified as Char8
 import Control.Monad
 import Control.Monad.Reader
+import Control.Monad.State
 import Data.ByteString
 import Data.IORef
 import Data.Maybe
 import Data.String
 import Data.List qualified as List
+import Data.Set qualified as Set
 import Data.Kind
 import Data.Proxy
 import GHC.TypeLits
@@ -44,7 +46,7 @@ dynProp propName valueDyn = do
   queueExp (LAssign (LVar domBuilderVar) (ReadLhs (unElBuilder domBuilderId)))
   queueExp (ElProp domBuilderId propName (fromJValue (toJSVal initialVal)))
   subscribe (updates valueDyn) $
-    queueExp . ElProp (ElBuilder (LVar domBuilderVar)) propName . fromJValue . toJSVal
+    queueIfAlive domBuilderVar . ElProp (ElBuilder (LVar domBuilderVar)) propName . fromJValue . toJSVal
 
 toggleClass :: ByteString -> Dynamic Bool -> WASM ()
 toggleClass className enableDyn = do
@@ -54,8 +56,17 @@ toggleClass className enableDyn = do
   queueExp (LAssign (LVar domBuilderVar) (ReadLhs (unElBuilder domBuilderId)))
   queueExp (ElToggleClass domBuilderId className initialVal)
   subscribe (updates enableDyn) $
-    queueExp . ElToggleClass (ElBuilder (LVar domBuilderVar)) className
+    queueIfAlive domBuilderVar . ElToggleClass (ElBuilder (LVar domBuilderVar)) className
   return ()
+
+queueIfAlive :: VarId -> Expr -> WASM ()
+queueIfAlive varId e = modify \s ->
+  let
+    evaluation_queue =
+      if Set.member varId s.var_storage
+        then e : s.evaluation_queue else s.evaluation_queue
+  in
+    s {evaluation_queue}
 
 attr :: ByteString -> ByteString -> WASM ()
 attr attrName attrVal = do
@@ -118,7 +129,7 @@ dynText dynContent = do
   textNodeVar <- newVar
   queueExp (LAssign (LVar textNodeVar) (ElText domBuilderId initialContent))
   subscribe (updates dynContent) $
-    queueExp . ElAssignTextContent textNodeVar
+    queueIfAlive textNodeVar . ElAssignTextContent textNodeVar
 
 dyn :: Dynamic (WASM ()) -> WASM ()
 dyn d = do

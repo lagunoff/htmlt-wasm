@@ -20,11 +20,12 @@ import "this" HtmlT.Wasm.Protocol
 newVar :: WASM VarId
 newVar = reactive \e s0 ->
   let
-    newVarId = maybe 0 succ (Set.lookupMax s0.var_storage)
-    var_storage = Set.insert newVarId s0.var_storage
-    (_, s1) = installFinalizer1 (CustomFinalizer (freeVar newVarId)) e s0
+    (newQueueId, s1) = nextQueueId s0
+    newVarId = VarId (unQueueId newQueueId)
+    var_storage = Set.insert newVarId s1.var_storage
+    (_, s2) = installFinalizer1 (CustomFinalizer (freeVar newVarId)) e s1
   in
-    (newVarId, s1 {var_storage})
+    (newVarId, s2 {var_storage})
 
 freeVar :: VarId -> WASM ()
 freeVar varId = do

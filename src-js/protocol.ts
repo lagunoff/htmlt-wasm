@@ -212,9 +212,7 @@ export function evalExpr(ctx: List<Bindings>, inst: HaskellIstance, exp: Expr): 
       // The 'builder' supposed to be a valid reference, but when a
       // 'simpleList' element gets deleted, this gets called with
       // previously freed 'builder'!
-      if (builder) {
-        toggleClass(builder, exp.className, exp.enable != 0);
-      }
+      toggleClass(builder, exp.className, exp.enable != 0);
       return null;
     }
     case ExprTag.UncaughtException: {

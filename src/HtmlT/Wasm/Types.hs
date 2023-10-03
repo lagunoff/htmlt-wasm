@@ -44,6 +44,9 @@ data WASMState = WASMState
   , subscriptions :: Map EventId [(SubscriptionId, Any -> WASM ())]
   , finalizers :: Map FinalizerNs (Map FinalizerKey FinalizerValue)
   , id_supply :: QueueId
+  -- ^ Source of unique identifiers for EventId, SubscriptionId and
+  -- VarId (potentially can lead to clashes if it overflows in a
+  -- long-living application, TODO: is this a legitimate concern?)
   , transaction_queue :: Map QueueId (WASM ())
   }
 

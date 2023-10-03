@@ -8,11 +8,7 @@ Flag development
   default: True
   description: Build faster
 
-executable todomvc
-  if !arch(wasm32)
-    buildable: False
-  hs-source-dirs: examples/todomvc, src
-  main-is: todomvc.hs
+common common-config
   ghc-options:
     -Wall -Wno-missing-signatures -Wno-name-shadowing -Wno-unused-do-bind
     -Wno-partial-type-signatures -Wno-missing-home-modules -static
@@ -20,7 +16,58 @@ executable todomvc
     ghc-options:
       -no-hs-main -optl-mexec-model=reactor
       -optl-Wl,--export=hs_init,--export=app,--export=hs_malloc,--export=hs_free
+  default-extensions:
+    AllowAmbiguousTypes
+    BangPatterns
+    BlockArguments
+    ConstraintKinds
+    DataKinds
+    DefaultSignatures
+    DeriveAnyClass
+    DeriveFunctor
+    DeriveGeneric
+    DerivingStrategies
+    DerivingVia
+    DoAndIfThenElse
+    DuplicateRecordFields
+    EmptyDataDecls
+    FlexibleContexts
+    FlexibleInstances
+    ForeignFunctionInterface
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    ImplicitParams
+    ImportQualifiedPost
+    LambdaCase
+    NamedFieldPuns
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+    PackageImports
+    PartialTypeSignatures
+    PatternGuards
+    PolyKinds
+    QuasiQuotes
+    RankNTypes
+    RecordWildCards
+    RecursiveDo
+    ScopedTypeVariables
+    StandaloneDeriving
+    StrictData
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeOperators
+    UndecidableInstances
+    ViewPatterns
 
+executable todomvc
+  import: common-config
+  if !arch(wasm32)
+    buildable: False
+  hs-source-dirs: examples/todomvc, src
+  main-is: todomvc.hs
   other-modules:
     Utils
     TodoList
@@ -36,36 +83,9 @@ executable todomvc
     containers,
     mtl,
     exceptions,
-  default-extensions:
-    BlockArguments
-    DataKinds
-    DeriveAnyClass
-    DeriveGeneric
-    DerivingStrategies
-    DuplicateRecordFields
-    ForeignFunctionInterface
-    GADTs
-    GeneralizedNewtypeDeriving
-    ImportQualifiedPost
-    LambdaCase
-    MultiParamTypeClasses
-    OverloadedRecordDot
-    OverloadedStrings
-    PackageImports
-    RankNTypes
-    ScopedTypeVariables
-    StrictData
-    TypeApplications
-    RecursiveDo
-    RecordWildCards
-    NamedFieldPuns
-    TupleSections
-    ConstraintKinds
-    PatternGuards
-    BangPatterns
-    FlexibleInstances
     
 executable server-app
+  import: common-config
   if arch(wasm32)
     buildable: False
   ghc-options:
@@ -74,6 +94,11 @@ executable server-app
     -with-rtsopts=-T
   main-is: server.hs
   hs-source-dirs: src
+  other-modules:
+    HtmlT.Wasm.Types
+    HtmlT.Wasm.Protocol
+    HtmlT.Wasm.Base
+    HtmlT.Wasm.Html
 
   build-depends:
     base,
@@ -82,31 +107,3 @@ executable server-app
     containers,
     mtl,
     exceptions,
-  default-extensions:
-    BlockArguments
-    DataKinds
-    DeriveAnyClass
-    DeriveGeneric
-    DerivingStrategies
-    DuplicateRecordFields
-    ForeignFunctionInterface
-    GADTs
-    GeneralizedNewtypeDeriving
-    ImportQualifiedPost
-    LambdaCase
-    MultiParamTypeClasses
-    OverloadedRecordDot
-    OverloadedStrings
-    PackageImports
-    RankNTypes
-    ScopedTypeVariables
-    StrictData
-    TypeApplications
-    RecursiveDo
-    RecordWildCards
-    NamedFieldPuns
-    TupleSections
-    ConstraintKinds
-    PatternGuards
-    BangPatterns
-    FlexibleInstances
