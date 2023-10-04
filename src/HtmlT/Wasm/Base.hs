@@ -106,7 +106,7 @@ handleCommand wasmMain = \case
       Left exp -> return $ Eval exp
       Right _ -> return Exit
   where
-    wasmEnv = WASMEnv (DomBuilder (LVar (VarId (0)))) (-1)
+    wasmEnv = WASMEnv (DomBuilder (VarId (0))) (-1)
 
 runTillInterruption :: forall a. WASMEnv -> WASM a -> IO (Either Expr a)
 runTillInterruption e wasm = do

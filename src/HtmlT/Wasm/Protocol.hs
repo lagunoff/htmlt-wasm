@@ -41,7 +41,7 @@ data Expr
   | Multiply Expr Expr
   | Divide Expr Expr
 
-  | Var ByteString
+  | Id ByteString
   | Lam [ByteString] Expr
   | Apply Expr [Expr]
   | Call Expr ByteString [Expr]
@@ -52,7 +52,7 @@ data Expr
   -- expression from the tip of the list)
 
   | ExecCallback CallbackId Expr
-  | LAssign LhsExpr Expr
+  | LAssign VarId Expr
   | FreeVar VarId
   | RVar VarId
   | Ix Expr Int64
@@ -72,7 +72,6 @@ data Expr
   | ElToggleClass DomBuilder ByteString Bool
 
   | UncaughtException ByteString
-  | ReadLhs LhsExpr
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
@@ -95,20 +94,13 @@ fromJValue = \case
   JArr xs -> Arr $ fmap fromJValue xs
   JObj kv -> Obj $ fmap (\(k, v) -> (k, fromJValue v)) kv
 
-data LhsExpr
-  = LVar VarId
-  | LIx LhsExpr Int64
-  | LProp LhsExpr ByteString
-  deriving stock (Generic, Show)
-  deriving anyclass (Binary)
-
 newtype VarId = VarId { unVarId :: Int64 }
   deriving newtype (Show, Num, Binary, Enum, Ord, Eq)
 
 newtype CallbackId = CallbackId { unCallbackId :: Int64 }
   deriving newtype (Show, Num, Binary, Ord, Eq)
 
-newtype DomBuilder = DomBuilder { unDomBuilder :: LhsExpr }
+newtype DomBuilder = DomBuilder { unDomBuilder :: VarId }
   deriving newtype (Show, Binary)
 
 storeByteString :: ByteString -> IO (Ptr a)

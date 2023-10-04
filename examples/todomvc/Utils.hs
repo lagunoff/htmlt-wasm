@@ -9,11 +9,11 @@ import HtmlT.Wasm.Marshal
 
 readLocalStorage :: FromJSVal v => ByteString -> WASM (Maybe v)
 readLocalStorage key = do
-  let jsonParse = Call (Var "JSON") "parse" . (:[])
-  jsval <- evalExp $ jsonParse $ Call (Var "localStorage") "getItem" [Str key]
+  let jsonParse = Call (Id "JSON") "parse" . (:[])
+  jsval <- evalExp $ jsonParse $ Call (Id "localStorage") "getItem" [Str key]
   return $ fromJSVal jsval
 
 saveLocalStorage :: ToJSVal v => ByteString -> v -> WASM ()
 saveLocalStorage key val = do
-  let stringify = Call (Var "JSON") "stringify" . (:[]) . fromJValue . toJSVal
-  queueExp $ Call (Var "localStorage") "setItem" [Str key, stringify val]
+  let stringify = Call (Id "JSON") "stringify" . (:[]) . fromJValue . toJSVal
+  queueExp $ Call (Id "localStorage") "setItem" [Str key, stringify val]

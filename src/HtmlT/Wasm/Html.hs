@@ -44,21 +44,20 @@ dynProp propName valueDyn = do
   domBuilderVar <- newVar
   domBuilderId <- asks (.dom_builder_id)
   initialVal <- readDyn valueDyn
-  queueExp (LAssign (LVar domBuilderVar) (ReadLhs (unDomBuilder domBuilderId)))
+  queueExp (LAssign domBuilderVar (RVar (unDomBuilder domBuilderId)))
   queueExp (ElProp domBuilderId propName (fromJValue (toJSVal initialVal)))
   subscribe (updates valueDyn) $
-    queueIfAlive domBuilderVar . ElProp (DomBuilder (LVar domBuilderVar)) propName . fromJValue . toJSVal
+    queueIfAlive domBuilderVar . ElProp (DomBuilder domBuilderVar) propName . fromJValue . toJSVal
 
 toggleClass :: ByteString -> Dynamic Bool -> WASM ()
 toggleClass className enableDyn = do
   domBuilderId <- asks (.dom_builder_id)
   initialVal <- readDyn enableDyn
   domBuilderVar <- newVar
-  queueExp (LAssign (LVar domBuilderVar) (ReadLhs (unDomBuilder domBuilderId)))
+  queueExp (LAssign domBuilderVar (RVar (unDomBuilder domBuilderId)))
   queueExp (ElToggleClass domBuilderId className initialVal)
   subscribe (updates enableDyn) $
-    queueIfAlive domBuilderVar . ElToggleClass (DomBuilder (LVar domBuilderVar)) className
-  return ()
+    queueIfAlive domBuilderVar . ElToggleClass (DomBuilder domBuilderVar) className
 
 attr :: ByteString -> ByteString -> WASM ()
 attr attrName attrVal = do
@@ -84,7 +83,7 @@ dynText dynContent = do
   domBuilderId <- asks (.dom_builder_id)
   initialContent <- readDyn dynContent
   textNodeVar <- newVar
-  queueExp (LAssign (LVar textNodeVar) (ElText domBuilderId initialContent))
+  queueExp (LAssign textNodeVar (ElText domBuilderId initialContent))
   subscribe (updates dynContent) $
     queueIfAlive textNodeVar . ElAssignTextContent textNodeVar
 
@@ -98,7 +97,7 @@ dyn d = do
       finalizeNamespace finalizerNs
       wasm
     applyBoundary e = e
-      { dom_builder_id = DomBuilder (LVar boundary)
+      { dom_builder_id = DomBuilder boundary
       , finalizer_ns = finalizerNs
       }
   performDyn $ fmap (local applyBoundary . setup) d
@@ -120,7 +119,7 @@ simpleList listDyn h = do
       -- New list is longer, append new elements
       ([], x:xs) -> do
         newElem <- newElemEnv x
-        let wasmEnv = WASMEnv (DomBuilder (LVar newElem.ee_boundary)) newElem.ee_namespace
+        let wasmEnv = WASMEnv (DomBuilder newElem.ee_boundary) newElem.ee_namespace
         local (const wasmEnv) $ h idx newElem.ee_dyn_ref
         fmap (newElem:) $ setup (idx + 1) xs []
       -- New list is shorter, delete the elements that no longer
@@ -148,7 +147,7 @@ simpleList listDyn h = do
       newEenvs <- setup 0 new eenvs
       liftIO $ writeIORef internalStateRef newEenvs
     applyBoundary e = e
-      { dom_builder_id = DomBuilder (LVar boundary)
+      { dom_builder_id = DomBuilder boundary
       }
   performDyn $ fmap (local applyBoundary . updateList) listDyn
   return ()
@@ -158,23 +157,6 @@ data ElemEnv a = ElemEnv
   , ee_dyn_ref :: DynRef a
   , ee_namespace :: FinalizerNs
   }
-
-consoleLog :: Expr -> WASM ()
-consoleLog e = queueExp (Call (Var "console") "log" [e])
-
-insertBoundary :: WASM VarId
-insertBoundary = do
-  domBuilderId <- asks (.dom_builder_id)
-  boundary <- newVar
-  queueExp (LAssign (LVar boundary) (ReadLhs (unDomBuilder domBuilderId)))
-  queueExp (ElInsertBoundary (DomBuilder (LVar boundary)))
-  return boundary
-
-clearBoundary :: VarId -> WASM ()
-clearBoundary boundary = queueExp (ElClearBoundary (DomBuilder (LVar boundary)))
-
-destroyBoundary :: VarId -> WASM ()
-destroyBoundary boundary = queueExp (ElDestroyBuilder (DomBuilder (LVar boundary)))
 
 instance a ~ () => IsString (WASM a) where
   fromString = text . Char8.pack

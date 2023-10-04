@@ -35,7 +35,7 @@ main = return ()
 wasmMain :: WASM ()
 wasmMain = do
   domBuilderId <- asks (.dom_builder_id)
-  queueExp $ ElInitBuilder domBuilderId (Var "document" `Dot` "body")
+  queueExp $ ElInitBuilder domBuilderId (Id "document" `Dot` "body")
   el "style" $ text styles
   todoListStateRef <- TodoList.eval TodoList.InitAction
   TodoList.html TodoList.TodoListConfig
