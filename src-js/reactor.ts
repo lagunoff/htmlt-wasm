@@ -67,8 +67,9 @@ const globalContext: List<Bindings> = [window as any, null]
 
 function interactWithHaskell(inst: HaskellIstance, down: DownCmd): UpCmd {
   const downBuf = p.downCmd.encode(down);
+  console.log(`sending ${downBuf.length} bytes`);
   const downPtr = storeBuffer(inst, downBuf);
   const upBuf = loadBuffer(inst, inst.exports.app(downPtr));
-//  console.log(upBuf);
+  console.log(`receiving ${upBuf.length} bytes`);
   return p.upCmd.decode(upBuf);
 }

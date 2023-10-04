@@ -35,6 +35,7 @@ newtype WASM a = WASM
 
 data WASMEnv = WASMEnv
   { dom_builder_id :: DomBuilder
+  , save_current_element :: VarId
   , finalizer_ns :: FinalizerNs
   }
 

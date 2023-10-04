@@ -172,6 +172,27 @@ performDyn d = do
   join $ liftIO $ dynamic_read d
   subscribe d.dynamic_updates id
 
+-- | Return a 'Dynamic' for which updates only fire when the value
+-- actually changes according to Eq instance
+holdUniqDyn :: Eq a => Dynamic a -> Dynamic a
+holdUniqDyn = holdUniqDynBy (==)
+{-# INLINE holdUniqDyn #-}
+
+-- TODO: holdUniqDynBy could be a misleading name, because it won't
+-- hold the value for the whole Dynamic, instead it will perform the
+-- comparison for each subscription
+-- | Same as 'holdUniqDyn' but accepts arbitrary equality test
+-- function
+holdUniqDynBy :: (a -> a -> Bool) -> Dynamic a -> Dynamic a
+holdUniqDynBy equalFn Dynamic{..} = Dynamic dynamic_read
+  (Event \k -> do
+    old <- liftIO dynamic_read
+    oldRef <- liftIO (newIORef old)
+    unEvent dynamic_updates \new -> do
+      old <- liftIO $ atomicModifyIORef' oldRef (new,)
+      unless (old `equalFn` new) $ k new
+  )
+
 type Subscriptions = Map EventId [(SubscriptionId, Any -> WASM ())]
 
 type Finalizers = Map FinalizerNs (Map FinalizerKey FinalizerValue)

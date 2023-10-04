@@ -70,7 +70,7 @@ continuationsRef = unsafePerformIO $ newIORef []
 
 wasmStateRef :: IORef WASMState
 wasmStateRef = unsafePerformIO $ newIORef WASMState
-  { var_storage = Set.singleton 0
+  { var_storage = Set.fromList [0, 1]
   , evaluation_queue = []
   , subscriptions = Map.empty
   , finalizers = Map.empty
@@ -106,7 +106,7 @@ handleCommand wasmMain = \case
       Left exp -> return $ Eval exp
       Right _ -> return Exit
   where
-    wasmEnv = WASMEnv (DomBuilder (VarId (0))) (-1)
+    wasmEnv = WASMEnv (DomBuilder (VarId (0))) (VarId 1) (-1)
 
 runTillInterruption :: forall a. WASMEnv -> WASM a -> IO (Either Expr a)
 runTillInterruption e wasm = do

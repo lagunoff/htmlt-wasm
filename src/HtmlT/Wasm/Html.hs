@@ -29,8 +29,9 @@ import "this" HtmlT.Wasm.Event
 el :: ByteString -> WASM a -> WASM a
 el tagName child = do
   domBuilderId <- asks (.dom_builder_id)
+  save_current_element <- newVar
   queueExp (ElPush domBuilderId tagName)
-  result <- child
+  result <- local (\e -> e {save_current_element}) child
   queueExp (ElPop domBuilderId)
   return result
 
@@ -39,25 +40,23 @@ prop propName propVal = do
   domBuilderId <- asks (.dom_builder_id)
   queueExp (ElProp domBuilderId propName (fromJValue (toJSVal propVal)))
 
-dynProp :: ToJSVal v => ByteString -> Dynamic v -> WASM ()
-dynProp propName valueDyn = do
-  domBuilderVar <- newVar
-  domBuilderId <- asks (.dom_builder_id)
+dynProp :: (ToJSVal v, Eq v) => ByteString -> Dynamic v -> WASM ()
+dynProp propName (holdUniqDyn -> valueDyn) = do
+  e <- ask
   initialVal <- readDyn valueDyn
-  queueExp (LAssign domBuilderVar (RVar (unDomBuilder domBuilderId)))
-  queueExp (ElProp domBuilderId propName (fromJValue (toJSVal initialVal)))
+  queueExp (LAssign e.save_current_element (RVar (unDomBuilder e.dom_builder_id)))
+  queueExp (ElProp e.dom_builder_id propName (fromJValue (toJSVal initialVal)))
   subscribe (updates valueDyn) $
-    queueIfAlive domBuilderVar . ElProp (DomBuilder domBuilderVar) propName . fromJValue . toJSVal
+    queueIfAlive e.save_current_element . ElProp (DomBuilder e.save_current_element) propName . fromJValue . toJSVal
 
 toggleClass :: ByteString -> Dynamic Bool -> WASM ()
-toggleClass className enableDyn = do
-  domBuilderId <- asks (.dom_builder_id)
+toggleClass className (holdUniqDyn -> enableDyn) = do
+  e <- ask
   initialVal <- readDyn enableDyn
-  domBuilderVar <- newVar
-  queueExp (LAssign domBuilderVar (RVar (unDomBuilder domBuilderId)))
-  queueExp (ElToggleClass domBuilderId className initialVal)
+  queueExp (LAssign e.save_current_element (RVar (unDomBuilder e.dom_builder_id)))
+  queueExp (ElToggleClass e.dom_builder_id className initialVal)
   subscribe (updates enableDyn) $
-    queueIfAlive domBuilderVar . ElToggleClass (DomBuilder domBuilderVar) className
+    queueIfAlive e.save_current_element . ElToggleClass (DomBuilder e.save_current_element) className
 
 attr :: ByteString -> ByteString -> WASM ()
 attr attrName attrVal = do
@@ -79,7 +78,7 @@ text contents = do
   queueExp (ElText domBuilderId contents)
 
 dynText :: Dynamic ByteString -> WASM ()
-dynText dynContent = do
+dynText (holdUniqDyn -> dynContent) = do
   domBuilderId <- asks (.dom_builder_id)
   initialContent <- readDyn dynContent
   textNodeVar <- newVar
@@ -119,7 +118,7 @@ simpleList listDyn h = do
       -- New list is longer, append new elements
       ([], x:xs) -> do
         newElem <- newElemEnv x
-        let wasmEnv = WASMEnv (DomBuilder newElem.ee_boundary) newElem.ee_namespace
+        let wasmEnv = WASMEnv newElem.ee_boundary newElem.ee_save_current_element newElem.ee_namespace
         local (const wasmEnv) $ h idx newElem.ee_dyn_ref
         fmap (newElem:) $ setup (idx + 1) xs []
       -- New list is shorter, delete the elements that no longer
@@ -136,11 +135,12 @@ simpleList listDyn h = do
       ee_namespace <- newNamespace
       local (\e -> e {finalizer_ns = ee_namespace}) do
         ee_dyn_ref <- newRef a
-        ee_boundary <- insertBoundary
+        ee_boundary <- DomBuilder <$> insertBoundary
+        ee_save_current_element <- newVar
         return ElemEnv {..}
     finalizeElems :: Bool -> [ElemEnv a] -> WASM ()
     finalizeElems remove = mapM_ \ee -> do
-      when remove $ destroyBoundary ee.ee_boundary
+      when remove $ destroyBoundary (unDomBuilder ee.ee_boundary)
       finalizeNamespace ee.ee_namespace
     updateList new = do
       eenvs <- liftIO $ readIORef internalStateRef
@@ -153,7 +153,8 @@ simpleList listDyn h = do
   return ()
 
 data ElemEnv a = ElemEnv
-  { ee_boundary :: VarId
+  { ee_boundary :: DomBuilder
+  , ee_save_current_element :: VarId
   , ee_dyn_ref :: DynRef a
   , ee_namespace :: FinalizerNs
   }
