@@ -64,3 +64,8 @@ instance IsEventName "checkbox/change" where
   type EventListener "checkbox/change" = Bool -> WASM ()
   mkEventListener k j = forM_ (fromJSVal j) k
   mkEventListener1 callbackId = Lam ["e"] (ExecCallback callbackId (Id "e" `Dot` "target" `Dot` "checked"))
+
+instance IsEventName "select/change" where
+  type EventListener "select/change" = ByteString -> WASM ()
+  mkEventListener k j = forM_ (fromJSVal j) k
+  mkEventListener1 callbackId = Lam ["e"] (ExecCallback callbackId (Id "e" `Dot` "target" `Dot` "value"))

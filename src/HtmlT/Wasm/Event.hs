@@ -1,4 +1,3 @@
-{-# LANGUAGE ViewPatterns #-}
 module HtmlT.Wasm.Event where
 
 import Control.Monad

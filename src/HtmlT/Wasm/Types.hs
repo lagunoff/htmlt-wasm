@@ -1,5 +1,3 @@
-{-|
--}
 module HtmlT.Wasm.Types where
 
 import Control.Exception

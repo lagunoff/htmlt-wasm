@@ -62,6 +62,26 @@ common common-config
     UndecidableInstances
     ViewPatterns
 
+executable voting
+  import: common-config
+  if !arch(wasm32)
+    buildable: False
+  hs-source-dirs: examples/voting, src
+  main-is: voting.hs
+  other-modules:
+    HtmlT.Wasm.Types
+    HtmlT.Wasm.Protocol
+    HtmlT.Wasm.Base
+    HtmlT.Wasm.Html
+  build-depends:
+                base,
+                binary,
+                bytestring,
+                containers,
+                exceptions,
+                mtl,
+                text
+
 executable todomvc
   import: common-config
   if !arch(wasm32)
@@ -77,12 +97,13 @@ executable todomvc
     HtmlT.Wasm.Base
     HtmlT.Wasm.Html
   build-depends:
-    base,
-    binary,
-    bytestring,
-    containers,
-    mtl,
-    exceptions,
+                base,
+                binary,
+                bytestring,
+                containers,
+                exceptions,
+                mtl,
+                text
     
 executable server-app
   import: common-config
@@ -101,9 +122,10 @@ executable server-app
     HtmlT.Wasm.Html
 
   build-depends:
-    base,
-    binary,
-    bytestring,
-    containers,
-    mtl,
-    exceptions,
+                base,
+                binary,
+                bytestring,
+                containers,
+                exceptions,
+                mtl,
+                text

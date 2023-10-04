@@ -15,7 +15,7 @@ let fds = [
 let wasi = new WASI(args, env, fds);
 
 
-let wasm = await WebAssembly.compileStreaming(fetch("todomvc/todomvc.wasm"));
+let wasm = await WebAssembly.compileStreaming(fetch("voting/voting.wasm"));
 let inst = await WebAssembly.instantiate(wasm, {
   "wasi_snapshot_preview1": wasi.wasiImport,
   env : {

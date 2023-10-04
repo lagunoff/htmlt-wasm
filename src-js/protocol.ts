@@ -143,7 +143,7 @@ export function evalExpr(ctx: List<Bindings>, inst: HaskellIstance, exp: Expr): 
         builder._begin.parentElement!.removeChild(builder._begin);
         builder._end.parentElement!.removeChild(builder._end);
       }
-      // storage.delete(exp.builder.varId)
+      storage.delete(exp.builder)
       return null;
     }
     case ExprTag.ElPush: {
@@ -273,7 +273,6 @@ export const jvalue = b.recursive<JValue>(self => b.discriminate({
   [JValueTag.JArr]: b.record({ 0: b.array(self) }),
   [JValueTag.JObj]: b.record({ 0: b.array(b.tuple(b.string, self)) }),
 }));
-
 
 export enum ExprTag {
   Null,
