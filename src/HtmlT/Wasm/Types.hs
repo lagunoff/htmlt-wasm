@@ -1,52 +1,43 @@
 module HtmlT.Wasm.Types where
 
-import Control.Exception
 import Control.Monad.Reader
 import Control.Monad.Fix
 import Control.Monad.State
-import Data.ByteString.Char8 qualified as Char8
-import Data.IORef
-import Data.Typeable
 import Data.Map (Map)
-import Data.Map qualified as Map
 import Data.Set (Set)
-import Data.Set qualified as Set
 import GHC.Exts
 import GHC.Int
-import GHC.Fingerprint
 import GHC.Generics
-import System.IO.Unsafe
-import Unsafe.Coerce
 
 import "this" HtmlT.Wasm.Protocol
 
-data WASMResult a where
-  Pure :: a -> WASMResult a
-  Cmd :: Expr -> WASMResult JValue
-  Interrupt :: Expr -> (JValue -> WASM b) -> WASMResult b
-  FMap :: (a -> b) -> WASMResult a -> WASMResult b
+data WAResult a where
+  Pure :: a -> WAResult a
+  Cmd :: Expr -> WAResult JValue
+  Interrupt :: Expr -> (JValue -> WA b) -> WAResult b
+  FMap :: (a -> b) -> WAResult a -> WAResult b
 
 -- | A computation capable of interacting with JavaScript.
-newtype WASM a = WASM
-  { unWasm :: WASMEnv -> WASMState -> IO (WASMState, WASMResult a)
+newtype WA a = WA
+  { unWA :: WAEnv -> WAState -> IO (WAState, WAResult a)
   }
 
-data WASMEnv = WASMEnv
+data WAEnv = WAEnv
   { dom_builder_id :: DomBuilder
   , save_current_element :: VarId
   , finalizer_ns :: FinalizerNs
   }
 
-data WASMState = WASMState
+data WAState = WAState
   { var_storage :: Set VarId
   , evaluation_queue :: [Expr]
-  , subscriptions :: Map EventId [(SubscriptionId, Any -> WASM ())]
+  , subscriptions :: Map EventId [(SubscriptionId, Any -> WA ())]
   , finalizers :: Map FinalizerNs (Map FinalizerKey FinalizerValue)
   , id_supply :: QueueId
   -- ^ Source of unique identifiers for EventId, SubscriptionId and
   -- VarId (potentially can lead to clashes if it overflows in a
   -- long-living application, TODO: is this a legitimate concern?)
-  , transaction_queue :: Map QueueId (WASM ())
+  , transaction_queue :: Map QueueId (WA ())
   }
 
 newtype QueueId = QueueId { unQueueId :: Int64 }
@@ -65,77 +56,77 @@ data FinalizerKey
 
 data FinalizerValue
   = SubscriptionSet (Set SubscriptionId)
-  | CustomFinalizer (WASM ())
+  | CustomFinalizer (WA ())
   | NamespaceFinalizer FinalizerNs
   | ParentNamespace FinalizerNs
 
 newtype FinalizerNs = FinalizerNs {unFinalizerNs :: QueueId}
   deriving newtype (Eq, Ord, Num)
 
-bindWasmResult :: forall a b. WASMResult a -> (a -> WASM b) -> WASMEnv -> WASMState -> IO (WASMState, WASMResult b)
+bindWasmResult :: forall a b. WAResult a -> (a -> WA b) -> WAEnv -> WAState -> IO (WAState, WAResult b)
 bindWasmResult r cont e s = case r of
-  Pure a -> unWasm (cont a) e s
+  Pure a -> unWA (cont a) e s
   Cmd cmd ->
     return (s, Interrupt cmd cont)
   FMap f i ->
     bindWasmResult i (cont . f) e s
   Interrupt cmd c2 -> do
     let
-      cont' exp = WASM \e s -> do
-        (s', r') <- unWasm (c2 exp) e s
+      cont' exp = WA \e s -> do
+        (s', r') <- unWA (c2 exp) e s
         bindWasmResult r' cont e s'
     return (s, Interrupt cmd cont')
 
 class MonadReactive m where
-  reactive :: (WASMEnv -> WASMState -> (a, WASMState)) -> m a
+  reactive :: (WAEnv -> WAState -> (a, WAState)) -> m a
 
-reactive_ :: MonadReactive m => (WASMEnv -> WASMState -> WASMState) -> m ()
+reactive_ :: MonadReactive m => (WAEnv -> WAState -> WAState) -> m ()
 reactive_ f = reactive \e s -> ((), f e s)
 {-# INLINE reactive_ #-}
 
-instance Functor WASM where
-  fmap f (WASM g) = WASM \e s -> fmap h (g e s)
+instance Functor WA where
+  fmap f (WA g) = WA \e s -> fmap h (g e s)
     where
       h (s, (Pure a)) = (s, Pure (f a))
       h (s, r) = (s, FMap f r)
   {-# INLINE fmap #-}
 
-instance Applicative WASM where
-  pure a = WASM \_ s -> return (s, Pure a)
+instance Applicative WA where
+  pure a = WA \_ s -> return (s, Pure a)
   {-# INLINE pure #-}
-  (<*>) mf ma = WASM \e s -> do
-    (s, r) <- unWasm mf e s
+  (<*>) mf ma = WA \e s -> do
+    (s, r) <- unWA mf e s
     bindWasmResult r (flip fmap ma) e s
   {-# INLINE (<*>) #-}
 
-instance Monad WASM where
-  (>>=) ma mf = WASM \e s -> do
-    (s, r) <- unWasm ma e s
+instance Monad WA where
+  (>>=) ma mf = WA \e s -> do
+    (s, r) <- unWA ma e s
     bindWasmResult r mf e s
   {-# INLINE (>>=) #-}
 
-instance MonadReader WASMEnv WASM where
-  local f (WASM g) = WASM \e -> g (f e)
+instance MonadReader WAEnv WA where
+  local f (WA g) = WA \e -> g (f e)
   {-# INLINE local #-}
-  ask = WASM \e s -> return (s, Pure e)
+  ask = WA \e s -> return (s, Pure e)
   {-# INLINE ask #-}
 
-instance MonadState WASMState WASM where
-  state f = WASM \_ s -> let (a, s') = f s in return (s', Pure a)
+instance MonadState WAState WA where
+  state f = WA \_ s -> let (a, s') = f s in return (s', Pure a)
   {-# INLINE state #-}
 
-instance MonadIO WASM where
-  liftIO io = WASM \_ s -> fmap ((s,) . Pure) io
+instance MonadIO WA where
+  liftIO io = WA \_ s -> fmap ((s,) . Pure) io
   {-# INLINE liftIO #-}
 
-instance MonadFix WASM where
-  mfix f = WASM \e s -> mfix \ ~(_, a) -> unWasm (f (extractPure a)) e s
+instance MonadFix WA where
+  mfix f = WA \e s -> mfix \ ~(_, a) -> unWA (f (extractPure a)) e s
     where
       extractPure (Pure a) = a
       extractPure _ = error
         "Asynchronous commands in conjunction with MonadFix not supported"
   {-# INLINE mfix #-}
 
-instance MonadReactive WASM where
-  reactive f = WASM \e s -> let (a, s') = f e s in return (s', Pure a)
+instance MonadReactive WA where
+  reactive f = WA \e s -> let (a, s') = f e s in return (s', Pure a)
   {-# INLINE reactive #-}

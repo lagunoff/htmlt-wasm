@@ -4,18 +4,10 @@ name: htmlt-wasm
 version: 0.1.0.0
 build-type: Simple
 
-Flag development
-  default: True
-  description: Build faster
-
 common common-config
   ghc-options:
     -Wall -Wno-missing-signatures -Wno-name-shadowing -Wno-unused-do-bind
     -Wno-partial-type-signatures -Wno-missing-home-modules -static
-  if arch(wasm32)
-    ghc-options:
-      -no-hs-main -optl-mexec-model=reactor
-      -optl-Wl,--export=hs_init,--export=app,--export=hs_malloc,--export=hs_free
   default-extensions:
     AllowAmbiguousTypes
     BangPatterns
@@ -66,66 +58,65 @@ executable voting
   import: common-config
   if !arch(wasm32)
     buildable: False
-  hs-source-dirs: examples/voting, src
+  else
+    ghc-options:
+      -no-hs-main -optl-mexec-model=reactor
+      -optl-Wl,--export=hs_init,--export=app,--export=hs_malloc,--export=hs_free
+  hs-source-dirs: examples/voting
   main-is: voting.hs
-  other-modules:
-    HtmlT.Wasm.Types
-    HtmlT.Wasm.Protocol
-    HtmlT.Wasm.Base
-    HtmlT.Wasm.Html
+
   build-depends:
-                base,
-                binary,
-                bytestring,
-                containers,
-                exceptions,
-                mtl,
-                text
+    base,
+    binary,
+    bytestring,
+    containers,
+    exceptions,
+    mtl,
+    text,
+    htmlt-wasm,
 
 executable todomvc
   import: common-config
   if !arch(wasm32)
     buildable: False
-  hs-source-dirs: examples/todomvc, src
+  else
+    ghc-options:
+      -no-hs-main -optl-mexec-model=reactor
+      -optl-Wl,--export=hs_init,--export=app,--export=hs_malloc,--export=hs_free
+  hs-source-dirs: examples/todomvc
   main-is: todomvc.hs
   other-modules:
     Utils
     TodoList
     TodoItem
-    HtmlT.Wasm.Types
-    HtmlT.Wasm.Protocol
-    HtmlT.Wasm.Base
-    HtmlT.Wasm.Html
   build-depends:
-                base,
-                binary,
-                bytestring,
-                containers,
-                exceptions,
-                mtl,
-                text
+    base,
+    binary,
+    bytestring,
+    containers,
+    exceptions,
+    mtl,
+    text,
+    htmlt-wasm,
     
-executable server-app
+library
   import: common-config
-  if arch(wasm32)
-    buildable: False
-  ghc-options:
-    -Wall -Wno-missing-signatures -Wno-name-shadowing -Wno-unused-do-bind
-    -Wno-partial-type-signatures -Wno-missing-home-modules -static
-    -with-rtsopts=-T
-  main-is: server.hs
   hs-source-dirs: src
-  other-modules:
-    HtmlT.Wasm.Types
-    HtmlT.Wasm.Protocol
+  exposed-modules:
     HtmlT.Wasm.Base
+    HtmlT.Wasm.DOM
+    HtmlT.Wasm.Element
+    HtmlT.Wasm.Event
     HtmlT.Wasm.Html
-
+    HtmlT.Wasm.Marshal
+    HtmlT.Wasm.Property
+    HtmlT.Wasm.Protocol
+    HtmlT.Wasm.Types
   build-depends:
-                base,
-                binary,
-                bytestring,
-                containers,
-                exceptions,
-                mtl,
-                text
+    base,
+    binary,
+    bytestring,
+    containers,
+    exceptions,
+    mtl,
+    text

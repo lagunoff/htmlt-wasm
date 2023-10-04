@@ -35,7 +35,9 @@ data Expr
   | Obj [(ByteString, Expr)]
 
   | Dot Expr ByteString
-  | Assign Expr ByteString Expr
+  | AssignProp Expr ByteString Expr
+  | Ix Expr Int64
+
   | Add Expr Expr
   | Subtract Expr Expr
   | Multiply Expr Expr
@@ -45,17 +47,10 @@ data Expr
   | Lam [ByteString] Expr
   | Apply Expr [Expr]
   | Call Expr ByteString [Expr]
-  | RevSeq [Expr]
-  -- ^ Sequence of the expressions is in reverse order! It starts
-  -- evaluating from the end of the list to the beggining. Returns
-  -- whatever the last expression evaluetes into (last being the
-  -- expression from the tip of the list)
 
-  | ExecCallback CallbackId Expr
-  | LAssign VarId Expr
+  | AssignVar VarId Expr
   | FreeVar VarId
-  | RVar VarId
-  | Ix Expr Int64
+  | Var VarId
 
   | ElInitBuilder DomBuilder Expr
   | ElDestroyBuilder DomBuilder
@@ -71,6 +66,12 @@ data Expr
   | ElClearBoundary DomBuilder
   | ElToggleClass DomBuilder ByteString Bool
 
+  | RevSeq [Expr]
+  -- ^ Sequence of the expressions is in reverse order! It starts
+  -- evaluating from the end of the list to the beggining. Returns
+  -- whatever the last expression evaluetes into (last being the
+  -- expression from the tip of the list)
+  | ExecCallback CallbackId Expr
   | UncaughtException ByteString
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
@@ -102,26 +103,3 @@ newtype CallbackId = CallbackId { unCallbackId :: Int64 }
 
 newtype DomBuilder = DomBuilder { unDomBuilder :: VarId }
   deriving newtype (Show, Binary)
-
-storeByteString :: ByteString -> IO (Ptr a)
-storeByteString bs = do
-  let len = BS.length bs
-  dest <- Alloc.callocBytes (len + 8)
-  poke @Word64 dest (fromIntegral len)
-  BSU.unsafeUseAsCStringLen bs $ \(src, _) ->
-    copyBytes (dest `plusPtr` 8) src len
-  return (castPtr dest)
-
-loadByteString :: Ptr a -> IO ByteString
-loadByteString ptr = do
-  len <- peek @Word64 (castPtr ptr)
-  let contentPtr = ptr `plusPtr` 8
-  BSU.unsafePackCStringFinalizer contentPtr (fromIntegral len) (Alloc.free ptr)
-
-storeBinary :: Binary a => a -> IO (Ptr a)
-storeBinary =
-  storeByteString . BSL.toStrict . Binary.encode
-
-loadBinary :: Binary a => Ptr a -> IO a
-loadBinary =
-  fmap (Binary.decode . BSL.fromStrict) . loadByteString

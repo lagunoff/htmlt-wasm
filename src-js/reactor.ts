@@ -4,10 +4,6 @@ import { UpCmd, DownCmd, DownCmdTag, UpCommandTag, Bindings, List } from './prot
 
 export  type HaskellPointer = number;
 
-export type JSValueRef = [number, number];
-
-export type JSFunctionName = string;
-
 export type HaskellExports = {
   hs_malloc: (size: number) => HaskellPointer;
   hs_free: (ptr: HaskellPointer) => void;
@@ -49,7 +45,6 @@ export function storeBuffer(inst: HaskellIstance, u8array: Uint8Array) {
 
 export function haskellApp(inst: HaskellIstance, down: DownCmd = { tag: DownCmdTag.Start }) {
   const upCmd = interactWithHaskell(inst, down);
-  // console.log(upCmd);
   switch (upCmd.tag) {
     case UpCommandTag.Eval: {
       const result = p.evalExpr(globalContext, inst, upCmd.expr);

@@ -1,15 +1,1 @@
 packages: .
-
-extra-deps:
-  aeson
-    git: https://github.com/haskell/aeson.git
-    commit: 9058d2a34bba3de23f705d1f7257cf16957e0f30
-  unordered-containers
-    git: https://github.com/haskell-unordered-containers/unordered-containers.git
-    commit: 259dc9e4191d988a7f84c3d417764a32e7c8e29f
-  text-short
-    git: https://github.com/haskell-hvr/text-short.git
-    commit: 536d365fbc8c50fc180f54ff215900b7eb8f3c2d
-  vector-stream
-    git: https://github.com/haskell/vector.git
-    commit: dd108295aef93557d69cae5313c53c99bd66f341

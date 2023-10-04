@@ -1,30 +1,17 @@
-import Data.Binary qualified as Binary
-import Data.ByteString.Lazy qualified as BSL
 import Data.Word
 import Foreign.Marshal.Alloc qualified as Alloc
 import Foreign.Ptr
 import Control.Monad.Reader
-import Data.Functor
 import Data.ByteString
-import Data.ByteString.Char8 qualified as Char8
 
-import "this" HtmlT.Wasm.Base
-import "this" HtmlT.Wasm.Html
-import "this" HtmlT.Wasm.Protocol
-import "this" HtmlT.Wasm.Types
-import "this" HtmlT.Wasm.Event
-import "this" Utils
-import "this" TodoList qualified as TodoList
-import "this" TodoItem qualified as TodoItem
+import HtmlT.Wasm.Base
+import HtmlT.Wasm.Html
+import HtmlT.Wasm.Protocol
+import HtmlT.Wasm.Types
+import TodoList qualified as TodoList
 
 foreign export ccall app :: Ptr Word8 -> IO (Ptr Word8)
-
-app :: Ptr Word8 -> IO (Ptr Word8)
-app p = do
-  downCmd <- Binary.decode . BSL.fromStrict <$> loadByteString p
-  upCmd <- handleCommand wasmMain downCmd
-  storeByteString $ BSL.toStrict $ Binary.encode upCmd
-
+app = wasmApp wasmMain
 foreign export ccall hs_malloc :: Int -> IO (Ptr a)
 hs_malloc = Alloc.callocBytes
 foreign export ccall hs_free :: Ptr a -> IO ()
@@ -32,7 +19,7 @@ hs_free = Alloc.free
 
 main = return ()
 
-wasmMain :: WASM ()
+wasmMain :: WA ()
 wasmMain = do
   domBuilderId <- asks (.dom_builder_id)
   queueExp $ ElInitBuilder domBuilderId (Id "document" `Dot` "body")
@@ -46,7 +33,7 @@ styles :: ByteString
 styles = "\
   \body {\
   \  margin: 0;\
-  \  padding: 0;\
+  \  padding: 0 ;\
   \}\
   \\
   \button {\

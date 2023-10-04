@@ -8,7 +8,6 @@ import HtmlT.Wasm.Types
 import HtmlT.Wasm.Html
 import HtmlT.Wasm.Element
 import HtmlT.Wasm.Property
-import HtmlT.Wasm.Base
 import HtmlT.Wasm.Event
 import HtmlT.Wasm.Protocol
 import HtmlT.Wasm.Marshal
@@ -16,7 +15,7 @@ import HtmlT.Wasm.Marshal
 data TodoItemConfig = TodoItemConfig
   { state_ref :: DynRef TodoItemState
   , is_hidden_dyn :: Dynamic Bool
-  , ask_delete_item :: WASM ()
+  , ask_delete_item :: WA ()
   }
 
 data TodoItemState = TodoItemState
@@ -33,7 +32,7 @@ data TodoItemAction a where
   CheckedAction :: TodoItemConfig -> Bool -> TodoItemAction ()
   KeydownAction :: TodoItemConfig -> Int64 -> TodoItemAction ()
 
-eval :: TodoItemAction a -> WASM a
+eval :: TodoItemAction a -> WA a
 eval = \case
   CancelAction cfg ->
     modifyRef cfg.state_ref \s -> s{editing=Nothing}
@@ -58,7 +57,7 @@ eval = \case
     27 {- Escape -} -> eval (CancelAction cfg)
     _ -> return ()
 
-html :: TodoItemConfig -> WASM ()
+html :: TodoItemConfig -> WA ()
 html cfg = li_ do
   let
     completedDyn = (.completed) <$> fromRef cfg.state_ref

@@ -25,13 +25,13 @@ class Term arg result | result -> arg where
     -> result -- ^ Result: either an element or an attribute.
 
 -- | Given attributes, expect more child input.
-instance f ~ WASM a => Term [WASM ()] (f -> WASM a) where
+instance f ~ WA a => Term [WA ()] (f -> WA a) where
   term name attrs = el name . (sequence_ attrs *>)
   {-# INLINE term #-}
 
 -- | Given children immediately, just use that and expect no
 -- attributes.
-instance Term (WASM a) (WASM a) where
+instance Term (WA a) (WA a) where
   term = el
   {-# INLINE term #-}
 
@@ -359,7 +359,7 @@ sup_ :: Term arg result => arg -> result
 sup_ = term "sup"
 {-# INLINE sup_ #-}
 
-br_ :: WASM ()
+br_ :: WA ()
 br_ = el "br" (return ())
 {-# INLINE br_ #-}
 

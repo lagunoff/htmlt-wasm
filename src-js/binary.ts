@@ -1,4 +1,5 @@
 import { absurd } from './lib';
+import { HaskellPointer } from './reactor';
 
 export class DecoderBase<A> {
   // @ts-ignore
@@ -353,5 +354,3 @@ export function recursive<A>(f: (self: Decoder<any>) => Decoder<A>): Decoder<A> 
   self._self = result;
   return result;
 }
-
-export type HaskellPointer = number;

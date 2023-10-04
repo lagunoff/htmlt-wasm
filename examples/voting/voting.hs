@@ -1,38 +1,32 @@
-import Data.Binary qualified as Binary
-import Data.ByteString.Lazy qualified as BSL
-import Data.Word
-import Foreign.Marshal.Alloc qualified as Alloc
-import Foreign.Ptr
-import Control.Monad.Reader
 import Control.Monad
+import Control.Monad.Reader
 import Data.ByteString
 import Data.ByteString.Char8 qualified as Char8
 import Data.List qualified as List
-import Data.Text qualified as Text
+import Data.Ord
+import Data.Text qualified as Text ()
 import Data.Text.Encoding qualified as Text
+import Data.Word
+import Foreign.Marshal.Alloc qualified as Alloc
+import Foreign.Ptr
 
-import "this" HtmlT.Wasm.Base
-import "this" HtmlT.Wasm.Html
-import "this" HtmlT.Wasm.Protocol
-import "this" HtmlT.Wasm.Element
-import "this" HtmlT.Wasm.Property
-import "this" HtmlT.Wasm.Types
-import "this" HtmlT.Wasm.Event
+import HtmlT.Wasm.Base
+import HtmlT.Wasm.Html
+import HtmlT.Wasm.Protocol
+import HtmlT.Wasm.Element
+import HtmlT.Wasm.Property
+import HtmlT.Wasm.Types
+import HtmlT.Wasm.Event
 
 foreign export ccall app :: Ptr Word8 -> IO (Ptr Word8)
-
-app :: Ptr Word8 -> IO (Ptr Word8)
-app p = do
-  downCmd <- Binary.decode . BSL.fromStrict <$> loadByteString p
-  upCmd <- handleCommand wasmMain downCmd
-  storeByteString $ BSL.toStrict $ Binary.encode upCmd
-
+app = wasmApp wasmMain
 foreign export ccall hs_malloc :: Int -> IO (Ptr a)
 hs_malloc = Alloc.callocBytes
 foreign export ccall hs_free :: Ptr a -> IO ()
 hs_free = Alloc.free
 
 main = return ()
+
 
 data VotingCandidate = VotingCandidate
   { language :: ByteString
@@ -53,12 +47,12 @@ candidates =
   , VotingCandidate "Haskell" 423
   ]
 
-wasmMain :: WASM ()
+wasmMain :: WA ()
 wasmMain = do
   domBuilderId <- asks (.dom_builder_id)
   queueExp $ ElInitBuilder domBuilderId (Id "document" `Dot` "body")
   el "link" (rel_ "stylesheet" >> href_ "./awsm.css")
-  votingListRef <- newRef candidates
+  votingListRef <- newRef $ normalize candidates
   main_ do
     h4_ "Vote for Your Favorite Programming Language"
     p_ $ ol_ do
@@ -68,10 +62,10 @@ wasmMain = do
           span_ $ dynText $ fmap (("votes: " <>) . Char8.pack . show . (.votes)) (fromRef itemRef)
           button_ do
             text (Text.encodeUtf8 "▲")
-            on @"click" $ modifyRef votingListRef . (List.sortOn (.votes) .) . upvote . (.language) =<< readRef itemRef
+            on @"click" $ modifyRef votingListRef . upvote . (.language) =<< readRef itemRef
           button_ do
             text (Text.encodeUtf8 "▼")
-            on @"click" $ modifyRef votingListRef . (List.sortOn (.votes) .) . downvote . (.language) =<< readRef itemRef
+            on @"click" $ modifyRef votingListRef . downvote . (.language) =<< readRef itemRef
     p_ do
       choiceRef <- newRef "Haskell"
       select_ do
@@ -81,22 +75,22 @@ wasmMain = do
         on @"select/change" $ writeRef choiceRef
       button_ do
         text (Text.encodeUtf8 "▲")
-        on @"click" $ modifyRef votingListRef . (List.sortOn (.votes) .) . upvote =<< readRef choiceRef
+        on @"click" $ modifyRef votingListRef . upvote =<< readRef choiceRef
       button_ do
         text (Text.encodeUtf8 "▼")
-        on @"click" $ modifyRef votingListRef . (List.sortOn (.votes) .) . downvote =<< readRef choiceRef
+        on @"click" $ modifyRef votingListRef . downvote =<< readRef choiceRef
+
+normalize :: [VotingCandidate] -> [VotingCandidate]
+normalize = List.sortOn (Down . (.votes))
 
 upvote :: ByteString -> [VotingCandidate] -> [VotingCandidate]
-upvote _ [] = []
-upvote l (x:xs) | x.language == l = x {votes = x.votes + 1} : xs
-                | otherwise = x : upvote l xs
+upvote l = normalize . modvote succ l
 
 downvote :: ByteString -> [VotingCandidate] -> [VotingCandidate]
-downvote _ [] = []
-downvote l (x:xs) | x.language == l = x {votes = x.votes - 1} : xs
-                  | otherwise = x : upvote l xs
+downvote l = normalize . modvote pred l
 
-styles :: ByteString
-styles = "\
-  \ \
-  \}"
+modvote :: (Int -> Int) -> ByteString -> [VotingCandidate] -> [VotingCandidate]
+modvote _ _ [] = []
+modvote f l (x:xs)
+  | x.language == l = x {votes = f x.votes} : xs
+  | otherwise = x : upvote l xs

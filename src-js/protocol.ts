@@ -3,8 +3,6 @@ import * as reactor from './reactor';
 import { HaskellIstance } from './reactor';
 import { absurd } from './lib';
 
-export  type HaskellPointer = number;
-
 export type JSFunctionName = string;
 
 export type Ident = string;
@@ -51,11 +49,15 @@ export function evalExpr(ctx: List<Bindings>, inst: HaskellIstance, exp: Expr): 
       const lhs = evalExpr(ctx, inst, exp[0]) as any;
       return lhs[exp[1]];
     }
-    case ExprTag.Assign: {
+    case ExprTag.AssignProp: {
       const rhs = evalExpr(ctx, inst, exp[2]);
       const obj = evalExpr(ctx, inst, exp[0]) as any;
       obj[exp[1]] = rhs;
       return rhs;
+    }
+    case ExprTag.Ix: {
+      const rhs: any = evalExpr(ctx, inst, exp.exp);
+      return rhs[exp.ix];
     }
     case ExprTag.Add: {
       const lhs = evalExpr(ctx, inst, exp[0]) as number;
@@ -104,6 +106,103 @@ export function evalExpr(ctx: List<Bindings>, inst: HaskellIstance, exp: Expr): 
       const fn = lhs[exp[1]];
       return fn.apply(lhs, exp[2].map(evalExpr.bind(undefined, ctx, inst)));
     }
+    case ExprTag.AssignVar: {
+      const rhs = evalExpr(ctx, inst, exp.rhs);
+      varStorage.set(exp.lhs, rhs);
+      return rhs;
+    }
+    case ExprTag.FreeVar: {
+      return varStorage.delete(exp.varId);
+    }
+    case ExprTag.Var: {
+      return varStorage.get(exp.varId);
+    }
+    case ExprTag.ElInitBuilder: {
+      const element: HTMLElement = evalExpr(ctx, inst, exp.element) as any;
+      const newBuilder = new ElementBuilder(null, element);
+      varStorage.set(exp.varId, newBuilder);
+      return newBuilder;
+    }
+    case ExprTag.ElDestroyBuilder: {
+      const builder = varStorage.get(exp.varId) as DomBuilder;
+      if (builder instanceof BoundaryBuilder) {
+        clearBoundary(builder);
+        builder._begin.parentElement!.removeChild(builder._begin);
+        builder._end.parentElement!.removeChild(builder._end);
+      }
+      varStorage.delete(exp.varId)
+      return null;
+    }
+    case ExprTag.ElPush: {
+      const builder = varStorage.get(exp.varId) as DomBuilder;
+      const newBuilder = insertElement(builder, exp.tagName)
+      varStorage.set(exp.varId, newBuilder);
+      return newBuilder;
+    }
+    case ExprTag.ElNoPush: {
+      const builder = varStorage.get(exp.varId) as DomBuilder;
+      const newElm = document.createElement(exp.tagName);
+      insertIntoBuilder(builder, newElm);
+      return null;
+    }
+    case ExprTag.ElProp: {
+      const builder = varStorage.get(exp.varId) as DomBuilder;
+      const propVal = evalExpr(ctx, inst, exp.val);
+      applyProperty(builder, exp.prop, propVal);
+      return null;
+    }
+    case ExprTag.ElAttr: {
+      const builder = varStorage.get(exp.varId) as DomBuilder;
+      applyAttribute(builder, exp.attr, exp.val);
+      return null;
+    }
+    case ExprTag.ElEvent: {
+      const builder = varStorage.get(exp.varId) as DomBuilder;
+      const callback = evalExpr(ctx, inst, exp.callback) as any;
+      addEventListener(builder, exp.name, callback);
+      return null;
+    }
+    case ExprTag.ElText: {
+      const builder = varStorage.get(exp.varId) as DomBuilder;
+      const textNode = document.createTextNode(exp.content);
+      insertIntoBuilder(builder, textNode);
+      return textNode;
+    }
+    case ExprTag.ElAssignTextContent: {
+      const textNode = varStorage.get(exp.varId) as Text;
+      textNode.nodeValue = exp.content;
+      return null;
+    }
+    case ExprTag.ElPop: {
+      const builder = varStorage.get(exp.varId) as DomBuilder;
+      if (builder instanceof ElementBuilder) {
+        varStorage.set(exp.varId, builder._parent);
+        return null;
+      } else if (builder instanceof BoundaryBuilder) {
+        varStorage.set(exp.varId, builder._parent);
+        return null;
+      }
+      return absurd(builder);
+    }
+    case ExprTag.ElInsertBoundary: {
+      const builder = varStorage.get(exp.varId) as DomBuilder;
+      const newBuilder = insertBoundary(builder);
+      varStorage.set(exp.varId, newBuilder);
+      return newBuilder;
+    }
+    case ExprTag.ElClearBoundary: {
+      const builder = varStorage.get(exp.varId) as DomBuilder;
+      if (builder instanceof BoundaryBuilder) {
+        clearBoundary(builder);
+        return null;
+      }
+      return null;
+    }
+    case ExprTag.ElToggleClass: {
+      const builder = varStorage.get(exp.varId) as DomBuilder;
+      toggleClass(builder, exp.className, exp.enable != 0);
+      return null;
+    }
     case ExprTag.RevSeq: {
       return exp.exprs.reduceRight<unknown>((_, e) => evalExpr(ctx, inst, e), null);
     }
@@ -114,107 +213,6 @@ export function evalExpr(ctx: List<Bindings>, inst: HaskellIstance, exp: Expr): 
         arg: unknownToJValue(arg),
         callbackId: exp.callbackId
       });
-    }
-    case ExprTag.LAssign: {
-      const rhs = evalExpr(ctx, inst, exp.rhs);
-      storage.set(exp.lhs, rhs);
-      return rhs;
-    }
-    case ExprTag.FreeVar: {
-      return storage.delete(exp.varId);
-    }
-    case ExprTag.RVar: {
-      return storage.get(exp.varId);
-    }
-    case ExprTag.Ix: {
-      const rhs: any = evalExpr(ctx, inst, exp.exp);
-      return rhs[exp.ix];
-    }
-    case ExprTag.ElInitBuilder: {
-      const element: HTMLElement = evalExpr(ctx, inst, exp.element) as any;
-      const newBuilder = new ElementBuilder(null, element);
-      storage.set(exp.builder, newBuilder);
-      return newBuilder;
-    }
-    case ExprTag.ElDestroyBuilder: {
-      const builder = storage.get(exp.builder) as DomBuilder;
-      if (builder instanceof BoundaryBuilder) {
-        clearBoundary(builder);
-        builder._begin.parentElement!.removeChild(builder._begin);
-        builder._end.parentElement!.removeChild(builder._end);
-      }
-      storage.delete(exp.builder)
-      return null;
-    }
-    case ExprTag.ElPush: {
-      const builder = storage.get(exp.builder) as DomBuilder;
-      const newBuilder = insertElement(builder, exp.tagName)
-      storage.set(exp.builder, newBuilder);
-      return newBuilder;
-    }
-    case ExprTag.ElNoPush: {
-      const builder = storage.get(exp.builder) as DomBuilder;
-      const newElm = document.createElement(exp.tagName);
-      insertIntoBuilder(builder, newElm);
-      return null;
-    }
-    case ExprTag.ElProp: {
-      const builder = storage.get(exp.builder) as DomBuilder;
-      const propVal = evalExpr(ctx, inst, exp.val);
-      applyProperty(builder, exp.prop, propVal);
-      return null;
-    }
-    case ExprTag.ElAttr: {
-      const builder = storage.get(exp.builder) as DomBuilder;
-      applyAttribute(builder, exp.attr, exp.val);
-      return null;
-    }
-    case ExprTag.ElEvent: {
-      const builder = storage.get(exp.builder) as DomBuilder;
-      const callback = evalExpr(ctx, inst, exp.callback) as any;
-      addEventListener(builder, exp.name, callback);
-      return null;
-    }
-    case ExprTag.ElText: {
-      const builder = storage.get(exp.builder) as DomBuilder;
-      const textNode = document.createTextNode(exp.content);
-      insertIntoBuilder(builder, textNode);
-      return textNode;
-    }
-    case ExprTag.ElAssignTextContent: {
-      const textNode = storage.get(exp.varId) as Text;
-      textNode.nodeValue = exp.content;
-      return null;
-    }
-    case ExprTag.ElPop: {
-      const builder = storage.get(exp.builder) as DomBuilder;
-      if (builder instanceof ElementBuilder) {
-        storage.set(exp.builder, builder._parent);
-        return null;
-      } else if (builder instanceof BoundaryBuilder) {
-        storage.set(exp.builder, builder._parent);
-        return null;
-      }
-      return absurd(builder);
-    }
-    case ExprTag.ElInsertBoundary: {
-      const builder = storage.get(exp.builder) as DomBuilder;
-      const newBuilder = insertBoundary(builder);
-      storage.set(exp.builder, newBuilder);
-      return newBuilder;
-    }
-    case ExprTag.ElClearBoundary: {
-      const builder = storage.get(exp.builder) as DomBuilder;
-      if (builder instanceof BoundaryBuilder) {
-        clearBoundary(builder);
-        return null;
-      }
-      return null;
-    }
-    case ExprTag.ElToggleClass: {
-      const builder = storage.get(exp.builder) as DomBuilder;
-      toggleClass(builder, exp.className, exp.enable != 0);
-      return null;
     }
     case ExprTag.UncaughtException: {
       throw new Error(exp.message);
@@ -283,7 +281,9 @@ export enum ExprTag {
   Obj,
 
   Dot,
-  Assign,
+  AssignProp,
+  Ix,
+
   Add,
   Subtract,
   Multiply,
@@ -293,13 +293,10 @@ export enum ExprTag {
   Lam,
   Apply,
   Call,
-  RevSeq,
 
-  ExecCallback,
-  LAssign,
+  AssignVar,
   FreeVar,
-  RVar,
-  Ix,
+  Var,
 
   ElInitBuilder,
   ElDestroyBuilder,
@@ -315,6 +312,8 @@ export enum ExprTag {
   ElClearBoundary,
   ElToggleClass,
 
+  RevSeq,
+  ExecCallback,
   UncaughtException,
 }
 
@@ -325,38 +324,41 @@ export type Expr =
   | { tag: ExprTag.Str, 0: string }
   | { tag: ExprTag.Arr, 0: Expr[] }
   | { tag: ExprTag.Obj, 0: [string, Expr][] }
+
   | { tag: ExprTag.Dot, 0: Expr, 1: string }
-  | { tag: ExprTag.Assign, 0: Expr, 1: string, 2: Expr }
+  | { tag: ExprTag.AssignProp, 0: Expr, 1: string, 2: Expr }
+  | { tag: ExprTag.Ix, exp: Expr, ix: number }
+
   | { tag: ExprTag.Add, 0: Expr, 1: Expr }
   | { tag: ExprTag.Subtract, 0: Expr, 1: Expr  }
   | { tag: ExprTag.Multiply, 0: Expr, 1: Expr  }
   | { tag: ExprTag.Divide, 0: Expr, 1: Expr  }
+
   | { tag: ExprTag.Id, 0: string }
   | { tag: ExprTag.Lam, args: string[], body: Expr }
   | { tag: ExprTag.Apply, 0: Expr, 1: Expr[] }
   | { tag: ExprTag.Call, 0: Expr, 1: JSFunctionName, 2: Expr[] }
-  | { tag: ExprTag.RevSeq, exprs: Expr[] }
 
-  | { tag: ExprTag.ExecCallback, callbackId: number, arg: Expr }
-  | { tag: ExprTag.LAssign, lhs: DomBuilderId, rhs: Expr }
+  | { tag: ExprTag.AssignVar, lhs: DomBuilderId, rhs: Expr }
   | { tag: ExprTag.FreeVar, varId: number }
-  | { tag: ExprTag.RVar, varId: number }
-  | { tag: ExprTag.Ix, exp: Expr, ix: number }
+  | { tag: ExprTag.Var, varId: number }
 
-  | { tag: ExprTag.ElInitBuilder, builder: DomBuilderId, element: Expr }
-  | { tag: ExprTag.ElDestroyBuilder, builder: DomBuilderId }
-  | { tag: ExprTag.ElPush, builder: DomBuilderId, tagName: string }
-  | { tag: ExprTag.ElNoPush, builder: DomBuilderId, tagName: string }
-  | { tag: ExprTag.ElProp, builder: DomBuilderId, prop: string, val: Expr }
-  | { tag: ExprTag.ElAttr, builder: DomBuilderId, attr: string, val: string }
-  | { tag: ExprTag.ElEvent, builder: DomBuilderId, name: string, callback: Expr }
-  | { tag: ExprTag.ElText, builder: DomBuilderId, content: string }
+  | { tag: ExprTag.ElInitBuilder, varId: DomBuilderId, element: Expr }
+  | { tag: ExprTag.ElDestroyBuilder, varId: DomBuilderId }
+  | { tag: ExprTag.ElPush, varId: DomBuilderId, tagName: string }
+  | { tag: ExprTag.ElNoPush, varId: DomBuilderId, tagName: string }
+  | { tag: ExprTag.ElProp, varId: DomBuilderId, prop: string, val: Expr }
+  | { tag: ExprTag.ElAttr, varId: DomBuilderId, attr: string, val: string }
+  | { tag: ExprTag.ElEvent, varId: DomBuilderId, name: string, callback: Expr }
+  | { tag: ExprTag.ElText, varId: DomBuilderId, content: string }
   | { tag: ExprTag.ElAssignTextContent, varId: number, content: string }
-  | { tag: ExprTag.ElPop, builder: DomBuilderId }
-  | { tag: ExprTag.ElInsertBoundary, builder: DomBuilderId }
-  | { tag: ExprTag.ElClearBoundary, builder: DomBuilderId }
-  | { tag: ExprTag.ElToggleClass, builder: DomBuilderId, className: string, enable: number }
+  | { tag: ExprTag.ElPop, varId: DomBuilderId }
+  | { tag: ExprTag.ElInsertBoundary, varId: DomBuilderId }
+  | { tag: ExprTag.ElClearBoundary, varId: DomBuilderId }
+  | { tag: ExprTag.ElToggleClass, varId: DomBuilderId, className: string, enable: number }
 
+  | { tag: ExprTag.RevSeq, exprs: Expr[] }
+  | { tag: ExprTag.ExecCallback, callbackId: number, arg: Expr }
   | { tag: ExprTag.UncaughtException, message: string }
 ;
 
@@ -367,38 +369,41 @@ export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.Str]: b.record({ 0: b.string }),
   [ExprTag.Arr]: b.record({ 0: b.array(self) }),
   [ExprTag.Obj]: b.record({ 0: b.array(b.tuple(b.string, self)) }),
+
   [ExprTag.Dot]: b.record({ 0: self, 1: b.string }),
-  [ExprTag.Assign]: b.record({ 0: self, 1: b.string, 2: self }),
+  [ExprTag.AssignProp]: b.record({ 0: self, 1: b.string, 2: self }),
+  [ExprTag.Ix]: b.record({ exp: self, ix: b.int64 }),
+
   [ExprTag.Add]: b.record({ 0: self, 1: self }),
   [ExprTag.Subtract]: b.record({ 0: self, 1: self }),
   [ExprTag.Multiply]: b.record({ 0: self, 1: self }),
   [ExprTag.Divide]: b.record({ 0: self, 1: self }),
+
   [ExprTag.Id]: b.record({ 0: b.string }),
   [ExprTag.Lam]: b.record({ args: b.array(b.string), body: self }),
   [ExprTag.Apply]: b.record({ 0: self, 1: b.array(self) }),
   [ExprTag.Call]: b.record({ 0: self, 1: b.string, 2: b.array(self) }),
-  [ExprTag.RevSeq]: b.record({ exprs: b.array(self) }),
 
-  [ExprTag.ExecCallback]: b.record({ callbackId: b.int64, arg: self }),
-  [ExprTag.LAssign]: b.record({ lhs: b.int64, rhs: self }),
+  [ExprTag.AssignVar]: b.record({ lhs: b.int64, rhs: self }),
   [ExprTag.FreeVar]: b.record({ varId: b.int64 }),
-  [ExprTag.RVar]: b.record({ varId: b.int64 }),
-  [ExprTag.Ix]: b.record({ exp: self, ix: b.int64 }),
+  [ExprTag.Var]: b.record({ varId: b.int64 }),
 
-  [ExprTag.ElInitBuilder]: b.record({ builder: b.int64, element: self }),
-  [ExprTag.ElDestroyBuilder]: b.record({ builder: b.int64 }),
-  [ExprTag.ElPush]: b.record({ builder: b.int64, tagName: b.string }),
-  [ExprTag.ElNoPush]: b.record({ builder: b.int64, tagName: b.string }),
-  [ExprTag.ElProp]: b.record({ builder: b.int64, prop: b.string, val: self }),
-  [ExprTag.ElAttr]: b.record({ builder: b.int64, attr: b.string, val: b.string }),
-  [ExprTag.ElEvent]: b.record({ builder: b.int64, name: b.string, callback: self }),
-  [ExprTag.ElText]: b.record({ builder: b.int64, content: b.string }),
+  [ExprTag.ElInitBuilder]: b.record({ varId: b.int64, element: self }),
+  [ExprTag.ElDestroyBuilder]: b.record({ varId: b.int64 }),
+  [ExprTag.ElPush]: b.record({ varId: b.int64, tagName: b.string }),
+  [ExprTag.ElNoPush]: b.record({ varId: b.int64, tagName: b.string }),
+  [ExprTag.ElProp]: b.record({ varId: b.int64, prop: b.string, val: self }),
+  [ExprTag.ElAttr]: b.record({ varId: b.int64, attr: b.string, val: b.string }),
+  [ExprTag.ElEvent]: b.record({ varId: b.int64, name: b.string, callback: self }),
+  [ExprTag.ElText]: b.record({ varId: b.int64, content: b.string }),
   [ExprTag.ElAssignTextContent]: b.record({ varId: b.int64, content: b.string }),
-  [ExprTag.ElPop]: b.record({ builder: b.int64 }),
-  [ExprTag.ElInsertBoundary]: b.record({ builder: b.int64 }),
-  [ExprTag.ElClearBoundary]: b.record({ builder: b.int64 }),
-  [ExprTag.ElToggleClass]: b.record({ builder: b.int64, className: b.string, enable: b.int8 }),
+  [ExprTag.ElPop]: b.record({ varId: b.int64 }),
+  [ExprTag.ElInsertBoundary]: b.record({ varId: b.int64 }),
+  [ExprTag.ElClearBoundary]: b.record({ varId: b.int64 }),
+  [ExprTag.ElToggleClass]: b.record({ varId: b.int64, className: b.string, enable: b.int8 }),
 
+  [ExprTag.RevSeq]: b.record({ exprs: b.array(self) }),
+  [ExprTag.ExecCallback]: b.record({ callbackId: b.int64, arg: self }),
   [ExprTag.UncaughtException]: b.record({ message: b.string }),
 }));
 
@@ -427,7 +432,7 @@ export const downCmd = b.discriminate({
 export type UpCmd = typeof upCmd['_A'];
 export type DownCmd = typeof downCmd['_A'];
 
-export const storage = new Map<number, unknown>();
+export const varStorage = new Map<number, unknown>();
 
 export type DomBuilderId = number;
 
@@ -525,6 +530,7 @@ export function toggleClass(builder: DomBuilder, className: string, enabled: boo
   }
   return absurd(builder);
 }
+
 export function addEventListener(builder: DomBuilder, eventName: string, listener: EventListener) {
   if (builder instanceof ElementBuilder) {
     builder._element.addEventListener(eventName, listener);

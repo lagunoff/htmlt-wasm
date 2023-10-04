@@ -1,21 +1,16 @@
-{-# LANGUAGE NondecreasingIndentation #-}
 module TodoList where
 
 import Control.Monad
 import Data.ByteString (ByteString)
-import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as Char8
 import Data.Maybe
 import Data.List qualified as List
 import GHC.Int
 import HtmlT.Wasm.Types
-import HtmlT.Wasm.Base
 import HtmlT.Wasm.Element
 import HtmlT.Wasm.Html
 import HtmlT.Wasm.Property
 import HtmlT.Wasm.Event
-import HtmlT.Wasm.Protocol
-import HtmlT.Wasm.Marshal
 
 import "this" Utils
 import "this" TodoItem qualified as TodoItem
@@ -43,7 +38,7 @@ data TodoListAction a where
   DeleteItemAction :: TodoListConfig -> Int -> TodoListAction ()
   ClearCompletedAction :: TodoListConfig -> TodoListAction ()
 
-eval :: TodoListAction a -> WASM a
+eval :: TodoListAction a -> WA a
 eval = \case
   InitAction -> do
     items <- fromMaybe [] <$> readLocalStorage "todo-items"
@@ -84,7 +79,7 @@ eval = \case
     mkNewItem t =
       TodoItem.emptyTodoItemState {TodoItem.title = t}
 
-html :: TodoListConfig -> WASM ()
+html :: TodoListConfig -> WA ()
 html cfg = do
   div_ do
     section_ [class_ "todoapp"] do
@@ -134,7 +129,7 @@ html cfg = do
       p_ do
         text "Part of "
         a_ [href_ "http://todomvc.com"] "TodoMVC"
-    filterWidget :: Filter -> WASM ()
+    filterWidget :: Filter -> WA ()
     filterWidget flt = li_ do
       a_ [href_ (printFilter flt)] do
         toggleClass "selected" $ filterSelectedDyn flt
