@@ -23,7 +23,7 @@ newVar = reactive \e s0 ->
     (newQueueId, s1) = nextQueueId s0
     newVarId = VarId (unQueueId newQueueId)
     var_storage = Set.insert newVarId s1.var_storage
-    (_, s2) = installFinalizer1 (CustomFinalizer (freeVar newVarId)) e s1
+    (_, s2) = installFinalizer (CustomFinalizer (freeVar newVarId)) e s1
   in
     (newVarId, s2 {var_storage})
 
@@ -40,8 +40,8 @@ newCallbackEvent k = reactive \e s0 ->
   in
     (CallbackId (unQueueId queueId), s2)
 
-installFinalizer1 :: FinalizerValue -> WASMEnv -> WASMState -> (FinalizerKey, WASMState)
-installFinalizer1 fin e s0 =
+installFinalizer :: FinalizerValue -> WASMEnv -> WASMState -> (FinalizerKey, WASMState)
+installFinalizer fin e s0 =
   let
     (finalizerId, s1) = nextQueueId s0
     finalizerKey = FinalizerCustomId finalizerId
@@ -55,6 +55,15 @@ evalExp e = WASM \_ s -> return (s, Cmd e)
 queueExp :: Expr -> WASM ()
 queueExp e = modify \s ->
   s {evaluation_queue = e : s.evaluation_queue}
+
+queueIfAlive :: VarId -> Expr -> WASM ()
+queueIfAlive varId e = modify \s ->
+  let
+    evaluation_queue =
+      if Set.member varId s.var_storage
+        then e : s.evaluation_queue else s.evaluation_queue
+  in
+    s {evaluation_queue}
 
 continuationsRef :: IORef [JValue -> WASM Any]
 continuationsRef = unsafePerformIO $ newIORef []
@@ -97,7 +106,7 @@ handleCommand wasmMain = \case
       Left exp -> return $ Eval exp
       Right _ -> return Exit
   where
-    wasmEnv = WASMEnv (ElBuilder (LVar (VarId (0)))) (-1)
+    wasmEnv = WASMEnv (DomBuilder (LVar (VarId (0)))) (-1)
 
 runTillInterruption :: forall a. WASMEnv -> WASM a -> IO (Either Expr a)
 runTillInterruption e wasm = do

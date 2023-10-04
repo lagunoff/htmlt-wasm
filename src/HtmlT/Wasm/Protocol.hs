@@ -6,7 +6,6 @@ import Data.ByteString as BS
 import Data.ByteString.Lazy qualified as BSL
 import Data.ByteString.Unsafe qualified as BSU
 import Data.Int
-import Data.String
 import Data.Word
 import Foreign.Marshal.Alloc qualified as Alloc
 import Foreign.Marshal.Utils
@@ -34,12 +33,14 @@ data Expr
   | Str ByteString
   | Arr [Expr]
   | Obj [(ByteString, Expr)]
+
   | Dot Expr ByteString
   | Assign Expr ByteString Expr
   | Add Expr Expr
   | Subtract Expr Expr
   | Multiply Expr Expr
   | Divide Expr Expr
+
   | Var ByteString
   | Lam [ByteString] Expr
   | Apply Expr [Expr]
@@ -56,19 +57,19 @@ data Expr
   | RVar VarId
   | Ix Expr Int64
 
-  | ElInitBuilder ElBuilder Expr
-  | ElDestroyBuilder ElBuilder
-  | ElPush ElBuilder ByteString
-  | ElNoPush ElBuilder ByteString
-  | ElProp ElBuilder ByteString Expr
-  | ElAttr ElBuilder ByteString ByteString
-  | ElEvent ElBuilder ByteString Expr
-  | ElText ElBuilder ByteString
+  | ElInitBuilder DomBuilder Expr
+  | ElDestroyBuilder DomBuilder
+  | ElPush DomBuilder ByteString
+  | ElNoPush DomBuilder ByteString
+  | ElProp DomBuilder ByteString Expr
+  | ElAttr DomBuilder ByteString ByteString
+  | ElEvent DomBuilder ByteString Expr
+  | ElText DomBuilder ByteString
   | ElAssignTextContent VarId ByteString
-  | ElPop ElBuilder
-  | ElInsertBoundary ElBuilder
-  | ElClearBoundary ElBuilder
-  | ElToggleClass ElBuilder ByteString Bool
+  | ElPop DomBuilder
+  | ElInsertBoundary DomBuilder
+  | ElClearBoundary DomBuilder
+  | ElToggleClass DomBuilder ByteString Bool
 
   | UncaughtException ByteString
   | ReadLhs LhsExpr
@@ -101,16 +102,13 @@ data LhsExpr
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
-newtype JSFunctionName = JSFunctionName { unJSFunctionName :: ByteString }
-  deriving newtype (Show, IsString, Binary)
-
 newtype VarId = VarId { unVarId :: Int64 }
   deriving newtype (Show, Num, Binary, Enum, Ord, Eq)
 
 newtype CallbackId = CallbackId { unCallbackId :: Int64 }
   deriving newtype (Show, Num, Binary, Ord, Eq)
 
-newtype ElBuilder = ElBuilder { unElBuilder :: LhsExpr }
+newtype DomBuilder = DomBuilder { unDomBuilder :: LhsExpr }
   deriving newtype (Show, Binary)
 
 storeByteString :: ByteString -> IO (Ptr a)

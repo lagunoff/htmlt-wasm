@@ -21,6 +21,7 @@ import Data.Map qualified as Map
 import "this" HtmlT.Wasm.Types
 import "this" HtmlT.Wasm.Types qualified as WAS (WASMState(..))
 import "this" HtmlT.Wasm.Base
+import "this" HtmlT.Wasm.DOM
 import "this" HtmlT.Wasm.Protocol
 import "this" HtmlT.Wasm.Marshal
 import "this" HtmlT.Wasm.Event
@@ -43,30 +44,21 @@ dynProp propName valueDyn = do
   domBuilderVar <- newVar
   domBuilderId <- asks (.dom_builder_id)
   initialVal <- readDyn valueDyn
-  queueExp (LAssign (LVar domBuilderVar) (ReadLhs (unElBuilder domBuilderId)))
+  queueExp (LAssign (LVar domBuilderVar) (ReadLhs (unDomBuilder domBuilderId)))
   queueExp (ElProp domBuilderId propName (fromJValue (toJSVal initialVal)))
   subscribe (updates valueDyn) $
-    queueIfAlive domBuilderVar . ElProp (ElBuilder (LVar domBuilderVar)) propName . fromJValue . toJSVal
+    queueIfAlive domBuilderVar . ElProp (DomBuilder (LVar domBuilderVar)) propName . fromJValue . toJSVal
 
 toggleClass :: ByteString -> Dynamic Bool -> WASM ()
 toggleClass className enableDyn = do
   domBuilderId <- asks (.dom_builder_id)
   initialVal <- readDyn enableDyn
   domBuilderVar <- newVar
-  queueExp (LAssign (LVar domBuilderVar) (ReadLhs (unElBuilder domBuilderId)))
+  queueExp (LAssign (LVar domBuilderVar) (ReadLhs (unDomBuilder domBuilderId)))
   queueExp (ElToggleClass domBuilderId className initialVal)
   subscribe (updates enableDyn) $
-    queueIfAlive domBuilderVar . ElToggleClass (ElBuilder (LVar domBuilderVar)) className
+    queueIfAlive domBuilderVar . ElToggleClass (DomBuilder (LVar domBuilderVar)) className
   return ()
-
-queueIfAlive :: VarId -> Expr -> WASM ()
-queueIfAlive varId e = modify \s ->
-  let
-    evaluation_queue =
-      if Set.member varId s.var_storage
-        then e : s.evaluation_queue else s.evaluation_queue
-  in
-    s {evaluation_queue}
 
 attr :: ByteString -> ByteString -> WASM ()
 attr attrName attrVal = do
@@ -81,41 +73,6 @@ on k = do
     eventName = fromMaybe symbolStr . listToMaybe . List.reverse . Char8.split '/' $ symbolStr
   callbackId <- newCallbackEvent (local (const e) . mkEventListener @eventName k)
   queueExp (ElEvent e.dom_builder_id eventName (mkEventListener1 @eventName callbackId))
-
-class KnownSymbol eventName => IsEventName eventName where
-  type EventListener eventName :: Type
-  mkEventListener :: EventListener eventName -> JValue -> WASM ()
-  mkEventListener1 :: CallbackId -> Expr
-
-instance IsEventName "click" where
-  type EventListener "click" = WASM ()
-  mkEventListener k _j = k
-  mkEventListener1 callbackId = Lam ["e"] (ExecCallback callbackId (Var "e"))
-
-instance IsEventName "dblclick" where
-  type EventListener "dblclick" = WASM ()
-  mkEventListener k _j = k
-  mkEventListener1 callbackId = Lam ["e"] (ExecCallback callbackId (Var "e"))
-
-instance IsEventName "input" where
-  type EventListener "input" = ByteString -> WASM ()
-  mkEventListener k j = forM_ (fromJSVal j) k
-  mkEventListener1 callbackId = Lam ["e"] (ExecCallback callbackId (Var "e" `Dot` "target" `Dot` "value"))
-
-instance IsEventName "blur" where
-  type EventListener "blur" = ByteString -> WASM ()
-  mkEventListener k j = forM_ (fromJSVal j) k
-  mkEventListener1 callbackId = Lam ["e"] (ExecCallback callbackId (Var "e" `Dot` "target" `Dot` "value"))
-
-instance IsEventName "keydown" where
-  type EventListener "keydown" = Int64 -> WASM ()
-  mkEventListener k j = forM_ (fromJSVal j) k
-  mkEventListener1 callbackId = Lam ["e"] (ExecCallback callbackId (Var "e" `Dot` "keyCode"))
-
-instance IsEventName "checkbox/change" where
-  type EventListener "checkbox/change" = Bool -> WASM ()
-  mkEventListener k j = forM_ (fromJSVal j) k
-  mkEventListener1 callbackId = Lam ["e"] (ExecCallback callbackId (Var "e" `Dot` "target" `Dot` "checked"))
 
 text :: ByteString -> WASM ()
 text contents = do
@@ -141,7 +98,7 @@ dyn d = do
       finalizeNamespace finalizerNs
       wasm
     applyBoundary e = e
-      { dom_builder_id = ElBuilder (LVar boundary)
+      { dom_builder_id = DomBuilder (LVar boundary)
       , finalizer_ns = finalizerNs
       }
   performDyn $ fmap (local applyBoundary . setup) d
@@ -163,7 +120,7 @@ simpleList listDyn h = do
       -- New list is longer, append new elements
       ([], x:xs) -> do
         newElem <- newElemEnv x
-        let wasmEnv = WASMEnv (ElBuilder (LVar newElem.ee_boundary)) newElem.ee_namespace
+        let wasmEnv = WASMEnv (DomBuilder (LVar newElem.ee_boundary)) newElem.ee_namespace
         local (const wasmEnv) $ h idx newElem.ee_dyn_ref
         fmap (newElem:) $ setup (idx + 1) xs []
       -- New list is shorter, delete the elements that no longer
@@ -191,7 +148,7 @@ simpleList listDyn h = do
       newEenvs <- setup 0 new eenvs
       liftIO $ writeIORef internalStateRef newEenvs
     applyBoundary e = e
-      { dom_builder_id = ElBuilder (LVar boundary)
+      { dom_builder_id = DomBuilder (LVar boundary)
       }
   performDyn $ fmap (local applyBoundary . updateList) listDyn
   return ()
@@ -205,31 +162,19 @@ data ElemEnv a = ElemEnv
 consoleLog :: Expr -> WASM ()
 consoleLog e = queueExp (Call (Var "console") "log" [e])
 
--- | Run an action before the current node is detached from the DOM
-installFinalizer :: WASM () -> WASM FinalizerKey
-installFinalizer fin = reactive \e s0 ->
-  let
-    (finalizerId, s1) = nextQueueId s0
-    finalizerKey = FinalizerCustomId finalizerId
-    finalizers = Map.alter
-      (Just . Map.insert finalizerKey (CustomFinalizer fin) . fromMaybe Map.empty
-      ) e.finalizer_ns s1.finalizers
-  in
-    (finalizerKey, s1 {WAS.finalizers})
-
 insertBoundary :: WASM VarId
 insertBoundary = do
   domBuilderId <- asks (.dom_builder_id)
   boundary <- newVar
-  queueExp (LAssign (LVar boundary) (ReadLhs (unElBuilder domBuilderId)))
-  queueExp (ElInsertBoundary (ElBuilder (LVar boundary)))
+  queueExp (LAssign (LVar boundary) (ReadLhs (unDomBuilder domBuilderId)))
+  queueExp (ElInsertBoundary (DomBuilder (LVar boundary)))
   return boundary
 
 clearBoundary :: VarId -> WASM ()
-clearBoundary boundary = queueExp (ElClearBoundary (ElBuilder (LVar boundary)))
+clearBoundary boundary = queueExp (ElClearBoundary (DomBuilder (LVar boundary)))
 
 destroyBoundary :: VarId -> WASM ()
-destroyBoundary boundary = queueExp (ElDestroyBuilder (ElBuilder (LVar boundary)))
+destroyBoundary boundary = queueExp (ElDestroyBuilder (DomBuilder (LVar boundary)))
 
 instance a ~ () => IsString (WASM a) where
   fromString = text . Char8.pack
