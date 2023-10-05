@@ -1,3 +1,6 @@
+/**
+ * Data.Binary serialization library implemented in typescript
+ */
 import { absurd } from './lib';
 import { HaskellPointer } from './reactor';
 
