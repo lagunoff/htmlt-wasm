@@ -76,6 +76,15 @@ nextQueueId :: WAState -> (QueueId, WAState)
 nextQueueId s =
   (s.id_supply, s {id_supply = succ s.id_supply})
 
+installFinalizer :: FinalizerValue -> WAEnv -> WAState -> (FinalizerKey, WAState)
+installFinalizer fin e s0 =
+  let
+    (finalizerId, s1) = nextQueueId s0
+    finalizerKey = FinalizerCustomId finalizerId
+    finalizers = Map.alter (Just . Map.insert finalizerKey fin . fromMaybe Map.empty) e.finalizer_ns s1.finalizers
+  in
+    (finalizerKey, s1 {finalizers})
+
 -- | Defers a computation (typically an event firing) until the end of
 -- the current reactive transaction. This allows for the avoidance of
 -- double firing of events constructed from multiple other events.

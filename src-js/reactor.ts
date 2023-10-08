@@ -47,9 +47,13 @@ export function haskellApp(inst: HaskellIstance, down: DownCmd = { tag: DownCmdT
   const upCmd = interactWithHaskell(inst, down);
   switch (upCmd.tag) {
     case UpCommandTag.Eval: {
-      const result = p.evalExpr(globalContext, inst, upCmd.expr);
+      const result = p.evalExpr(globalContext, (down: DownCmd) => haskellApp(inst, down), upCmd.expr);
       const jvalue = p.unknownToJValue(result);
       return haskellApp(inst, { tag: DownCmdTag.Return, 0: jvalue });
+    }
+    case UpCommandTag.HotReload: {
+      window.location.reload();
+      return;
     }
     case UpCommandTag.Exit: {
       return;

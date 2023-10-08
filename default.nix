@@ -31,8 +31,11 @@ let
     shell = {
       native = pkgs.mkShell {
         inputsFrom = [haskellPackages.htmlt-wasm.env];
+        # shellHook = ''
+        #   export CABAL_CARGS=$(ghc ${cabalCargsScript} -e 'printGhcArgs (FromCabalFile "${cabalFile}" (Just [Executable "todomvc-server"]))')
+        # '';
         shellHook = ''
-          export CABAL_CARGS=$(ghc ${cabalCargsScript} -e 'printGhcArgs (FromCabalFile "${cabalFile}" (Just [Executable "todomvc"]))')
+          export CABAL_CARGS="-isrc -hide-all-packages -iexamples/todomvc -iexamples/todomvc-server -Wall -Wno-missing-signatures -Wno-name-shadowing -Wno-unused-do-bind -Wno-partial-type-signatures -Wno-missing-home-modules -static -XAllowAmbiguousTypes -XBangPatterns -XBlockArguments -XConstraintKinds -XDataKinds -XDefaultSignatures -XDeriveAnyClass -XDeriveFunctor -XDeriveGeneric -XDerivingStrategies -XDerivingVia -XDoAndIfThenElse -XDuplicateRecordFields -XEmptyDataDecls -XFlexibleContexts -XFlexibleInstances -XForeignFunctionInterface -XFunctionalDependencies -XGADTs -XGeneralizedNewtypeDeriving -XImplicitParams -XImportQualifiedPost -XLambdaCase -XNamedFieldPuns -XOverloadedLabels -XOverloadedRecordDot -XOverloadedStrings -XPackageImports -XPartialTypeSignatures -XPatternGuards -XPolyKinds -XQuasiQuotes -XRankNTypes -XRecordWildCards -XRecursiveDo -XScopedTypeVariables -XStandaloneDeriving -XStrictData -XTupleSections -XTypeApplications -XTypeFamilies -XTypeOperators -XUndecidableInstances -XViewPatterns -package=base -package=binary -package=bytestring -package=containers -package=exceptions -package=mtl -package=text -package=wai -package=wai-websockets -package=warp -package=websockets -package=wuss -package=wai-app-static -package=http-types -package=foreign-store"
         '';
       };
     };

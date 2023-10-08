@@ -71,9 +71,9 @@ executable voting
     bytestring,
     containers,
     exceptions,
+    htmlt-wasm,
     mtl,
     text,
-    htmlt-wasm,
 
 executable todomvc
   import: common-config
@@ -95,10 +95,37 @@ executable todomvc
     bytestring,
     containers,
     exceptions,
+    htmlt-wasm,
     mtl,
     text,
+
+executable todomvc-server
+  import: common-config
+  if arch(wasm32)
+    buildable: False
+  hs-source-dirs: examples/todomvc examples/todomvc-server
+  main-is: todomvc-server.hs
+  other-modules:
+    Utils
+    TodoList
+    TodoItem
+  build-depends:
+    base,
+    binary,
+    bytestring,
+    containers,
+    exceptions,
     htmlt-wasm,
-    
+    mtl,
+    text,
+    wai,
+    wai-websockets,
+    warp,
+    websockets,
+    wuss,
+    wai-app-static,
+    http-types,
+
 library
   import: common-config
   hs-source-dirs: src
@@ -111,6 +138,7 @@ library
     HtmlT.Wasm.Marshal
     HtmlT.Wasm.Property
     HtmlT.Wasm.Protocol
+    HtmlT.Wasm.Main
     HtmlT.Wasm.Types
   build-depends:
     base,
@@ -119,4 +147,17 @@ library
     containers,
     exceptions,
     mtl,
-    text
+    text,
+  if !arch(wasm32)
+    exposed-modules:
+      HtmlT.Wasm.DevServer
+    build-depends:
+      wai,
+      wai-websockets,
+      websockets,
+      wuss,
+      http-types,
+      foreign-store,
+      warp,
+      wai-app-static,
+ 

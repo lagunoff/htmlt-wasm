@@ -3,5 +3,4 @@
 
 CWD=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
 OUTPUT_DIR=$CWD/../dist/ghc-tmp/
-echo $CABAL_CARGS
 ghc --interactive $CABAL_CARGS -j -outputdir=$OUTPUT_DIR $@

@@ -15,6 +15,7 @@ import GHC.Generics
 
 data UpCmd
   = Eval { expr :: Expr }
+  | HotReload -- ^ Used under dev server
   | Exit
   deriving stock (Generic, Show)
   deriving anyclass (Binary)

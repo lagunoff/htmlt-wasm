@@ -1,24 +1,18 @@
-import Data.Word
-import Foreign.Marshal.Alloc qualified as Alloc
-import Foreign.Ptr
 import Control.Monad.Reader
 import Data.ByteString
+
 import Data.Text.Encoding qualified as Text
 
 import HtmlT.Wasm.Base
 import HtmlT.Wasm.Html
 import HtmlT.Wasm.Protocol
 import HtmlT.Wasm.Types
+import HtmlT.Wasm.DevServer
 import TodoList qualified as TodoList
 
-foreign export ccall app :: Ptr Word8 -> IO (Ptr Word8)
-app = wasmApp wasmMain
-foreign export ccall hs_malloc :: Int -> IO (Ptr a)
-hs_malloc = Alloc.callocBytes
-foreign export ccall hs_free :: Ptr a -> IO ()
-hs_free = Alloc.free
 
-main = return ()
+main :: IO ()
+main = runDevServer wasmMain
 
 wasmMain :: WA ()
 wasmMain = do

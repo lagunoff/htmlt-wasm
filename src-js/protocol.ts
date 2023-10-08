@@ -25,7 +25,9 @@ export function cdr<T>(pair: Cons<T>): List<T> {
   return pair[1];
 }
 
-export function evalExpr(ctx: List<Bindings>, inst: HaskellIstance, exp: Expr): unknown {
+export type HaskellCallback = (down: DownCmd) => void;
+
+export function evalExpr(ctx: List<Bindings>, hscb: HaskellCallback, exp: Expr): unknown {
   switch(exp.tag) {
     case ExprTag.Null: {
        return null;
@@ -40,43 +42,43 @@ export function evalExpr(ctx: List<Bindings>, inst: HaskellIstance, exp: Expr): 
       return exp[0];
     }
     case ExprTag.Arr: {
-      return exp[0].map(evalExpr.bind(undefined, ctx, inst));
+      return exp[0].map(evalExpr.bind(undefined, ctx, hscb));
     }
     case ExprTag.Obj: {
-      return Object.fromEntries(exp[0].map(([k, e]) => [k, evalExpr(ctx, inst, e)]));
+      return Object.fromEntries(exp[0].map(([k, e]) => [k, evalExpr(ctx, hscb, e)]));
     }
     case ExprTag.Dot: {
-      const lhs = evalExpr(ctx, inst, exp[0]) as any;
+      const lhs = evalExpr(ctx, hscb, exp[0]) as any;
       return lhs[exp[1]];
     }
     case ExprTag.AssignProp: {
-      const rhs = evalExpr(ctx, inst, exp[2]);
-      const obj = evalExpr(ctx, inst, exp[0]) as any;
+      const rhs = evalExpr(ctx, hscb, exp[2]);
+      const obj = evalExpr(ctx, hscb, exp[0]) as any;
       obj[exp[1]] = rhs;
       return rhs;
     }
     case ExprTag.Ix: {
-      const rhs: any = evalExpr(ctx, inst, exp.exp);
+      const rhs: any = evalExpr(ctx, hscb, exp.exp);
       return rhs[exp.ix];
     }
     case ExprTag.Add: {
-      const lhs = evalExpr(ctx, inst, exp[0]) as number;
-      const rhs = evalExpr(ctx, inst, exp[1]) as number;
+      const lhs = evalExpr(ctx, hscb, exp[0]) as number;
+      const rhs = evalExpr(ctx, hscb, exp[1]) as number;
       return lhs + rhs;
     }
     case ExprTag.Subtract: {
-      const lhs = evalExpr(ctx, inst, exp[0]) as number;
-      const rhs = evalExpr(ctx, inst, exp[1]) as number;
+      const lhs = evalExpr(ctx, hscb, exp[0]) as number;
+      const rhs = evalExpr(ctx, hscb, exp[1]) as number;
       return lhs - rhs;
     }
     case ExprTag.Multiply: {
-      const lhs = evalExpr(ctx, inst, exp[0]) as number;
-      const rhs = evalExpr(ctx, inst, exp[1]) as number;
+      const lhs = evalExpr(ctx, hscb, exp[0]) as number;
+      const rhs = evalExpr(ctx, hscb, exp[1]) as number;
       return lhs * rhs;
     }
     case ExprTag.Divide: {
-      const lhs = evalExpr(ctx, inst, exp[0]) as number;
-      const rhs = evalExpr(ctx, inst, exp[1]) as number;
+      const lhs = evalExpr(ctx, hscb, exp[0]) as number;
+      const rhs = evalExpr(ctx, hscb, exp[1]) as number;
       return lhs / rhs;
     }
     case ExprTag.Id: {
@@ -94,20 +96,20 @@ export function evalExpr(ctx: List<Bindings>, inst: HaskellIstance, exp: Expr): 
       const argsNames = exp.args;
       return (...argValues: any[]) => {
         const bindings = argsNames.reduce<Bindings>((acc, name, idx) => (acc[name] = argValues[idx], acc), {});
-        return evalExpr(Cons(bindings, ctx), inst, exp.body);
+        return evalExpr(Cons(bindings, ctx), hscb, exp.body);
       };
     }
     case ExprTag.Apply: {
-      const lhs = evalExpr(ctx, inst, exp[0]) as Function;
-      return lhs.apply(undefined, exp[1].map(evalExpr.bind(undefined, ctx, inst)));
+      const lhs = evalExpr(ctx, hscb, exp[0]) as Function;
+      return lhs.apply(undefined, exp[1].map(evalExpr.bind(undefined, ctx, hscb)));
     }
     case ExprTag.Call: {
-      const lhs = evalExpr(ctx, inst, exp[0]) as any;
+      const lhs = evalExpr(ctx, hscb, exp[0]) as any;
       const fn = lhs[exp[1]];
-      return fn.apply(lhs, exp[2].map(evalExpr.bind(undefined, ctx, inst)));
+      return fn.apply(lhs, exp[2].map(evalExpr.bind(undefined, ctx, hscb)));
     }
     case ExprTag.AssignVar: {
-      const rhs = evalExpr(ctx, inst, exp.rhs);
+      const rhs = evalExpr(ctx, hscb, exp.rhs);
       varStorage.set(exp.lhs, rhs);
       return rhs;
     }
@@ -118,7 +120,7 @@ export function evalExpr(ctx: List<Bindings>, inst: HaskellIstance, exp: Expr): 
       return varStorage.get(exp.varId);
     }
     case ExprTag.ElInitBuilder: {
-      const element: HTMLElement = evalExpr(ctx, inst, exp.element) as any;
+      const element: HTMLElement = evalExpr(ctx, hscb, exp.element) as any;
       const newBuilder = new ElementBuilder(null, element);
       varStorage.set(exp.varId, newBuilder);
       return newBuilder;
@@ -147,7 +149,7 @@ export function evalExpr(ctx: List<Bindings>, inst: HaskellIstance, exp: Expr): 
     }
     case ExprTag.ElProp: {
       const builder = varStorage.get(exp.varId) as DomBuilder;
-      const propVal = evalExpr(ctx, inst, exp.val);
+      const propVal = evalExpr(ctx, hscb, exp.val);
       applyProperty(builder, exp.prop, propVal);
       return null;
     }
@@ -158,7 +160,7 @@ export function evalExpr(ctx: List<Bindings>, inst: HaskellIstance, exp: Expr): 
     }
     case ExprTag.ElEvent: {
       const builder = varStorage.get(exp.varId) as DomBuilder;
-      const callback = evalExpr(ctx, inst, exp.callback) as any;
+      const callback = evalExpr(ctx, hscb, exp.callback) as any;
       addEventListener(builder, exp.name, callback);
       return null;
     }
@@ -204,11 +206,11 @@ export function evalExpr(ctx: List<Bindings>, inst: HaskellIstance, exp: Expr): 
       return null;
     }
     case ExprTag.RevSeq: {
-      return exp.exprs.reduceRight<unknown>((_, e) => evalExpr(ctx, inst, e), null);
+      return exp.exprs.reduceRight<unknown>((_, e) => evalExpr(ctx, hscb, e), null);
     }
     case ExprTag.ExecCallback: {
-      const arg = evalExpr(ctx, inst, exp.arg);
-      return reactor.haskellApp(inst, {
+      const arg = evalExpr(ctx, hscb, exp.arg);
+      return hscb({
         tag: DownCmdTag.ExecCallback,
         arg: unknownToJValue(arg),
         callbackId: exp.callbackId
@@ -409,11 +411,13 @@ export const expr = b.recursive<Expr>(self => b.discriminate({
 
 export enum UpCommandTag {
   Eval,
+  HotReload,
   Exit,
 }
 
 export const upCmd = b.discriminate({
   [UpCommandTag.Eval]: b.record({ expr: expr }),
+  [UpCommandTag.HotReload]: b.record({ }),
   [UpCommandTag.Exit]: b.record({ }),
 });
 
