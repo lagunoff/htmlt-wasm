@@ -6,11 +6,14 @@
 **/*.o_dyn
 **/.directory
 **/*.drv
+/bin
 /dist
-/dist-newstyle
+/dist-newstyle/build
+/dist-newstyle/cache
+/dist-newstyle/packagedb
+/dist-newstyle/tmp
 /result
 /tmp
 /.envrc
-/public/**
 /node_modules
 /.cache/**

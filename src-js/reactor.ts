@@ -1,10 +1,12 @@
+import { WASI, File, OpenFile } from '@bjorn3/browser_wasi_shim';
 import { absurd } from './lib';
 import * as p from './protocol';
 import { UpCmd, DownCmd, DownCmdTag, UpCommandTag, Bindings, List } from './protocol';
 
-export  type HaskellPointer = number;
+export type HaskellPointer = number;
 
 export type HaskellExports = {
+  hs_init: (argc: number, argv: HaskellPointer) => void;
   hs_malloc: (size: number) => HaskellPointer;
   hs_free: (ptr: HaskellPointer) => void;
   app: (input: HaskellPointer) => HaskellPointer;
@@ -72,3 +74,21 @@ function interactWithHaskell(inst: HaskellIstance, down: DownCmd): UpCmd {
   console.log(`receiving ${upBuf.length} bytes`);
   return p.upCmd.decode(upBuf);
 }
+
+export async function startReactor(wasmUri: string): Promise<void> {
+  const wasi = new WASI([], [], [
+    new OpenFile(new File([])), // stdin
+    new OpenFile(new File([])), // stdout
+    new OpenFile(new File([])), // stderr
+  ]);
+
+  const wasm = await WebAssembly.compileStreaming(fetch(wasmUri));
+  const inst = await WebAssembly.instantiate(wasm, {
+    "wasi_snapshot_preview1": wasi.wasiImport
+  }) as HaskellIstance;
+  wasi.inst = inst;
+
+  inst.exports.hs_init(0, 0);
+
+  haskellApp(inst);
+};

@@ -1,5 +1,4 @@
-{-|
-Shortcuts for common HTML5 attributes and properties
+{-| Shortcuts for common HTML5 attributes and properties
 -}
 module HtmlT.Wasm.Property where
 
@@ -28,7 +27,6 @@ dynChecked = dynProp "checked"
 dynDisabled :: Dynamic Bool -> WA ()
 dynDisabled = dynProp "disabled"
 {-# INLINE dynDisabled #-}
-
 
 title_ :: ByteString -> WA ()
 title_ = prop "title"

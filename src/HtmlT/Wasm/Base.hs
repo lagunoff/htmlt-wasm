@@ -1,27 +1,13 @@
-{-|
--}
 module HtmlT.Wasm.Base where
 
 import Control.Exception
 import Control.Monad.State
-import Data.Binary (Binary)
-import Data.Binary qualified as Binary
-import Data.ByteString as BS
 import Data.ByteString.Char8 qualified as Char8
-import Data.ByteString.Lazy qualified as BSL
-import Data.ByteString.Unsafe qualified as BSU
 import Data.IORef
 import Data.Map qualified as Map
-import Data.Maybe
 import Data.Set qualified as Set
-import Data.Word
-import Foreign.Marshal.Alloc qualified as Alloc
-import Foreign.Marshal.Utils
-import Foreign.Ptr
-import Foreign.Storable
 import GHC.Exts
 import GHC.Generics
-import System.IO.Unsafe
 import Unsafe.Coerce
 
 import "this" HtmlT.Wasm.Types
@@ -67,12 +53,12 @@ queueIfAlive varId e = modify \s ->
   in
     s {evaluation_queue}
 
-data WasmOptions = WasmOptions
+data WasmInstance = WasmInstance
   { continuations_ref :: IORef [JValue -> WA Any]
   , wasm_state_ref :: IORef WAState
   } deriving (Generic)
 
-runUntillInterruption :: WasmOptions -> WAEnv -> WA a -> IO (Either Expr a)
+runUntillInterruption :: WasmInstance -> WAEnv -> WA a -> IO (Either Expr a)
 runUntillInterruption opt e wasm = do
   s0 <- readIORef opt.wasm_state_ref
   (s1, result) <- unWA wasm e s0 `catch` \(e :: SomeException) ->
@@ -103,7 +89,7 @@ runUntillInterruption opt e wasm = do
     coerceResult :: forall a b. WAResult a -> WAResult b
     coerceResult = unsafeCoerce
 
-handleCommand :: WasmOptions -> WA () -> DownCmd -> IO UpCmd
+handleCommand :: WasmInstance -> WA () -> DownCmd -> IO UpCmd
 handleCommand opt wasmMain = \case
   Start -> do
     writeIORef opt.continuations_ref []

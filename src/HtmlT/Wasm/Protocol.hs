@@ -1,16 +1,8 @@
 module HtmlT.Wasm.Protocol where
 
 import Data.Binary (Binary)
-import Data.Binary qualified as Binary
 import Data.ByteString as BS
-import Data.ByteString.Lazy qualified as BSL
-import Data.ByteString.Unsafe qualified as BSU
 import Data.Int
-import Data.Word
-import Foreign.Marshal.Alloc qualified as Alloc
-import Foreign.Marshal.Utils
-import Foreign.Ptr
-import Foreign.Storable
 import GHC.Generics
 
 data UpCmd
@@ -53,6 +45,7 @@ data Expr
   | FreeVar VarId
   | Var VarId
 
+  -- TODO: Explain DomBuilder and DomBoundaries
   | ElInitBuilder DomBuilder Expr
   | ElDestroyBuilder DomBuilder
   | ElPush DomBuilder ByteString
@@ -77,6 +70,9 @@ data Expr
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
+-- | Represents a fully-evaluated form of 'Expr' with no lambdas (a
+-- JSON basically). This is the result we get from JavaScript after
+-- evaluating an 'Expr'.
 data JValue
   = JNull
   | JBool Bool

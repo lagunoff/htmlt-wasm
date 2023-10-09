@@ -5,8 +5,6 @@ import Data.ByteString as BS
 import Data.ByteString.Lazy qualified as BSL
 import Data.ByteString.Unsafe qualified as BSU
 import Data.IORef
-import Data.Map qualified as Map
-import Data.Set qualified as Set
 import Data.Word
 import Foreign.Marshal.Alloc qualified as Alloc
 import Foreign.Marshal.Utils
@@ -20,7 +18,7 @@ import "this" HtmlT.Wasm.Base
 wasmApp :: WA () -> Ptr Word8 -> IO (Ptr Word8)
 wasmApp wasmMain p = do
   downCmd <- Binary.decode . BSL.fromStrict <$> loadByteString p
-  upCmd <- handleCommand wasmOptions wasmMain downCmd
+  upCmd <- handleCommand wasmInstance wasmMain downCmd
   storeByteString $ BSL.toStrict $ Binary.encode upCmd
   where
     storeByteString :: ByteString -> IO (Ptr a)
@@ -38,15 +36,8 @@ wasmApp wasmMain p = do
       let contentPtr = ptr `plusPtr` 8
       BSU.unsafePackCStringFinalizer contentPtr (fromIntegral len) (Alloc.free ptr)
 
-wasmOptions :: WasmOptions
-wasmOptions = unsafePerformIO do
-  wasm_state_ref <- newIORef WAState
-    { var_storage = Set.fromList [0, 1]
-    , evaluation_queue = []
-    , subscriptions = Map.empty
-    , finalizers = Map.empty
-    , id_supply = 0
-    , transaction_queue = Map.empty
-    }
+wasmInstance :: WasmInstance
+wasmInstance = unsafePerformIO do
+  wasm_state_ref <- newIORef emptyWAState
   continuations_ref <- newIORef []
-  return WasmOptions {..}
+  return WasmInstance {wasm_state_ref, continuations_ref}

@@ -13,9 +13,6 @@ import "this" HtmlT.Wasm.Protocol
 import "this" HtmlT.Wasm.Types
 
 
-consoleLog :: Expr -> WA ()
-consoleLog e = queueExp (Call (Id "console") "log" [e])
-
 insertBoundary :: WA VarId
 insertBoundary = do
   domBuilderId <- asks (.dom_builder_id)
@@ -29,6 +26,9 @@ clearBoundary boundary = queueExp (ElClearBoundary (DomBuilder boundary))
 
 destroyBoundary :: VarId -> WA ()
 destroyBoundary boundary = queueExp (ElDestroyBuilder (DomBuilder boundary))
+
+consoleLog :: Expr -> WA ()
+consoleLog e = queueExp (Call (Id "console") "log" [e])
 
 class KnownSymbol eventName => IsEventName eventName where
   type EventListener eventName :: Type

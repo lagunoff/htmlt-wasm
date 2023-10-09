@@ -10,13 +10,7 @@ import Data.Word
 import Foreign.Marshal.Alloc qualified as Alloc
 import Foreign.Ptr
 
-import HtmlT.Wasm.Base
-import HtmlT.Wasm.Html
-import HtmlT.Wasm.Protocol
-import HtmlT.Wasm.Element
-import HtmlT.Wasm.Property
-import HtmlT.Wasm.Types
-import HtmlT.Wasm.Event
+import HtmlT.Wasm
 
 foreign export ccall app :: Ptr Word8 -> IO (Ptr Word8)
 app = wasmApp wasmMain
@@ -26,7 +20,6 @@ foreign export ccall hs_free :: Ptr a -> IO ()
 hs_free = Alloc.free
 
 main = return ()
-
 
 data VotingCandidate = VotingCandidate
   { language :: ByteString

@@ -103,7 +103,7 @@ executable todomvc-server
   import: common-config
   if arch(wasm32)
     buildable: False
-  hs-source-dirs: examples/todomvc examples/todomvc-server
+  hs-source-dirs: examples/todomvc
   main-is: todomvc-server.hs
   other-modules:
     Utils
@@ -130,15 +130,16 @@ library
   import: common-config
   hs-source-dirs: src
   exposed-modules:
+    HtmlT.Wasm
     HtmlT.Wasm.Base
     HtmlT.Wasm.DOM
     HtmlT.Wasm.Element
     HtmlT.Wasm.Event
     HtmlT.Wasm.Html
+    HtmlT.Wasm.Main
     HtmlT.Wasm.Marshal
     HtmlT.Wasm.Property
     HtmlT.Wasm.Protocol
-    HtmlT.Wasm.Main
     HtmlT.Wasm.Types
   build-depends:
     base,
@@ -155,9 +156,7 @@ library
       wai,
       wai-websockets,
       websockets,
-      wuss,
       http-types,
       foreign-store,
       warp,
-      wai-app-static,
  

@@ -81,7 +81,8 @@ installFinalizer fin e s0 =
   let
     (finalizerId, s1) = nextQueueId s0
     finalizerKey = FinalizerCustomId finalizerId
-    finalizers = Map.alter (Just . Map.insert finalizerKey fin . fromMaybe Map.empty) e.finalizer_ns s1.finalizers
+    insertFin = Just . Map.insert finalizerKey fin . fromMaybe Map.empty
+    finalizers = Map.alter insertFin e.finalizer_ns s1.finalizers
   in
     (finalizerKey, s1 {finalizers})
 

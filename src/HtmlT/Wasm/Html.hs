@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
 module HtmlT.Wasm.Html where
 
 import Data.ByteString.Char8 qualified as Char8
@@ -146,6 +147,7 @@ simpleList listDyn h = do
   performDyn $ fmap (local applyBoundary . updateList) listDyn
   return ()
 
+-- | Auxilliary datatype that helps to implement 'simpleList'
 data ElemEnv a = ElemEnv
   { ee_boundary :: DomBuilder
   , ee_save_current_element :: VarId

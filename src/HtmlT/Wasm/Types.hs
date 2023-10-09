@@ -1,13 +1,15 @@
 module HtmlT.Wasm.Types where
 
-import Control.Monad.Reader
 import Control.Monad.Fix
+import Control.Monad.Reader
 import Control.Monad.State
 import Data.Map (Map)
+import Data.Map qualified as Map
 import Data.Set (Set)
+import Data.Set qualified as Set
 import GHC.Exts
-import GHC.Int
 import GHC.Generics
+import GHC.Int
 
 import "this" HtmlT.Wasm.Protocol
 
@@ -38,6 +40,16 @@ data WAState = WAState
   -- VarId (potentially can lead to clashes if it overflows in a
   -- long-living application, TODO: is this a legitimate concern?)
   , transaction_queue :: Map QueueId (WA ())
+  }
+
+emptyWAState :: WAState
+emptyWAState = WAState
+  { var_storage = Set.fromList [0, 1]
+  , evaluation_queue = []
+  , subscriptions = Map.empty
+  , finalizers = Map.empty
+  , id_supply = 0
+  , transaction_queue = Map.empty
   }
 
 newtype QueueId = QueueId { unQueueId :: Int64 }
