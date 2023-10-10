@@ -1,12 +1,9 @@
 module TodoList where
 
 import Control.Monad
-import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as Char8
 import Data.List qualified as List
 import Data.Maybe
-import Data.Text ()
-import Data.Text.Encoding qualified as Text
 import GHC.Int
 import HtmlT.Wasm
 
@@ -19,7 +16,7 @@ data TodoListConfig = TodoListConfig
   }
 
 data TodoListState = TodoListState
-  { title :: ByteString
+  { title :: Utf8
   , items :: [TodoItem.TodoItemState]
   , filter :: Filter
   } deriving (Show, Eq)
@@ -30,7 +27,7 @@ data Filter = All | Active | Completed
 data TodoListAction a where
   InitAction :: TodoListAction (DynRef TodoListState)
   ToggleAllAction :: TodoListConfig -> Bool -> TodoListAction ()
-  InputAction :: TodoListConfig -> ByteString -> TodoListAction ()
+  InputAction :: TodoListConfig -> Utf8 -> TodoListAction ()
   CommitAction :: TodoListConfig -> TodoListAction ()
   KeydownAction :: TodoListConfig -> Int64 -> TodoListAction ()
   DeleteItemAction :: TodoListConfig -> Int -> TodoListAction ()
@@ -112,7 +109,7 @@ html cfg = do
     footerWidget = footer_ [class_ "footer"] do
       toggleClass "hidden" hiddenDyn
       span_ [class_ "todo-count"] do
-        strong_ $ dynText $ Char8.pack . show <$> itemsLeftDyn
+        strong_ $ dynText $ Utf8 . Char8.pack . show <$> itemsLeftDyn
         dynText $ pluralize " item left" " items left" <$> itemsLeftDyn
       ul_ [class_ "filters"] do
         forM_ [All, Active, Completed] filterWidget
@@ -131,7 +128,7 @@ html cfg = do
     filterWidget flt = li_ do
       a_ [href_ (printFilter flt)] do
         toggleClass "selected" $ filterSelectedDyn flt
-        text $ Char8.pack (show flt)
+        text $ Utf8 . Char8.pack $ show flt
     hiddenDyn =
       Prelude.null . (.items) <$> fromRef cfg.state_ref
     itemsLeftDyn =
@@ -150,18 +147,18 @@ html cfg = do
         (Completed, False) -> True
         _                  -> False
 
-pluralize :: ByteString -> ByteString -> Int -> ByteString
+pluralize :: Utf8 -> Utf8 -> Int -> Utf8
 pluralize singular _plural 0 = singular
 pluralize _singular plural _ = plural
 
-parseFilter :: ByteString -> Maybe Filter
+parseFilter :: Utf8 -> Maybe Filter
 parseFilter =  \case
   "#/"          -> Just All
   "#/active"    -> Just Active
   "#/completed" -> Just Completed
   _             -> Nothing
 
-printFilter :: Filter -> ByteString
+printFilter :: Filter -> Utf8
 printFilter =  \case
   All       -> "#/"
   Active    -> "#/active"
@@ -192,8 +189,8 @@ todoItemModifier cfg idx elemModifier = Modifier \upd f -> do
     overIx n f (x:xs) = x : overIx (pred n) f xs
     overIx _ _ [] = []
 
-styles :: ByteString
-styles = Text.encodeUtf8 "\
+styles :: Utf8
+styles = "\
   \body {\
   \  margin: 0;\
   \  padding: 0 ;\

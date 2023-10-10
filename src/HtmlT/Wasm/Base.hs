@@ -64,7 +64,7 @@ runUntillInterruption opt e wasm = do
   (s1, result) <- unWA wasm e s0 `catch` \(e :: SomeException) ->
     -- UncaughtException command never returns a value from JS side,
     -- therefore we can coerce the result to any type
-    pure (s0, coerceResult (Cmd (UncaughtException (Char8.pack (show e)))))
+    pure (s0, coerceResult (Cmd (UncaughtException (Utf8 (Char8.pack (show e))))))
   let
     g :: forall a. WAResult a -> IO (Either Expr a)
     g r = case r of

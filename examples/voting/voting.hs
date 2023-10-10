@@ -1,15 +1,11 @@
 import Control.Monad
 import Control.Monad.Reader
-import Data.ByteString
 import Data.ByteString.Char8 qualified as Char8
 import Data.List qualified as List
 import Data.Ord
-import Data.Text qualified as Text ()
-import Data.Text.Encoding qualified as Text
 import Data.Word
 import Foreign.Marshal.Alloc qualified as Alloc
 import Foreign.Ptr
-
 import HtmlT.Wasm
 
 foreign export ccall app :: Ptr Word8 -> IO (Ptr Word8)
@@ -22,7 +18,7 @@ hs_free = Alloc.free
 main = return ()
 
 data VotingCandidate = VotingCandidate
-  { language :: ByteString
+  { language :: Utf8
   , votes :: Int
   }
 
@@ -44,7 +40,7 @@ wasmMain :: WA ()
 wasmMain = do
   domBuilderId <- asks (.dom_builder_id)
   queueExp $ ElInitBuilder domBuilderId (Id "document" `Dot` "body")
-  el "link" (rel_ "stylesheet" >> href_ "./awsm.css")
+  link_ [rel_ "stylesheet", href_ "./awsm.css"] (pure ())
   votingListRef <- newRef $ normalize candidates
   main_ do
     h4_ "Vote for Your Favorite Programming Language"
@@ -52,12 +48,12 @@ wasmMain = do
       simpleList (fromRef votingListRef) \_ix itemRef -> do
         li_ do
           b_ $ dynText $ fmap (.language) (fromRef itemRef)
-          span_ $ dynText $ fmap (("votes: " <>) . Char8.pack . show . (.votes)) (fromRef itemRef)
+          span_ $ dynText $ fmap (("votes: " <>) . Utf8 . Char8.pack . show . (.votes)) (fromRef itemRef)
           button_ do
-            text (Text.encodeUtf8 "▲")
+            text "▲"
             on @"click" $ modifyRef votingListRef . upvote . (.language) =<< readRef itemRef
           button_ do
-            text (Text.encodeUtf8 "▼")
+            text "▼"
             on @"click" $ modifyRef votingListRef . downvote . (.language) =<< readRef itemRef
     p_ do
       choiceRef <- newRef "Haskell"
@@ -67,22 +63,22 @@ wasmMain = do
         dynProp "value" $ fromRef choiceRef
         on @"select/change" $ writeRef choiceRef
       button_ do
-        text (Text.encodeUtf8 "▲")
+        text "▲"
         on @"click" $ modifyRef votingListRef . upvote =<< readRef choiceRef
       button_ do
-        text (Text.encodeUtf8 "▼")
+        text "▼"
         on @"click" $ modifyRef votingListRef . downvote =<< readRef choiceRef
 
 normalize :: [VotingCandidate] -> [VotingCandidate]
 normalize = List.sortOn (Down . (.votes))
 
-upvote :: ByteString -> [VotingCandidate] -> [VotingCandidate]
+upvote :: Utf8 -> [VotingCandidate] -> [VotingCandidate]
 upvote l = normalize . modvote succ l
 
-downvote :: ByteString -> [VotingCandidate] -> [VotingCandidate]
+downvote :: Utf8 -> [VotingCandidate] -> [VotingCandidate]
 downvote l = normalize . modvote pred l
 
-modvote :: (Int -> Int) -> ByteString -> [VotingCandidate] -> [VotingCandidate]
+modvote :: (Int -> Int) -> Utf8 -> [VotingCandidate] -> [VotingCandidate]
 modvote _ _ [] = []
 modvote f l (x:xs)
   | x.language == l = x {votes = f x.votes} : xs

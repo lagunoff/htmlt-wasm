@@ -19,7 +19,7 @@ import "this" HtmlT.Wasm.Protocol
 import "this" HtmlT.Wasm.Marshal
 import "this" HtmlT.Wasm.Event
 
-el :: ByteString -> WA a -> WA a
+el :: Utf8 -> WA a -> WA a
 el tagName child = do
   domBuilderId <- asks (.dom_builder_id)
   save_current_element <- newVar
@@ -28,12 +28,12 @@ el tagName child = do
   queueExp (ElPop domBuilderId)
   return result
 
-prop :: ToJSVal v => ByteString -> v -> WA ()
+prop :: ToJSVal v => Utf8 -> v -> WA ()
 prop propName propVal = do
   domBuilderId <- asks (.dom_builder_id)
   queueExp (ElProp domBuilderId propName (fromJValue (toJSVal propVal)))
 
-dynProp :: (ToJSVal v, Eq v) => ByteString -> Dynamic v -> WA ()
+dynProp :: (ToJSVal v, Eq v) => Utf8 -> Dynamic v -> WA ()
 dynProp propName (holdUniqDyn -> valueDyn) = do
   e <- ask
   initialVal <- readDyn valueDyn
@@ -43,7 +43,7 @@ dynProp propName (holdUniqDyn -> valueDyn) = do
     $ queueIfAlive e.save_current_element
     . ElProp (DomBuilder e.save_current_element) propName . fromJValue . toJSVal
 
-toggleClass :: ByteString -> Dynamic Bool -> WA ()
+toggleClass :: Utf8 -> Dynamic Bool -> WA ()
 toggleClass className (holdUniqDyn -> enableDyn) = do
   e <- ask
   initialVal <- readDyn enableDyn
@@ -53,7 +53,7 @@ toggleClass className (holdUniqDyn -> enableDyn) = do
     $ queueIfAlive e.save_current_element
     . ElToggleClass (DomBuilder e.save_current_element) className
 
-attr :: ByteString -> ByteString -> WA ()
+attr :: Utf8 -> Utf8 -> WA ()
 attr attrName attrVal = do
   domBuilderId <- asks (.dom_builder_id)
   queueExp (ElAttr domBuilderId attrName attrVal)
@@ -63,16 +63,16 @@ on k = do
   e <- ask
   let
     symbolStr = Char8.pack $ (symbolVal (Proxy @eventName))
-    eventName = fromMaybe symbolStr . listToMaybe . List.reverse . Char8.split '/' $ symbolStr
+    eventName = Utf8 . fromMaybe symbolStr . listToMaybe . List.reverse . Char8.split '/' $ symbolStr
   callbackId <- newCallbackEvent (local (const e) . mkCallback @eventName k)
   queueExp (ElEvent e.dom_builder_id eventName (mkEventListener @eventName callbackId))
 
-text :: ByteString -> WA ()
+text :: Utf8 -> WA ()
 text contents = do
   domBuilderId <- asks (.dom_builder_id)
   queueExp (ElText domBuilderId contents)
 
-dynText :: Dynamic ByteString -> WA ()
+dynText :: Dynamic Utf8 -> WA ()
 dynText (holdUniqDyn -> dynContent) = do
   domBuilderId <- asks (.dom_builder_id)
   initialContent <- readDyn dynContent
@@ -156,4 +156,4 @@ data ElemEnv a = ElemEnv
   }
 
 instance a ~ () => IsString (WA a) where
-  fromString = text . Char8.pack
+  fromString = text . Utf8 . Char8.pack

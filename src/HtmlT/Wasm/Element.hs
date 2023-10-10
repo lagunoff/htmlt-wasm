@@ -7,6 +7,7 @@ module HtmlT.Wasm.Element where
 import Data.ByteString (ByteString)
 
 import "this" HtmlT.Wasm.Html
+import "this" HtmlT.Wasm.Protocol
 import "this" HtmlT.Wasm.Types
 
 -- | This typeclass allows for tag constructors to have variable
@@ -20,7 +21,7 @@ import "this" HtmlT.Wasm.Types
 -- https://github.com/chrisdone/lucid/blob/fb3b0e7c189c2acd8d88838d4a13923f24542ee8/src/Lucid/Base.hs#L272
 class Term arg result | result -> arg where
   term
-    :: ByteString -- ^ Name.
+    :: Utf8 -- ^ Name.
     -> arg -- ^ Some argument.
     -> result -- ^ Result: either an element or an attribute.
 

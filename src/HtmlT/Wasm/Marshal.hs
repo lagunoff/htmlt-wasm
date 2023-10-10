@@ -1,6 +1,5 @@
 module HtmlT.Wasm.Marshal where
 
-import Data.ByteString (ByteString)
 import Data.Maybe
 import GHC.Int
 
@@ -12,7 +11,7 @@ instance ToJSVal Bool where toJSVal = JBool
 
 instance ToJSVal Int64 where toJSVal = JNum
 
-instance ToJSVal ByteString where toJSVal = JStr
+instance ToJSVal Utf8 where toJSVal = JStr
 
 instance ToJSVal a => ToJSVal [a] where toJSVal = JArr . fmap toJSVal
 
@@ -27,7 +26,7 @@ instance FromJSVal Bool where
 instance FromJSVal Int64 where
   fromJSVal = \case JNum a -> Just a; _ -> Nothing
 
-instance FromJSVal ByteString where
+instance FromJSVal Utf8 where
   fromJSVal = \case JStr a -> Just a; _ -> Nothing
 
 instance FromJSVal a => FromJSVal [a] where

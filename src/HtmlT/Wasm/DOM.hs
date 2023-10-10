@@ -2,7 +2,6 @@ module HtmlT.Wasm.DOM where
 
 import Control.Monad
 import Control.Monad.Reader
-import Data.ByteString
 import Data.Kind
 import GHC.TypeLits
 import GHC.Int
@@ -46,12 +45,12 @@ instance IsEventName "dblclick" where
   mkEventListener callbackId = Lam ["e"] (ExecCallback callbackId (Id "e"))
 
 instance IsEventName "input" where
-  type EventListener "input" = ByteString -> WA ()
+  type EventListener "input" = Utf8 -> WA ()
   mkCallback k j = forM_ (fromJSVal j) k
   mkEventListener callbackId = Lam ["e"] (ExecCallback callbackId (Id "e" `Dot` "target" `Dot` "value"))
 
 instance IsEventName "blur" where
-  type EventListener "blur" = ByteString -> WA ()
+  type EventListener "blur" = Utf8 -> WA ()
   mkCallback k j = forM_ (fromJSVal j) k
   mkEventListener callbackId = Lam ["e"] (ExecCallback callbackId (Id "e" `Dot` "target" `Dot` "value"))
 
@@ -66,6 +65,6 @@ instance IsEventName "checkbox/change" where
   mkEventListener callbackId = Lam ["e"] (ExecCallback callbackId (Id "e" `Dot` "target" `Dot` "checked"))
 
 instance IsEventName "select/change" where
-  type EventListener "select/change" = ByteString -> WA ()
+  type EventListener "select/change" = Utf8 -> WA ()
   mkCallback k j = forM_ (fromJSVal j) k
   mkEventListener callbackId = Lam ["e"] (ExecCallback callbackId (Id "e" `Dot` "target" `Dot` "value"))

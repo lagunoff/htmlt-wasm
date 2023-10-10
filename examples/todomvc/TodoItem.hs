@@ -1,6 +1,5 @@
 module TodoItem where
 
-import Data.ByteString (ByteString)
 import Data.List qualified as List
 import Data.Maybe
 import GHC.Int
@@ -19,15 +18,15 @@ data TodoItemConfig = TodoItemConfig
   }
 
 data TodoItemState = TodoItemState
-  { title :: ByteString
+  { title :: Utf8
   , completed :: Bool
-  , editing :: Maybe ByteString
+  , editing :: Maybe Utf8
   } deriving stock (Show, Eq)
 
 data TodoItemAction a where
   CancelAction :: TodoItemConfig -> TodoItemAction ()
   CommitAction :: TodoItemConfig -> TodoItemAction ()
-  InputAction :: TodoItemConfig -> ByteString -> TodoItemAction ()
+  InputAction :: TodoItemConfig -> Utf8 -> TodoItemAction ()
   DoubleClickAction :: TodoItemConfig -> TodoItemAction ()
   CheckedAction :: TodoItemConfig -> Bool -> TodoItemAction ()
   KeydownAction :: TodoItemConfig -> Int64 -> TodoItemAction ()
