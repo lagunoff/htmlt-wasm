@@ -7,6 +7,7 @@ import Data.Binary qualified as Binary
 import Data.ByteString as BS
 import Data.ByteString.Lazy qualified as BSL
 import Data.Function
+import Data.Typeable
 import Data.IORef
 import Data.List qualified as List
 import Data.Map (Map)
@@ -26,12 +27,12 @@ import "this" HtmlT.Wasm.Base
 import "this" HtmlT.Wasm.Types
 import "this" HtmlT.Wasm.Protocol
 
-data DevServerOptions = DevServerOptions
-  { server_state_ref :: IORef DevServerState
-  , reload_state_ref :: IORef ReloadState
+data DevServerInstance = DevServerInstance
+  { conn_state_ref :: IORef ConnectionState
+  , app_state_ref :: IORef RunningApp
   }
 
-data DevServerState = DevServerState
+data ConnectionState = ConnectionState
   { connections :: Map ConnectionId ConnectionInfo
   , id_supply :: ConnectionId
   }
@@ -41,33 +42,41 @@ data ConnectionInfo = ConnectionInfo
   , options :: WasmInstance
   }
 
-data ReloadState = ReloadState
-  { wasm_main :: WA ()
-  , wai_fallback :: Application
+data DebugConfig a = DebugConfig
+  { open_resource :: IO a
+  , close_resource :: a -> IO ()
+  , init_app :: a -> IO (WA (), Application)
+  }
+
+data RunningApp = forall a. Typeable a => RunningApp
+  { resource :: a
+  , debug_config :: DebugConfig a
+  , client_app :: WA ()
+  , server_app :: Application
   }
 
 newtype ConnectionId = ConnectionId {unConnectionId :: Int}
   deriving newtype (Ord, Eq, Num, Enum)
 
-runDebug :: Warp.Settings -> Application -> WA () -> IO ()
-runDebug settings waiFallback wasmMain = do
+runDebug :: Typeable a => Warp.Settings -> DebugConfig a -> IO ()
+runDebug settings debugCfg = do
   let storeId = 183
   hSetBuffering stderr LineBuffering
   lookupStore storeId >>= \case
     Nothing -> do
-      devopts <- newDevServerOptions waiFallback wasmMain
-      writeStore (Store storeId) devopts
+      devInst <- newInstance debugCfg
+      writeStore (Store storeId) devInst
       let
         useCurrentApp req resp = do
-          reloadState <- readIORef devopts.reload_state_ref
-          reloadState.wai_fallback req resp
+          reloadState <- readIORef devInst.app_state_ref
+          reloadState.server_app req resp
       void $ forkIO $ tryPort settings $
-        devserverMiddleware devopts useCurrentApp
+        devserverMiddleware devInst useCurrentApp
     Just store -> do
-      opts :: DevServerOptions <- readStore store
-      writeIORef opts.reload_state_ref $ ReloadState wasmMain waiFallback
-      serverState <- readIORef opts.server_state_ref
-      forM_ serverState.connections \connInfo ->
+      oldInst <- readStore store
+      updateInstance debugCfg oldInst
+      connState <- readIORef oldInst.conn_state_ref
+      forM_ connState.connections \connInfo ->
         sendDataMessage connInfo.connection . Binary $ Binary.encode HotReload
   where
     tryPort :: Warp.Settings -> Application -> IO ()
@@ -84,14 +93,19 @@ runDebug settings waiFallback wasmMain = do
           | otherwise -> throwIO e
 
 runDebugDefault :: Warp.Port -> WA () -> IO ()
-runDebugDefault port = runDebug (Warp.setPort port Warp.defaultSettings) notFound
+runDebugDefault port wasmApp =
+  runDebug (Warp.setPort port Warp.defaultSettings) DebugConfig
+    { open_resource = pure ()
+    , close_resource = const (pure ())
+    , init_app = const $ pure (wasmApp, notFound)
+    }
 
-devserverApplication :: DevServerOptions -> Application
+devserverApplication :: DevServerInstance -> Application
 devserverApplication opt =
   devserverMiddleware opt $ const
     ($ responseLBS status404 [] "Not found")
 
-devserverMiddleware :: DevServerOptions -> Middleware
+devserverMiddleware :: DevServerInstance -> Middleware
 devserverMiddleware opts next req resp =
   case pathInfo req of
     [] -> indexHtmlApp req resp
@@ -124,7 +138,7 @@ notFound :: Application
 notFound _ resp =
   resp $ responseLBS status404 [] "Not found"
 
-devserverWebsocket :: DevServerOptions -> ServerApp
+devserverWebsocket :: DevServerInstance -> ServerApp
 devserverWebsocket opt p =
   bracket acceptConn dropConn \(conn, _, options) ->
     withPingThread conn 30 (pure ()) $
@@ -134,7 +148,7 @@ devserverWebsocket opt p =
       connection <- acceptRequest p
       options <- newWasmInstance
       let connInfo = ConnectionInfo {options, connection}
-      connId <- atomicModifyIORef' opt.server_state_ref \s ->
+      connId <- atomicModifyIORef' opt.conn_state_ref \s ->
         ( s
           { id_supply = succ s.id_supply
           , connections = Map.insert s.id_supply connInfo s.connections
@@ -143,7 +157,7 @@ devserverWebsocket opt p =
         )
       return (connection, connId, options)
     dropConn (_, connId, _) =
-      modifyIORef' opt.server_state_ref \s -> s
+      modifyIORef' opt.conn_state_ref \s -> s
         {connections = Map.delete connId s.connections}
     newWasmInstance = do
       wasm_state_ref <- newIORef emptyWAState
@@ -153,18 +167,57 @@ devserverWebsocket opt p =
       try (receiveData conn) >>= \case
         Right (websocketBytes::ByteString) -> do
           let downCmd = Binary.decode . BSL.fromStrict $ websocketBytes
-          reloadState <- readIORef opt.reload_state_ref
-          upCmd <- handleCommand options reloadState.wasm_main downCmd
+          runningApp <- readIORef opt.app_state_ref
+          upCmd <- handleCommand options runningApp.client_app downCmd
           sendDataMessage conn . Binary $ Binary.encode upCmd
           loop conn options
         Left (_::ConnectionException) ->
           return ()
 
-newDevServerOptions :: Application -> WA () -> IO DevServerOptions
-newDevServerOptions waiFallback wasmMain = do
-  reload_state_ref <- newIORef $ ReloadState wasmMain waiFallback
-  server_state_ref <- newIORef $ DevServerState Map.empty 0
-  return DevServerOptions {server_state_ref, reload_state_ref}
+newInstance :: Typeable a => DebugConfig a -> IO DevServerInstance
+newInstance debugCfg = do
+  resource <- debugCfg.open_resource
+  (client_app, server_app) <- debugCfg.init_app resource
+  app_state_ref <- newIORef RunningApp
+    { resource
+    , debug_config = debugCfg
+    , client_app
+    , server_app
+    }
+  conn_state_ref <- newIORef $ ConnectionState Map.empty 0
+  return DevServerInstance {conn_state_ref, app_state_ref}
+
+updateInstance :: Typeable a => DebugConfig a -> DevServerInstance -> IO ()
+updateInstance debugCfg devInst = do
+  oldApp <- readIORef devInst.app_state_ref
+  let tryOld = tryOldResource debugCfg oldApp
+  case tryOld of
+    Right oldResource -> do
+      (client_app, server_app) <- debugCfg.init_app oldResource
+      writeIORef devInst.app_state_ref RunningApp
+        { resource = oldResource
+        , debug_config = debugCfg
+        , client_app
+        , server_app
+        }
+    Left closeOld -> do
+      closeOld
+      newResource <- debugCfg.open_resource
+      (client_app, server_app) <- debugCfg.init_app newResource
+      writeIORef devInst.app_state_ref RunningApp
+        { resource = newResource
+        , debug_config = debugCfg
+        , client_app
+        , server_app
+        }
+  where
+    tryOldResource :: forall a. Typeable a => DebugConfig a -> RunningApp -> Either (IO ()) a
+    tryOldResource _ RunningApp {resource, debug_config}
+      | Just Refl <- eqT0 @a resource = Right resource
+      | otherwise = Left (debug_config.close_resource resource)
+
+    eqT0 :: forall a b. (Typeable a, Typeable b) => b -> Maybe (a :~: b)
+    eqT0 _ = eqT @a @b
 
 -- | Run @yarn run webpack --mode production@ and copy contents from
 -- @./dist-newstyle/index.bundle.js@ to update the 'indexBundleJs'
