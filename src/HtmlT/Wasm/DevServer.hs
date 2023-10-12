@@ -28,7 +28,7 @@ import "this" HtmlT.Wasm.Protocol
 
 data DevServerOptions = DevServerOptions
   { server_state_ref :: IORef DevServerState
-  , wasm_main_ref :: IORef (WA ())
+  , reload_state_ref :: IORef ReloadState
   }
 
 data DevServerState = DevServerState
@@ -41,21 +41,31 @@ data ConnectionInfo = ConnectionInfo
   , options :: WasmInstance
   }
 
+data ReloadState = ReloadState
+  { wasm_main :: WA ()
+  , wai_fallback :: Application
+  }
+
 newtype ConnectionId = ConnectionId {unConnectionId :: Int}
   deriving newtype (Ord, Eq, Num, Enum)
 
-runDebugSettings :: Warp.Settings -> WA () -> IO ()
-runDebugSettings settings wasmMain = do
+runDebug :: Warp.Settings -> Application -> WA () -> IO ()
+runDebug settings waiFallback wasmMain = do
   let storeId = 183
   hSetBuffering stderr LineBuffering
-  devopts <- newDevServerOptions wasmMain
   lookupStore storeId >>= \case
     Nothing -> do
+      devopts <- newDevServerOptions waiFallback wasmMain
       writeStore (Store storeId) devopts
-      void $ forkIO $ tryPort settings $ devserverMiddleware devopts notFound
+      let
+        useCurrentApp req resp = do
+          reloadState <- readIORef devopts.reload_state_ref
+          reloadState.wai_fallback req resp
+      void $ forkIO $ tryPort settings $
+        devserverMiddleware devopts useCurrentApp
     Just store -> do
       opts :: DevServerOptions <- readStore store
-      writeIORef opts.wasm_main_ref wasmMain
+      writeIORef opts.reload_state_ref $ ReloadState wasmMain waiFallback
       serverState <- readIORef opts.server_state_ref
       forM_ serverState.connections \connInfo ->
         sendDataMessage connInfo.connection . Binary $ Binary.encode HotReload
@@ -73,8 +83,8 @@ runDebugSettings settings wasmMain = do
             tryPort (setPort (getPort settings + 1) settings) application
           | otherwise -> throwIO e
 
-runDebugPort :: Warp.Port -> WA () -> IO ()
-runDebugPort port = runDebugSettings (Warp.setPort port Warp.defaultSettings)
+runDebugDefault :: Warp.Port -> WA () -> IO ()
+runDebugDefault port = runDebug (Warp.setPort port Warp.defaultSettings) notFound
 
 devserverApplication :: DevServerOptions -> Application
 devserverApplication opt =
@@ -143,18 +153,18 @@ devserverWebsocket opt p =
       try (receiveData conn) >>= \case
         Right (websocketBytes::ByteString) -> do
           let downCmd = Binary.decode . BSL.fromStrict $ websocketBytes
-          wasmMain <- readIORef opt.wasm_main_ref
-          upCmd <- handleCommand options wasmMain downCmd
+          reloadState <- readIORef opt.reload_state_ref
+          upCmd <- handleCommand options reloadState.wasm_main downCmd
           sendDataMessage conn . Binary $ Binary.encode upCmd
           loop conn options
         Left (_::ConnectionException) ->
           return ()
 
-newDevServerOptions :: WA () -> IO DevServerOptions
-newDevServerOptions wasmMain = do
-  wasm_main_ref <- newIORef wasmMain
+newDevServerOptions :: Application -> WA () -> IO DevServerOptions
+newDevServerOptions waiFallback wasmMain = do
+  reload_state_ref <- newIORef $ ReloadState wasmMain waiFallback
   server_state_ref <- newIORef $ DevServerState Map.empty 0
-  return DevServerOptions {server_state_ref, wasm_main_ref}
+  return DevServerOptions {server_state_ref, reload_state_ref}
 
 -- | Run @yarn run webpack --mode production@ and copy contents from
 -- @./dist-newstyle/index.bundle.js@ to update the 'indexBundleJs'

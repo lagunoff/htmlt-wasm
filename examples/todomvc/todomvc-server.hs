@@ -5,7 +5,7 @@ import HtmlT.Wasm.DevServer
 import "this" TodoList qualified as TodoList
 
 main :: IO ()
-main = runDebugPort 8081 wasmMain
+main = runDebugDefault 8081 wasmMain
 
 wasmMain :: WA ()
 wasmMain = do
