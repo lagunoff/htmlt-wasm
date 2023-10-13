@@ -5,29 +5,31 @@ import Control.Monad.Reader
 import Data.Kind
 import GHC.TypeLits
 import GHC.Int
+import Data.ByteString.Char8 qualified as Char8
+import Data.List qualified as List
+import Data.Maybe
+import Data.Proxy
 
 import "this" HtmlT.Wasm.Base
 import "this" HtmlT.Wasm.Marshal
 import "this" HtmlT.Wasm.Protocol
 import "this" HtmlT.Wasm.Types
+import "this" HtmlT.Wasm.Html
 
 
-insertBoundary :: WA VarId
-insertBoundary = do
-  domBuilderId <- asks (.dom_builder_id)
-  boundary <- newVar
-  queueExp (AssignVar boundary (Var (unDomBuilder domBuilderId)))
-  queueExp (ElInsertBoundary (DomBuilder boundary))
-  return boundary
-
-clearBoundary :: VarId -> WA ()
-clearBoundary boundary = queueExp (ElClearBoundary (DomBuilder boundary))
-
-destroyBoundary :: VarId -> WA ()
-destroyBoundary boundary = queueExp (ElDestroyBuilder (DomBuilder boundary))
 
 consoleLog :: Expr -> WA ()
 consoleLog e = queueExp (Call (Id "console") "log" [e])
+
+on :: forall eventName. IsEventName eventName => EventListener eventName -> Html ()
+on k = do
+  wasmEnv <- lift ask
+  dom_builder_id <- asks (.dom_builder_id)
+  let
+    symbolStr = Char8.pack $ (symbolVal (Proxy @eventName))
+    eventName = Utf8 . fromMaybe symbolStr . listToMaybe . List.reverse . Char8.split '/' $ symbolStr
+  callbackId <- lift $ newCallbackEvent (local (const wasmEnv) . mkCallback @eventName k)
+  lift $ queueExp (ElEvent dom_builder_id eventName (mkEventListener @eventName callbackId))
 
 class KnownSymbol eventName => IsEventName eventName where
   type EventListener eventName :: Type

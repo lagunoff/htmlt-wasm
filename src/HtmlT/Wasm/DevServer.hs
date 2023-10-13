@@ -17,7 +17,6 @@ import Foreign.Store
 import GHC.IO.Exception
 import Network.HTTP.Types as H
 import Network.Wai as WAI
-import Network.Wai.Handler.Warp
 import Network.Wai.Handler.Warp as Warp
 import Network.Wai.Handler.WebSockets
 import Network.WebSockets

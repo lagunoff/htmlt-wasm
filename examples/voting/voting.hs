@@ -37,11 +37,9 @@ candidates =
   ]
 
 wasmMain :: WA ()
-wasmMain = do
-  domBuilderId <- asks (.dom_builder_id)
-  queueExp $ ElInitBuilder domBuilderId (Id "document" `Dot` "body")
+wasmMain = attachToBody do
   link_ [rel_ "stylesheet", href_ "./awsm.css"] (pure ())
-  votingListRef <- newRef $ normalize candidates
+  votingListRef <- lift $ newRef $ normalize candidates
   main_ do
     h4_ "Vote for Your Favorite Programming Language"
     p_ $ ol_ do
@@ -56,7 +54,7 @@ wasmMain = do
             text "▼"
             on @"click" $ modifyRef votingListRef . downvote . (.language) =<< readRef itemRef
     p_ do
-      choiceRef <- newRef "Haskell"
+      choiceRef <- lift $ newRef "Haskell"
       select_ do
         forM_ candidates \c -> do
           option_ [value_ c.language] $ text c.language

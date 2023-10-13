@@ -126,4 +126,4 @@ handleCommand opt wasmMain = \case
       Left exp -> return $ Eval exp
       Right _ -> return Exit
   where
-    wasmEnv = WAEnv (DomBuilder (VarId (0))) (VarId 1) (-1)
+    wasmEnv = WAEnv (-1)

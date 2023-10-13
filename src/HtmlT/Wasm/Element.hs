@@ -4,8 +4,6 @@ Shortcuts for most common HTML5 elements
 -}
 module HtmlT.Wasm.Element where
 
-import Data.ByteString (ByteString)
-
 import "this" HtmlT.Wasm.Html
 import "this" HtmlT.Wasm.Protocol
 import "this" HtmlT.Wasm.Types
@@ -26,13 +24,13 @@ class Term arg result | result -> arg where
     -> result -- ^ Result: either an element or an attribute.
 
 -- | Given attributes, expect more child input.
-instance f ~ WA a => Term [WA ()] (f -> WA a) where
+instance f ~ Html a => Term [Html ()] (f -> Html a) where
   term name attrs = el name . (sequence_ attrs *>)
   {-# INLINE term #-}
 
 -- | Given children immediately, just use that and expect no
 -- attributes.
-instance Term (WA a) (WA a) where
+instance Term (Html a) (Html a) where
   term = el
   {-# INLINE term #-}
 
@@ -360,7 +358,7 @@ sup_ :: Term arg result => arg -> result
 sup_ = term "sup"
 {-# INLINE sup_ #-}
 
-br_ :: WA ()
+br_ :: Html ()
 br_ = el "br" (return ())
 {-# INLINE br_ #-}
 

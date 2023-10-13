@@ -3,13 +3,7 @@ module TodoItem where
 import Data.List qualified as List
 import Data.Maybe
 import GHC.Int
-import HtmlT.Wasm.Types
-import HtmlT.Wasm.Html
-import HtmlT.Wasm.Element
-import HtmlT.Wasm.Property
-import HtmlT.Wasm.Event
-import HtmlT.Wasm.Protocol
-import HtmlT.Wasm.Marshal
+import HtmlT.Wasm
 
 data TodoItemConfig = TodoItemConfig
   { state_ref :: DynRef TodoItemState
@@ -56,7 +50,7 @@ eval = \case
     27 {- Escape -} -> eval (CancelAction cfg)
     _ -> return ()
 
-html :: TodoItemConfig -> WA ()
+html :: TodoItemConfig -> Html ()
 html cfg = li_ do
   let
     completedDyn = (.completed) <$> fromRef cfg.state_ref

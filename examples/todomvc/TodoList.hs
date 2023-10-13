@@ -74,7 +74,7 @@ eval = \case
     mkNewItem t =
       TodoItem.emptyTodoItemState {TodoItem.title = t}
 
-html :: TodoListConfig -> WA ()
+html :: TodoListConfig -> Html ()
 html cfg = do
   div_ do
     section_ [class_ "todoapp"] do
@@ -124,7 +124,7 @@ html cfg = do
       p_ do
         text "Part of "
         a_ [href_ "http://todomvc.com"] "TodoMVC"
-    filterWidget :: Filter -> WA ()
+    filterWidget :: Filter -> Html ()
     filterWidget flt = li_ do
       a_ [href_ (printFilter flt)] do
         toggleClass "selected" $ filterSelectedDyn flt

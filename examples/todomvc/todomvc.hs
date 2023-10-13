@@ -1,4 +1,4 @@
-import Control.Monad.Reader
+import Control.Monad.Trans
 import Data.Word
 import Foreign.Marshal.Alloc qualified as Alloc
 import Foreign.Ptr
@@ -16,11 +16,9 @@ hs_free = Alloc.free
 main = return ()
 
 wasmMain :: WA ()
-wasmMain = do
-  domBuilderId <- asks (.dom_builder_id)
-  queueExp $ ElInitBuilder domBuilderId (Id "document" `Dot` "body")
+wasmMain = attachToBody do
   el "style" $ text TodoList.styles
-  todoListStateRef <- TodoList.eval TodoList.InitAction
+  todoListStateRef <- lift $ TodoList.eval TodoList.InitAction
   TodoList.html TodoList.TodoListConfig
     { state_ref = todoListStateRef
     }

@@ -25,9 +25,7 @@ newtype WA a = WA
   }
 
 data WAEnv = WAEnv
-  { dom_builder_id :: DomBuilder
-  , save_current_element :: VarId
-  , finalizer_ns :: FinalizerNs
+  { finalizer_ns :: FinalizerNs
   }
 
 data WAState = WAState
@@ -51,6 +49,13 @@ emptyWAState = WAState
   , id_supply = 0
   , transaction_queue = Map.empty
   }
+
+class MonadWA m where
+  wasm :: (WAEnv -> WAState -> (WAState, WAResult a)) -> m a
+
+instance MonadWA WA where
+  wasm f = WA \e s -> pure (f e s)
+  {-# INLINE wasm #-}
 
 newtype QueueId = QueueId { unQueueId :: Int64 }
   deriving newtype (Eq, Ord, Show, Num, Enum)
