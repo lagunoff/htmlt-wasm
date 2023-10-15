@@ -1,21 +1,18 @@
-{-# LANGUAGE FunctionalDependencies #-}
-{-|
-Shortcuts for most common HTML5 elements
+{-| Shortcuts for the most common HTML5 elements
 -}
 module HtmlT.Wasm.Element where
 
 import "this" HtmlT.Wasm.Html
 import "this" HtmlT.Wasm.Protocol
-import "this" HtmlT.Wasm.Types
 
 -- | This typeclass allows for tag constructors to have variable
 -- length arguments. Each tag constructor like 'div_' defined below
 -- can be called with one or two arguments
 --
 -- > div_ $ text "A Div without attributes"
--- > div_ [class_ "wrapper"] $ text "A Div with a class"
+-- > div_ [class_ "wrapper"] $ text "A Div with CSS class"
 --
--- Unceremoniously copied from the amazing @lucid@ library, see
+-- Unceremoniously copied from the @lucid@ library, see
 -- https://github.com/chrisdone/lucid/blob/fb3b0e7c189c2acd8d88838d4a13923f24542ee8/src/Lucid/Base.hs#L272
 class Term arg result | result -> arg where
   term
@@ -25,7 +22,7 @@ class Term arg result | result -> arg where
 
 -- | Given attributes, expect more child input.
 instance f ~ Html a => Term [Html ()] (f -> Html a) where
-  term name attrs = el name . (sequence_ attrs *>)
+  term name attrs content = el name $ sequence_ attrs *> content
   {-# INLINE term #-}
 
 -- | Given children immediately, just use that and expect no

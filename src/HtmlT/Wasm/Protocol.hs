@@ -6,6 +6,7 @@ import Data.Int
 import Data.String
 import Data.Text ()
 import Data.Text.Encoding qualified as Text
+import Data.Word
 import GHC.Generics
 
 data UpCmd
@@ -47,8 +48,8 @@ data Expr
   -- (Id "foo") "bar" (Str "baz"))@ is equivalent to @foo['bar'] =
   -- baz;@ JavaScript expression
   | Ix Expr Int64
-  -- ^ Assign a value to an integer index of an object. @(AssignProp
-  -- (Id "foo") 0)@ is equivalent to @foo[0]@ JavaScript expression
+  -- ^ Read value from an integer index of an object. @(Ix (Id
+  -- "foo") 0)@ is equivalent to @foo[0]@ JavaScript expression
 
   | Add Expr Expr
   -- ^ Binary addition @(Add 256 5647)@ is equivalent to @256 + 5647@
@@ -60,7 +61,8 @@ data Expr
   -- ^ Binary division @(Divide 256 5647)@ is equivalent to @256 / 5647@
 
   | Id Utf8
-  | Lam [Utf8] Expr
+  | Lam Expr
+  | Arg Word8 Word8
   | Apply Expr [Expr]
   | Call Expr Utf8 [Expr]
 
@@ -68,20 +70,17 @@ data Expr
   | FreeVar VarId
   | Var VarId
 
-  -- TODO: Explain DomBuilder and DomBoundaries
-  | ElInitBuilder DomBuilder Expr
-  | ElDestroyBuilder DomBuilder
-  | ElPush DomBuilder Utf8
-  | ElNoPush DomBuilder Utf8
-  | ElProp DomBuilder Utf8 Expr
-  | ElAttr DomBuilder Utf8 Utf8
-  | ElEvent DomBuilder Utf8 Expr
-  | ElText DomBuilder Utf8
-  | ElAssignTextContent VarId Utf8
-  | ElPop DomBuilder
-  | ElInsertBoundary DomBuilder
-  | ElClearBoundary DomBuilder
-  | ElToggleClass DomBuilder Utf8 Bool
+  | InsertNode Expr Expr
+  | WithBuilder Expr Expr
+  | CreateElement Utf8
+  | CreateText Utf8
+  | ElementProp Expr Utf8 Expr
+  | ElementAttr Expr Utf8 Utf8
+  | AddEventListener Expr Utf8 Expr
+  | ToggleClass Expr Utf8 Bool
+  | AssignText Expr Utf8
+  | InsertBoundary Expr
+  | ClearBoundary Expr Bool
 
   | RevSeq [Expr]
   -- ^ Sequence of the expressions is in reverse order! It starts
@@ -122,6 +121,9 @@ newtype CallbackId = CallbackId { unCallbackId :: Int64 }
   deriving newtype (Show, Num, Binary, Ord, Eq)
 
 newtype DomBuilder = DomBuilder { unDomBuilder :: VarId }
+  deriving newtype (Show, Binary)
+
+newtype Node = Node { unNode :: Expr }
   deriving newtype (Show, Binary)
 
 -- TODO: Make a separate module with reexported functions from

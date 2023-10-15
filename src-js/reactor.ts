@@ -49,7 +49,7 @@ export function haskellApp(inst: HaskellIstance, down: DownCmd = { tag: DownCmdT
   const upCmd = interactWithHaskell(inst, down);
   switch (upCmd.tag) {
     case UpCommandTag.Eval: {
-      const result = p.evalExpr(globalContext, (down: DownCmd) => haskellApp(inst, down), upCmd.expr);
+      const result = p.evalExpr(globalContext, null, (down: DownCmd) => haskellApp(inst, down), upCmd.expr);
       const jvalue = p.unknownToJValue(result);
       return haskellApp(inst, { tag: DownCmdTag.Return, 0: jvalue });
     }
@@ -68,10 +68,8 @@ const globalContext: List<Bindings> = [window as any, null]
 
 function interactWithHaskell(inst: HaskellIstance, down: DownCmd): UpCmd {
   const downBuf = p.downCmd.encode(down);
-  console.log(`sending ${downBuf.length} bytes`);
   const downPtr = storeBuffer(inst, downBuf);
   const upBuf = loadBuffer(inst, inst.exports.app(downPtr));
-  console.log(`receiving ${upBuf.length} bytes`);
   return p.upCmd.decode(upBuf);
 }
 

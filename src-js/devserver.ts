@@ -31,7 +31,7 @@ export async function devClient(devSocketUri: string) {
 export async function haskellApp(upCmd: UpCmd, send: (downCmd: DownCmd) => void) {
   switch (upCmd.tag) {
     case UpCommandTag.Eval: {
-      const result = p.evalExpr(globalContext, send, upCmd.expr);
+      const result = p.evalExpr(globalContext, null, send, upCmd.expr);
       const jvalue = p.unknownToJValue(result);
       return send({ tag: DownCmdTag.Return, 0: jvalue });
     }
