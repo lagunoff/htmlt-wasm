@@ -2,7 +2,6 @@ module HtmlT.Wasm.Base where
 
 import Control.Exception
 import Control.Monad.State
-import Data.ByteString.Char8 qualified as Char8
 import Data.IORef
 import Data.Map qualified as Map
 import Data.Set qualified as Set
@@ -13,6 +12,7 @@ import Unsafe.Coerce
 import "this" HtmlT.Wasm.Event
 import "this" HtmlT.Wasm.JSM
 import "this" HtmlT.Wasm.Protocol
+import "this" HtmlT.Wasm.Protocol.Utf8 qualified as Utf8
 
 newVar :: JSM VarId
 newVar = reactive \e s0 ->
@@ -64,7 +64,7 @@ runUntillInterruption opt e wasm = do
   (s1, result) <- unJSM wasm e s0 `catch` \(e :: SomeException) ->
     -- UncaughtException command never returns a value from JS side,
     -- therefore we can coerce the result to any type
-    pure (s0, coerceResult (Cmd (UncaughtException (Utf8 (Char8.pack (show e))))))
+    pure (s0, coerceResult (Cmd (UncaughtException (Utf8.pack (show e)))))
   let
     g :: forall a. JSMResult a -> IO (Either Expr a)
     g r = case r of
@@ -103,7 +103,7 @@ handleCommand opt wasmMain = \case
       }
     result <- runUntillInterruption opt wasmEnv wasmMain
     case result of
-      Left exp -> return $ Eval exp
+      Left exp -> return $ EvalExpr exp
       Right () -> return Exit
   Return jval -> do
     tipCont <- atomicModifyIORef' opt.continuations_ref \case
@@ -111,11 +111,11 @@ handleCommand opt wasmMain = \case
       x:xs -> (xs, Just x)
     case tipCont of
       Nothing ->
-        return $ Eval $ UncaughtException "Protocol violation: continuation is missing"
+        return $ EvalExpr $ UncaughtException "Protocol violation: continuation is missing"
       Just c -> do
         result <- runUntillInterruption opt wasmEnv (c jval)
         case result of
-          Left exp -> return $ Eval exp
+          Left exp -> return $ EvalExpr exp
           Right _ -> return Exit
   ExecCallbackCommand arg callbackId -> do
     let
@@ -123,7 +123,7 @@ handleCommand opt wasmMain = \case
       wasm = unsafeTrigger eventId arg
     result <- runUntillInterruption opt wasmEnv (dynStep wasm)
     case result of
-      Left exp -> return $ Eval exp
+      Left exp -> return $ EvalExpr exp
       Right _ -> return Exit
   where
     wasmEnv = JSMEnv (-1)

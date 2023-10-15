@@ -48,7 +48,7 @@ export function storeBuffer(inst: HaskellIstance, u8array: Uint8Array) {
 export function haskellApp(inst: HaskellIstance, down: DownCmd = { tag: DownCmdTag.Start }) {
   const upCmd = interactWithHaskell(inst, down);
   switch (upCmd.tag) {
-    case UpCommandTag.Eval: {
+    case UpCommandTag.EvalExpr: {
       const result = p.evalExpr(globalContext, null, (down: DownCmd) => haskellApp(inst, down), upCmd.expr);
       const jvalue = p.unknownToJValue(result);
       return haskellApp(inst, { tag: DownCmdTag.Return, 0: jvalue });

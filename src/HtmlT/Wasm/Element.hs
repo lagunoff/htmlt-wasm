@@ -3,7 +3,7 @@
 module HtmlT.Wasm.Element where
 
 import "this" HtmlT.Wasm.Html
-import "this" HtmlT.Wasm.Protocol
+import "this" HtmlT.Wasm.Protocol.Utf8 (Utf8(..))
 
 -- | This typeclass allows for tag constructors to have variable
 -- length arguments. Each tag constructor like 'div_' defined below

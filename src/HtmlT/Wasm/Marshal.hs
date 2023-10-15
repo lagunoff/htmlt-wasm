@@ -4,12 +4,20 @@ import Data.Maybe
 import GHC.Int
 
 import "this" HtmlT.Wasm.Protocol
+import "this" HtmlT.Wasm.Protocol.JNumber (JNumber(..))
+import "this" HtmlT.Wasm.Protocol.JNumber qualified as JNumber
+import "this" HtmlT.Wasm.Protocol.Utf8 (Utf8(..))
 
 class ToJSVal a where toJSVal :: a -> JValue
 
 instance ToJSVal Bool where toJSVal = JBool
 
-instance ToJSVal Int64 where toJSVal = JNum
+instance ToJSVal Int64 where toJSVal i = JNum (JNumber i 0)
+
+instance ToJSVal Rational where
+  toJSVal r = JNum (JNumber.jsNumberFromRational r)
+
+instance {-# OVERLAPPABLE #-} Real a => ToJSVal a where toJSVal = toJSVal . toRational
 
 instance ToJSVal Utf8 where toJSVal = JStr
 
@@ -24,7 +32,20 @@ instance FromJSVal Bool where
   fromJSVal = \case JBool a -> Just a; _ -> Nothing
 
 instance FromJSVal Int64 where
-  fromJSVal = \case JNum a -> Just a; _ -> Nothing
+  fromJSVal = \case
+    JNum (JNumber c e)
+      | e >= 0 -> Just (c * (10 ^ e))
+      -- Ignoring the remainder after decimal point
+      | otherwise -> Just (fst (quotRem c (10 ^ (-e))))
+    _ -> Nothing
+
+instance FromJSVal Rational where
+  fromJSVal = \case
+    JNum j -> Just (JNumber.jsNumberToRational j)
+    _ -> Nothing
+
+instance {-# OVERLAPPABLE #-} Fractional a => FromJSVal a where
+  fromJSVal = fmap fromRational . fromJSVal
 
 instance FromJSVal Utf8 where
   fromJSVal = \case JStr a -> Just a; _ -> Nothing

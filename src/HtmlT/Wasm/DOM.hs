@@ -16,6 +16,7 @@ import "this" HtmlT.Wasm.Marshal
 import "this" HtmlT.Wasm.Protocol
 import "this" HtmlT.Wasm.JSM
 import "this" HtmlT.Wasm.Html
+import "this" HtmlT.Wasm.Protocol.Utf8 (Utf8(..))
 
 
 consoleLog :: Expr -> JSM ()

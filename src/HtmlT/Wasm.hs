@@ -10,3 +10,5 @@ import HtmlT.Wasm.Main as Export
 import HtmlT.Wasm.Marshal as Export
 import HtmlT.Wasm.Property as Export
 import HtmlT.Wasm.Protocol as Export
+import HtmlT.Wasm.Protocol.JNumber as Export (JNumber(..))
+import HtmlT.Wasm.Protocol.Utf8 as Export (Utf8(..))

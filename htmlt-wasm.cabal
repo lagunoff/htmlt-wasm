@@ -141,6 +141,8 @@ library
     HtmlT.Wasm.Marshal
     HtmlT.Wasm.Property
     HtmlT.Wasm.Protocol
+    HtmlT.Wasm.Protocol.JNumber
+    HtmlT.Wasm.Protocol.Utf8
   build-depends:
     base,
     binary,

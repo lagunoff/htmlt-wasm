@@ -34,7 +34,7 @@ export function evalExpr(ctx: List<Bindings>, argCtx: List<IArguments>, hscb: Ha
        return exp[0] != 0;
     }
     case ExprTag.Num: {
-       return exp[0];
+      return exp.coefficient * Math.pow(10, exp.base10Exponent);
     }
     case ExprTag.Str: {
       return exp[0];
@@ -128,92 +128,6 @@ export function evalExpr(ctx: List<Bindings>, argCtx: List<IArguments>, hscb: Ha
     case ExprTag.Var: {
       return varStorage.get(exp.varId);
     }
-    // case ExprTag.ElInitBuilder: {
-    //   const element: HTMLElement = evalExpr(ctx, argCtx, hscb, exp.element) as any;
-    //   const newBuilder = new ElementBuilder(null, element);
-    //   varStorage.set(exp.varId, newBuilder);
-    //   return newBuilder;
-    // }
-    // case ExprTag.ElDestroyBuilder: {
-    //   const builder = varStorage.get(exp.varId) as DomBuilder;
-    //   if (builder instanceof BoundaryBuilder) {
-    //     clearBoundary(builder);
-    //     builder._begin.parentElement!.removeChild(builder._begin);
-    //     builder._end.parentElement!.removeChild(builder._end);
-    //   }
-    //   varStorage.delete(exp.varId)
-    //   return null;
-    // }
-    // case ExprTag.ElPush: {
-    //   const builder = varStorage.get(exp.varId) as DomBuilder;
-    //   const newBuilder = insertElement(builder, exp.tagName)
-    //   varStorage.set(exp.varId, newBuilder);
-    //   return newBuilder;
-    // }
-    // case ExprTag.ElNoPush: {
-    //   const builder = varStorage.get(exp.varId) as DomBuilder;
-    //   const newElm = document.createElement(exp.tagName);
-    //   insertIntoBuilder(builder, newElm);
-    //   return null;
-    // }
-    // case ExprTag.ElProp: {
-    //   const builder = varStorage.get(exp.varId) as DomBuilder;
-    //   const propVal = evalExpr(ctx, argCtx, hscb, exp.val);
-    //   applyProperty(builder, exp.prop, propVal);
-    //   return null;
-    // }
-    // case ExprTag.ElAttr: {
-    //   const builder = varStorage.get(exp.varId) as DomBuilder;
-    //   applyAttribute(builder, exp.attr, exp.val);
-    //   return null;
-    // }
-    // case ExprTag.ElEvent: {
-    //   const builder = varStorage.get(exp.varId) as DomBuilder;
-    //   const callback = evalExpr(ctx, argCtx, hscb, exp.callback) as any;
-    //   addEventListener(builder, exp.name, callback);
-    //   return null;
-    // }
-    // case ExprTag.ElText: {
-    //   const builder = varStorage.get(exp.varId) as DomBuilder;
-    //   const textNode = document.createTextNode(exp.content);
-    //   insertIntoBuilder(builder, textNode);
-    //   return textNode;
-    // }
-    // case ExprTag.ElAssignTextContent: {
-    //   const textNode = varStorage.get(exp.varId) as Text;
-    //   textNode.nodeValue = exp.content;
-    //   return null;
-    // }
-    // case ExprTag.ElPop: {
-    //   const builder = varStorage.get(exp.varId) as DomBuilder;
-    //   if (builder instanceof ElementBuilder) {
-    //     varStorage.set(exp.varId, builder._parent);
-    //     return null;
-    //   } else if (builder instanceof BoundaryBuilder) {
-    //     varStorage.set(exp.varId, builder._parent);
-    //     return null;
-    //   }
-    //   return absurd(builder);
-    // }
-    // case ExprTag.ElInsertBoundary: {
-    //   const builder = varStorage.get(exp.varId) as DomBuilder;
-    //   const newBuilder = insertBoundary(builder);
-    //   varStorage.set(exp.varId, newBuilder);
-    //   return newBuilder;
-    // }
-    // case ExprTag.ElClearBoundary: {
-    //   const builder = varStorage.get(exp.varId) as DomBuilder;
-    //   if (builder instanceof BoundaryBuilder) {
-    //     clearBoundary(builder);
-    //     return null;
-    //   }
-    //   return null;
-    // }
-    // case ExprTag.ElToggleClass: {
-    //   const builder = varStorage.get(exp.varId) as DomBuilder;
-    //   toggleClass(builder, exp.className, exp.enable != 0);
-    //   return null;
-    // }
     case ExprTag.InsertNode: {
       const parent = evalExpr(ctx, argCtx, hscb, exp.parent) as Element|Comment;
       const child = evalExpr(ctx, argCtx, hscb, exp.child) as Node;
@@ -270,6 +184,9 @@ export function evalExpr(ctx: List<Bindings>, argCtx: List<IArguments>, hscb: Ha
     case ExprTag.RevSeq: {
       return exp.exprs.reduceRight<unknown>((_, e) => evalExpr(ctx, argCtx, hscb, e), null);
     }
+    case ExprTag.Eval: {
+      return eval(exp.rawJavaScript);
+    }
     case ExprTag.ExecCallback: {
       const arg = evalExpr(ctx, argCtx, hscb, exp.arg);
       return hscb({
@@ -290,7 +207,8 @@ export function unknownToJValue(inp: unknown): JValue {
     return { tag: JValueTag.JBool, 0: inp ? 1 : 0 };
   }
   if (typeof(inp) === 'number') {
-    return { tag: JValueTag.JNum, 0: inp };
+    const {coefficient, base10Exponent} = toScientific(inp);
+    return { tag: JValueTag.JNum, coefficient, base10Exponent };
   }
   if (typeof(inp) === 'string') {
     return { tag: JValueTag.JStr, 0: inp };
@@ -309,6 +227,24 @@ export function unknownToJValue(inp: unknown): JValue {
   type KV = [string, JValue];
 }
 
+function toScientific(n: number): { coefficient: number, base10Exponent: number } {
+  // Check if the number is zero
+  if (n === 0) {
+    return { coefficient: 0, base10Exponent: 0 };
+  }
+
+  // Calculate the base 10 exponent
+  let base10Exponent = 0;
+  let coefficient = n;
+
+  while (coefficient % 10 !== 0) {
+    coefficient *= 10;
+    base10Exponent--;
+  }
+
+  return { coefficient, base10Exponent };
+}
+
 export enum JValueTag {
   JNull,
   JBool,
@@ -321,7 +257,7 @@ export enum JValueTag {
 export type JValue =
   | { tag: JValueTag.JNull }
   | { tag: JValueTag.JBool, 0: number }
-  | { tag: JValueTag.JNum, 0: number }
+  | { tag: JValueTag.JNum, coefficient: number, base10Exponent: number }
   | { tag: JValueTag.JStr, 0: string }
   | { tag: JValueTag.JArr, 0: JValue[] }
   | { tag: JValueTag.JObj, 0: [string, JValue][] }
@@ -330,7 +266,7 @@ export type JValue =
 export const jvalue = b.recursive<JValue>(self => b.discriminate({
   [JValueTag.JNull]: b.record({ }),
   [JValueTag.JBool]: b.record({ 0: b.int8 }),
-  [JValueTag.JNum]: b.record({ 0: b.int64 }),
+  [JValueTag.JNum]: b.record({ coefficient: b.int64, base10Exponent: b.int8 }),
   [JValueTag.JStr]: b.record({ 0: b.string }),
   [JValueTag.JArr]: b.record({ 0: b.array(self) }),
   [JValueTag.JObj]: b.record({ 0: b.array(b.tuple(b.string, self)) }),
@@ -376,6 +312,7 @@ export enum ExprTag {
   ClearBoundary,
 
   RevSeq,
+  Eval,
   ExecCallback,
   UncaughtException,
 }
@@ -383,7 +320,7 @@ export enum ExprTag {
 export type Expr =
   | { tag: ExprTag.Null }
   | { tag: ExprTag.Boolean, 0: number }
-  | { tag: ExprTag.Num, 0: number }
+  | { tag: ExprTag.Num, coefficient: number, base10Exponent: number }
   | { tag: ExprTag.Str, 0: string }
   | { tag: ExprTag.Arr, 0: Expr[] }
   | { tag: ExprTag.Obj, 0: [string, Expr][] }
@@ -420,6 +357,7 @@ export type Expr =
   | { tag: ExprTag.ClearBoundary, boundary: Expr, detach: number }
 
   | { tag: ExprTag.RevSeq, exprs: Expr[] }
+  | { tag: ExprTag.Eval, rawJavaScript: string }
   | { tag: ExprTag.ExecCallback, callbackId: number, arg: Expr }
   | { tag: ExprTag.UncaughtException, message: string }
 ;
@@ -427,7 +365,7 @@ export type Expr =
 export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.Null]: b.record({}),
   [ExprTag.Boolean]: b.record({ 0: b.int8 }),
-  [ExprTag.Num]: b.record({ 0: b.int64 }),
+  [ExprTag.Num]: b.record({ coefficient: b.int64, base10Exponent: b.int64 }),
   [ExprTag.Str]: b.record({ 0: b.string }),
   [ExprTag.Arr]: b.record({ 0: b.array(self) }),
   [ExprTag.Obj]: b.record({ 0: b.array(b.tuple(b.string, self)) }),
@@ -464,18 +402,19 @@ export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.ClearBoundary]: b.record({ boundary: self, detach: b.int8 }),
 
   [ExprTag.RevSeq]: b.record({ exprs: b.array(self) }),
+  [ExprTag.Eval]: b.record({ rawJavaScript: b.string }),
   [ExprTag.ExecCallback]: b.record({ callbackId: b.int64, arg: self }),
   [ExprTag.UncaughtException]: b.record({ message: b.string }),
 }));
 
 export enum UpCommandTag {
-  Eval,
+  EvalExpr,
   HotReload,
   Exit,
 }
 
 export const upCmd = b.discriminate({
-  [UpCommandTag.Eval]: b.record({ expr: expr }),
+  [UpCommandTag.EvalExpr]: b.record({ expr: expr }),
   [UpCommandTag.HotReload]: b.record({ }),
   [UpCommandTag.Exit]: b.record({ }),
 });

@@ -4,7 +4,7 @@ module HtmlT.Wasm.Property where
 
 import "this" HtmlT.Wasm.Event
 import "this" HtmlT.Wasm.Html
-import "this" HtmlT.Wasm.Protocol
+import "this" HtmlT.Wasm.Protocol.Utf8 (Utf8(..))
 
 dynStyles :: Dynamic Utf8 -> Html ()
 dynStyles = dynProp "style"

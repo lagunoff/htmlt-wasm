@@ -16,21 +16,9 @@ import "this" HtmlT.Wasm.Event
 import "this" HtmlT.Wasm.JSM
 import "this" HtmlT.Wasm.Marshal
 import "this" HtmlT.Wasm.Protocol
+import "this" HtmlT.Wasm.Protocol.Utf8 (Utf8(..))
 
 newtype HtmlT m a = HtmlT {unHtmlT :: StateT HtmlState m a}
-
-deriving newtype instance Functor m => Functor (HtmlT m)
-deriving newtype instance Monad m => Applicative (HtmlT m)
-deriving newtype instance Monad m => Monad (HtmlT m)
-deriving newtype instance Monad m => MonadState HtmlState (HtmlT m)
-deriving newtype instance MonadReader r m => MonadReader r (HtmlT m)
-deriving newtype instance MonadWriter w m => MonadWriter w (HtmlT m)
-deriving newtype instance MonadIO m => MonadIO (HtmlT m)
-deriving newtype instance MonadTrans HtmlT
-deriving newtype instance MonadFix m => MonadFix (HtmlT m)
-
-instance a ~ () => IsString (Html a) where
-  fromString = text . Utf8 . Char8.pack
 
 execHtmlT :: Monad m => HtmlState -> HtmlT m a -> m (a, HtmlState)
 execHtmlT s = flip runStateT s . unHtmlT
@@ -138,7 +126,8 @@ simpleList listDyn h = do
       ([], x:xs) -> do
         newElem <- newElemEnv x
         let wasmEnv = JSMEnv newElem.ee_namespace
-        withBuilder (Var newElem.ee_boundary) $ monohoist (local (const wasmEnv)) $ h idx newElem.ee_dyn_ref
+        withBuilder (Var newElem.ee_boundary) $
+          monohoist (local (const wasmEnv)) $ h idx newElem.ee_dyn_ref
         fmap (newElem:) $ setup (idx + 1) xs []
       -- New list is shorter, delete the elements that no longer
       -- present in the new list
@@ -202,3 +191,16 @@ withBuilder builder content = do
 
 attachToBody :: Html a -> JSM a
 attachToBody = attachHtml (Id "document" `Dot` "body")
+
+deriving newtype instance Functor m => Functor (HtmlT m)
+deriving newtype instance Monad m => Applicative (HtmlT m)
+deriving newtype instance Monad m => Monad (HtmlT m)
+deriving newtype instance Monad m => MonadState HtmlState (HtmlT m)
+deriving newtype instance MonadReader r m => MonadReader r (HtmlT m)
+deriving newtype instance MonadWriter w m => MonadWriter w (HtmlT m)
+deriving newtype instance MonadIO m => MonadIO (HtmlT m)
+deriving newtype instance MonadTrans HtmlT
+deriving newtype instance MonadFix m => MonadFix (HtmlT m)
+
+instance a ~ () => IsString (Html a) where
+  fromString = text . Utf8 . Char8.pack

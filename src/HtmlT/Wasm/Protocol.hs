@@ -1,16 +1,16 @@
 module HtmlT.Wasm.Protocol where
 
 import Data.Binary (Binary)
-import Data.ByteString as BS
 import Data.Int
-import Data.String
 import Data.Text ()
-import Data.Text.Encoding qualified as Text
 import Data.Word
 import GHC.Generics
 
+import "this" HtmlT.Wasm.Protocol.JNumber (JNumber)
+import "this" HtmlT.Wasm.Protocol.Utf8 (Utf8)
+
 data UpCmd
-  = Eval { expr :: Expr }
+  = EvalExpr { expr :: Expr }
   | HotReload -- ^ Used under dev server
   | Exit
   deriving stock (Generic, Show)
@@ -31,7 +31,7 @@ data Expr
   -- ^ Represents null or undefined values
   | Boolean Bool
   -- ^ JavaScript boolean value
-  | Num Int64
+  | Num JNumber
   -- ^ JavaScript integer number
   | Str Utf8
   -- ^ JavaScript string
@@ -87,6 +87,7 @@ data Expr
   -- evaluating from the end of the list to the beggining. Returns
   -- whatever the last expression evaluetes into (last being the
   -- expression from the tip of the list)
+  | Eval Utf8
   | ExecCallback CallbackId Expr
   | UncaughtException Utf8
   deriving stock (Generic, Show)
@@ -98,7 +99,7 @@ data Expr
 data JValue
   = JNull
   | JBool Bool
-  | JNum Int64
+  | JNum JNumber
   | JStr Utf8
   | JArr [JValue]
   | JObj [(Utf8, JValue)]
@@ -119,18 +120,3 @@ newtype VarId = VarId { unVarId :: Int64 }
 
 newtype CallbackId = CallbackId { unCallbackId :: Int64 }
   deriving newtype (Show, Num, Binary, Ord, Eq)
-
-newtype DomBuilder = DomBuilder { unDomBuilder :: VarId }
-  deriving newtype (Show, Binary)
-
-newtype Node = Node { unNode :: Expr }
-  deriving newtype (Show, Binary)
-
--- TODO: Make a separate module with reexported functions from
--- Data.ByteString
-newtype Utf8 = Utf8 { unUtf8 :: ByteString }
-  deriving newtype (Show, Binary, Ord, Eq, Semigroup, Monoid)
-
-instance IsString Utf8 where
-  fromString = Utf8 . Text.encodeUtf8 . fromString
-  {-# INLINE fromString #-}
