@@ -33,7 +33,7 @@ data TodoListAction a where
   DeleteItemAction :: TodoListConfig -> Int -> TodoListAction ()
   ClearCompletedAction :: TodoListConfig -> TodoListAction ()
 
-eval :: TodoListAction a -> WA a
+eval :: TodoListAction a -> JSM a
 eval = \case
   InitAction -> do
     items <- fromMaybe [] <$> readLocalStorage "todo-items"

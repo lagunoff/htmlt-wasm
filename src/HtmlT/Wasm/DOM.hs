@@ -14,11 +14,11 @@ import Data.Proxy
 import "this" HtmlT.Wasm.Base
 import "this" HtmlT.Wasm.Marshal
 import "this" HtmlT.Wasm.Protocol
-import "this" HtmlT.Wasm.Types
+import "this" HtmlT.Wasm.JSM
 import "this" HtmlT.Wasm.Html
 
 
-consoleLog :: Expr -> WA ()
+consoleLog :: Expr -> JSM ()
 consoleLog e = queueExp (Call (Id "console") "log" [e])
 
 on :: forall eventName. IsEventName eventName => EventListener eventName -> Html ()
@@ -33,40 +33,40 @@ on k = do
 
 class KnownSymbol eventName => IsEventName eventName where
   type EventListener eventName :: Type
-  mkCallback :: EventListener eventName -> JValue -> WA ()
+  mkCallback :: EventListener eventName -> JValue -> JSM ()
   mkEventListener :: CallbackId -> Expr
 
 instance IsEventName "click" where
-  type EventListener "click" = WA ()
+  type EventListener "click" = JSM ()
   mkCallback k _j = k
   mkEventListener callbackId = Lam (ExecCallback callbackId (Arg 0 0))
 
 instance IsEventName "dblclick" where
-  type EventListener "dblclick" = WA ()
+  type EventListener "dblclick" = JSM ()
   mkCallback k _j = k
   mkEventListener callbackId = Lam (ExecCallback callbackId (Arg 0 0))
 
 instance IsEventName "input" where
-  type EventListener "input" = Utf8 -> WA ()
+  type EventListener "input" = Utf8 -> JSM ()
   mkCallback k j = forM_ (fromJSVal j) k
   mkEventListener callbackId = Lam (ExecCallback callbackId (Arg 0 0 `Dot` "target" `Dot` "value"))
 
 instance IsEventName "blur" where
-  type EventListener "blur" = Utf8 -> WA ()
+  type EventListener "blur" = Utf8 -> JSM ()
   mkCallback k j = forM_ (fromJSVal j) k
   mkEventListener callbackId = Lam (ExecCallback callbackId (Arg 0 0 `Dot` "target" `Dot` "value"))
 
 instance IsEventName "keydown" where
-  type EventListener "keydown" = Int64 -> WA ()
+  type EventListener "keydown" = Int64 -> JSM ()
   mkCallback k j = forM_ (fromJSVal j) k
   mkEventListener callbackId = Lam (ExecCallback callbackId (Arg 0 0 `Dot` "keyCode"))
 
 instance IsEventName "checkbox/change" where
-  type EventListener "checkbox/change" = Bool -> WA ()
+  type EventListener "checkbox/change" = Bool -> JSM ()
   mkCallback k j = forM_ (fromJSVal j) k
   mkEventListener callbackId = Lam (ExecCallback callbackId (Arg 0 0 `Dot` "target" `Dot` "checked"))
 
 instance IsEventName "select/change" where
-  type EventListener "select/change" = Utf8 -> WA ()
+  type EventListener "select/change" = Utf8 -> JSM ()
   mkCallback k j = forM_ (fromJSVal j) k
   mkEventListener callbackId = Lam (ExecCallback callbackId (Arg 0 0 `Dot` "target" `Dot` "value"))

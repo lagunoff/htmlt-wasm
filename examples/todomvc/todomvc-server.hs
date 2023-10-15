@@ -7,7 +7,7 @@ import "this" TodoList qualified as TodoList
 main :: IO ()
 main = runDebugDefault 8081 wasmMain
 
-wasmMain :: WA ()
+wasmMain :: JSM ()
 wasmMain = attachToBody do
   el "style" $ text TodoList.styles
   todoListStateRef <- lift $ TodoList.eval TodoList.InitAction

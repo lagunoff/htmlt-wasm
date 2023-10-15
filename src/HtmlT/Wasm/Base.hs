@@ -10,11 +10,11 @@ import GHC.Exts
 import GHC.Generics
 import Unsafe.Coerce
 
-import "this" HtmlT.Wasm.Types
 import "this" HtmlT.Wasm.Event
+import "this" HtmlT.Wasm.JSM
 import "this" HtmlT.Wasm.Protocol
 
-newVar :: WA VarId
+newVar :: JSM VarId
 newVar = reactive \e s0 ->
   let
     (newQueueId, s1) = nextQueueId s0
@@ -24,12 +24,12 @@ newVar = reactive \e s0 ->
   in
     (newVarId, s2 {var_storage})
 
-freeVar :: VarId -> WA ()
+freeVar :: VarId -> JSM ()
 freeVar varId = do
   modify \s -> s { var_storage = Set.delete varId s.var_storage}
   queueExp $ FreeVar varId
 
-newCallbackEvent :: (JValue -> WA ()) -> WA CallbackId
+newCallbackEvent :: (JValue -> JSM ()) -> JSM CallbackId
 newCallbackEvent k = reactive \e s0 ->
   let
     (queueId, s1) = nextQueueId s0
@@ -37,14 +37,14 @@ newCallbackEvent k = reactive \e s0 ->
   in
     (CallbackId (unQueueId queueId), s2)
 
-evalExp :: Expr -> WA JValue
-evalExp e = WA \_ s -> return (s, Cmd e)
+evalExp :: Expr -> JSM JValue
+evalExp e = JSM \_ s -> return (s, Cmd e)
 
-queueExp :: Expr -> WA ()
+queueExp :: Expr -> JSM ()
 queueExp e = modify \s ->
   s {evaluation_queue = e : s.evaluation_queue}
 
-queueIfAlive :: VarId -> Expr -> WA ()
+queueIfAlive :: VarId -> Expr -> JSM ()
 queueIfAlive varId e = modify \s ->
   let
     evaluation_queue =
@@ -54,19 +54,19 @@ queueIfAlive varId e = modify \s ->
     s {evaluation_queue}
 
 data WasmInstance = WasmInstance
-  { continuations_ref :: IORef [JValue -> WA Any]
-  , wasm_state_ref :: IORef WAState
+  { continuations_ref :: IORef [JValue -> JSM Any]
+  , wasm_state_ref :: IORef JSMState
   } deriving (Generic)
 
-runUntillInterruption :: WasmInstance -> WAEnv -> WA a -> IO (Either Expr a)
+runUntillInterruption :: WasmInstance -> JSMEnv -> JSM a -> IO (Either Expr a)
 runUntillInterruption opt e wasm = do
   s0 <- readIORef opt.wasm_state_ref
-  (s1, result) <- unWA wasm e s0 `catch` \(e :: SomeException) ->
+  (s1, result) <- unJSM wasm e s0 `catch` \(e :: SomeException) ->
     -- UncaughtException command never returns a value from JS side,
     -- therefore we can coerce the result to any type
     pure (s0, coerceResult (Cmd (UncaughtException (Utf8 (Char8.pack (show e))))))
   let
-    g :: forall a. WAResult a -> IO (Either Expr a)
+    g :: forall a. JSMResult a -> IO (Either Expr a)
     g r = case r of
       Pure a -> return (Right a)
       Cmd cmd -> return (Left cmd)
@@ -86,14 +86,14 @@ runUntillInterruption opt e wasm = do
         modifyIORef' opt.continuations_ref (cont:)
         return $ Left $ RevSeq s1.evaluation_queue
   where
-    coerceResult :: forall a b. WAResult a -> WAResult b
+    coerceResult :: forall a b. JSMResult a -> JSMResult b
     coerceResult = unsafeCoerce
 
-handleCommand :: WasmInstance -> WA () -> DownCmd -> IO UpCmd
+handleCommand :: WasmInstance -> JSM () -> DownCmd -> IO UpCmd
 handleCommand opt wasmMain = \case
   Start -> do
     writeIORef opt.continuations_ref []
-    writeIORef opt.wasm_state_ref WAState
+    writeIORef opt.wasm_state_ref JSMState
       { var_storage = Set.fromList [0, 1]
       , evaluation_queue = []
       , subscriptions = Map.empty
@@ -126,4 +126,4 @@ handleCommand opt wasmMain = \case
       Left exp -> return $ Eval exp
       Right _ -> return Exit
   where
-    wasmEnv = WAEnv (-1)
+    wasmEnv = JSMEnv (-1)

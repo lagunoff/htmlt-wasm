@@ -15,7 +15,7 @@ hs_free = Alloc.free
 
 main = return ()
 
-wasmMain :: WA ()
+wasmMain :: JSM ()
 wasmMain = attachToBody do
   el "style" $ text TodoList.styles
   todoListStateRef <- lift $ TodoList.eval TodoList.InitAction

@@ -136,11 +136,11 @@ library
     HtmlT.Wasm.Element
     HtmlT.Wasm.Event
     HtmlT.Wasm.Html
+    HtmlT.Wasm.JSM
     HtmlT.Wasm.Main
     HtmlT.Wasm.Marshal
     HtmlT.Wasm.Property
     HtmlT.Wasm.Protocol
-    HtmlT.Wasm.Types
   build-depends:
     base,
     binary,

@@ -23,7 +23,7 @@ import Network.WebSockets
 import System.IO
 
 import "this" HtmlT.Wasm.Base
-import "this" HtmlT.Wasm.Types
+import "this" HtmlT.Wasm.JSM
 import "this" HtmlT.Wasm.Protocol
 
 data DevServerInstance = DevServerInstance
@@ -44,13 +44,13 @@ data ConnectionInfo = ConnectionInfo
 data DebugConfig a = DebugConfig
   { open_resource :: IO a
   , close_resource :: a -> IO ()
-  , init_app :: a -> IO (WA (), Application)
+  , init_app :: a -> IO (JSM (), Application)
   }
 
 data RunningApp = forall a. Typeable a => RunningApp
   { resource :: a
   , debug_config :: DebugConfig a
-  , client_app :: WA ()
+  , client_app :: JSM ()
   , server_app :: Application
   }
 
@@ -87,11 +87,11 @@ runDebug settings debugCfg = do
         Right () -> return ()
         Left (e::IOException)
           | ioe_type e == ResourceBusy -> do
-            hPutStrLn stderr $ "Already in use, trying next…"
+            hPutStrLn stderr $ "Already in use, trying next port…"
             tryPort (setPort (getPort settings + 1) settings) application
           | otherwise -> throwIO e
 
-runDebugDefault :: Warp.Port -> WA () -> IO ()
+runDebugDefault :: Warp.Port -> JSM () -> IO ()
 runDebugDefault port wasmApp =
   runDebug (Warp.setPort port Warp.defaultSettings) DebugConfig
     { open_resource = pure ()

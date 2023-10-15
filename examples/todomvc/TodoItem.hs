@@ -8,7 +8,7 @@ import HtmlT.Wasm
 data TodoItemConfig = TodoItemConfig
   { state_ref :: DynRef TodoItemState
   , is_hidden_dyn :: Dynamic Bool
-  , ask_delete_item :: WA ()
+  , ask_delete_item :: JSM ()
   }
 
 data TodoItemState = TodoItemState
@@ -25,7 +25,7 @@ data TodoItemAction a where
   CheckedAction :: TodoItemConfig -> Bool -> TodoItemAction ()
   KeydownAction :: TodoItemConfig -> Int64 -> TodoItemAction ()
 
-eval :: TodoItemAction a -> WA a
+eval :: TodoItemAction a -> JSM a
 eval = \case
   CancelAction cfg ->
     modifyRef cfg.state_ref \s -> s{editing=Nothing}

@@ -5,16 +5,17 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Writer
+import Control.Monad.Fix
 import Data.ByteString.Char8 qualified as Char8
 import Data.IORef
 import Data.String
 import GHC.Generics
 
-import "this" HtmlT.Wasm.Types
 import "this" HtmlT.Wasm.Base
-import "this" HtmlT.Wasm.Protocol
-import "this" HtmlT.Wasm.Marshal
 import "this" HtmlT.Wasm.Event
+import "this" HtmlT.Wasm.JSM
+import "this" HtmlT.Wasm.Marshal
+import "this" HtmlT.Wasm.Protocol
 
 newtype HtmlT m a = HtmlT {unHtmlT :: StateT HtmlState m a}
 
@@ -26,6 +27,7 @@ deriving newtype instance MonadReader r m => MonadReader r (HtmlT m)
 deriving newtype instance MonadWriter w m => MonadWriter w (HtmlT m)
 deriving newtype instance MonadIO m => MonadIO (HtmlT m)
 deriving newtype instance MonadTrans HtmlT
+deriving newtype instance MonadFix m => MonadFix (HtmlT m)
 
 instance a ~ () => IsString (Html a) where
   fromString = text . Utf8 . Char8.pack
@@ -33,7 +35,7 @@ instance a ~ () => IsString (Html a) where
 execHtmlT :: Monad m => HtmlState -> HtmlT m a -> m (a, HtmlState)
 execHtmlT s = flip runStateT s . unHtmlT
 
-type Html = HtmlT WA
+type Html = HtmlT JSM
 
 data HtmlState = HtmlState
   { rev_queue :: [Expr]
@@ -135,7 +137,7 @@ simpleList listDyn h = do
       -- New list is longer, append new elements
       ([], x:xs) -> do
         newElem <- newElemEnv x
-        let wasmEnv = WAEnv newElem.ee_namespace
+        let wasmEnv = JSMEnv newElem.ee_namespace
         withBuilder (Var newElem.ee_boundary) $ monohoist (local (const wasmEnv)) $ h idx newElem.ee_dyn_ref
         fmap (newElem:) $ setup (idx + 1) xs []
       -- New list is shorter, delete the elements that no longer
@@ -166,7 +168,7 @@ simpleList listDyn h = do
   withBuilder (Var boundary) $ updateList initialVal
   lift $ subscribe (updates listDyn) $ attachHtml (Var boundary) . updateList
 
-monohoist :: forall a. (forall a. WA a -> WA a) -> Html a -> Html a
+monohoist :: forall a. (forall a. JSM a -> JSM a) -> Html a -> Html a
 monohoist f (HtmlT (StateT g)) = HtmlT $ StateT \s -> f (g s)
 
 insertBoundary :: Html VarId
@@ -175,13 +177,13 @@ insertBoundary = do
   modify \s -> s {rev_queue = AssignVar boundary (InsertBoundary (Arg 0 0)) : s.rev_queue}
   return boundary
 
-clearBoundary :: VarId -> WA ()
+clearBoundary :: VarId -> JSM ()
 clearBoundary boundary = queueExp (ClearBoundary (Var boundary) False)
 
-destroyBoundary :: VarId -> WA ()
+destroyBoundary :: VarId -> JSM ()
 destroyBoundary boundary = queueExp (ClearBoundary (Var boundary) True)
 
-attachHtml :: Expr -> Html a -> WA a
+attachHtml :: Expr -> Html a -> JSM a
 attachHtml builder html = do
   (result, newState) <- execHtmlT (HtmlState [] Nothing) html
   let newExpr = WithBuilder builder (Lam (RevSeq newState.rev_queue))
@@ -198,5 +200,5 @@ withBuilder builder content = do
   modify \s -> s {rev_queue = mkExpr s.rev_queue : prevQueue}
   return result
 
-attachToBody :: Html a -> WA a
+attachToBody :: Html a -> JSM a
 attachToBody = attachHtml (Id "document" `Dot` "body")

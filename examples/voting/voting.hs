@@ -36,7 +36,7 @@ candidates =
   , VotingCandidate "Haskell" 423
   ]
 
-wasmMain :: WA ()
+wasmMain :: JSM ()
 wasmMain = attachToBody do
   link_ [rel_ "stylesheet", href_ "./awsm.css"] (pure ())
   votingListRef <- lift $ newRef $ normalize candidates

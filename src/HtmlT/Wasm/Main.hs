@@ -12,10 +12,11 @@ import Foreign.Ptr
 import Foreign.Storable
 import System.IO.Unsafe
 
-import "this" HtmlT.Wasm.Types
 import "this" HtmlT.Wasm.Base
+import "this" HtmlT.Wasm.JSM
 
-wasmApp :: WA () -> Ptr Word8 -> IO (Ptr Word8)
+
+wasmApp :: JSM () -> Ptr Word8 -> IO (Ptr Word8)
 wasmApp wasmMain p = do
   downCmd <- Binary.decode . BSL.fromStrict <$> loadByteString p
   upCmd <- handleCommand wasmInstance wasmMain downCmd
