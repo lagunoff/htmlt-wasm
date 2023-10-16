@@ -1,0 +1,3 @@
+[submodule "ghc-wasm-meta"]
+	path = ghc-wasm-meta
+	url = https://gitlab.haskell.org/ghc/ghc-wasm-meta.git
