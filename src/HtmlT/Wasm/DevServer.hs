@@ -45,6 +45,7 @@ data DebugConfig a = DebugConfig
   { open_resource :: IO a
   , close_resource :: a -> IO ()
   , init_app :: a -> IO (JSM (), Application)
+  , html_template :: BSL.ByteString -> BSL.ByteString
   }
 
 data RunningApp = forall a. Typeable a => RunningApp
@@ -96,13 +97,9 @@ runDebugDefault port wasmApp =
   runDebug (Warp.setPort port Warp.defaultSettings) DebugConfig
     { open_resource = pure ()
     , close_resource = const (pure ())
-    , init_app = const $ pure (wasmApp, notFound)
+    , init_app = const $ pure (wasmApp, defaultFallbackApp)
+    , html_template = defaultHtmlTemplate
     }
-
-devserverApplication :: DevServerInstance -> Application
-devserverApplication opt =
-  devserverMiddleware opt $ const
-    ($ responseLBS status404 [] "Not found")
 
 devserverMiddleware :: DevServerInstance -> Middleware
 devserverMiddleware opts next req resp =
@@ -113,29 +110,40 @@ devserverMiddleware opts next req resp =
     _ -> next req resp
   where
     devserverApp =
-      websocketsOr defaultConnectionOptions (devserverWebsocket opts) notFound
+      websocketsOr defaultConnectionOptions (devserverWebsocket opts) defaultFallbackApp
     indexHtmlApp req resp = do
       let origin = inferOrigin req
+      RunningApp{debug_config} <- readIORef opts.app_state_ref
       resp $ responseLBS status200
-        [(hContentType, "text/html; charset=utf-8")] $ indexHtml origin
-    indexHtml (BSL.fromStrict -> origin) = "\
-      \<html>\n\
-      \ <body>\n\
-      \  <script>\n\
-      \    " <> BSL.fromStrict indexBundleJs <> "\n\
-      \    startDevClient(\"" <> origin <> "/dev-server.sock\");\n\
-      \  </script>\n\
-      \ </body>\n\
-      \</html>\n\
-      \"
+        [(hContentType, "text/html; charset=utf-8")] $
+        debug_config.html_template (BSL.fromStrict origin)
     inferOrigin req = WAI.requestHeaders req
       & List.lookup "Host"
       & fromMaybe "localhost"
       & ((if WAI.isSecure req then "wss://" else "ws://") <>)
 
-notFound :: Application
-notFound _ resp =
-  resp $ responseLBS status404 [] "Not found"
+defaultHtmlTemplate :: BSL.ByteString -> BSL.ByteString
+defaultHtmlTemplate origin =
+  "<html>\n\
+  \ <body>\n\
+  \  <script>\n\
+  \    " <> BSL.fromStrict indexBundleJs <> "\n\
+  \    startDevClient(\"" <> origin <> "/dev-server.sock\");\n\
+  \  </script>\n\
+  \ </body>\n\
+  \</html>\n\
+  \"
+
+defaultFallbackApp :: Application
+defaultFallbackApp _ resp =
+  resp $ responseLBS status404
+    [(hContentType, "text/html; charset=utf-8")]
+    "<html>\n\
+    \ <body>\n\
+    \   <h1>Not Found</h1>\n\
+    \ </body>\n\
+    \</html>\n\
+    \"
 
 devserverWebsocket :: DevServerInstance -> ServerApp
 devserverWebsocket opt p =
