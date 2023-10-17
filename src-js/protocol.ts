@@ -365,7 +365,7 @@ export type Expr =
 export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.Null]: b.record({}),
   [ExprTag.Boolean]: b.record({ 0: b.int8 }),
-  [ExprTag.Num]: b.record({ coefficient: b.int64, base10Exponent: b.int64 }),
+  [ExprTag.Num]: b.record({ coefficient: b.int64, base10Exponent: b.int8 }),
   [ExprTag.Str]: b.record({ 0: b.string }),
   [ExprTag.Arr]: b.record({ 0: b.array(self) }),
   [ExprTag.Obj]: b.record({ 0: b.array(b.tuple(b.string, self)) }),

@@ -10,6 +10,8 @@ import "this" HtmlT.Wasm.Protocol.Utf8 (Utf8(..))
 
 class ToJSVal a where toJSVal :: a -> JValue
 
+instance ToJSVal JValue where toJSVal = Prelude.id
+
 instance ToJSVal Bool where toJSVal = JBool
 
 instance ToJSVal Int64 where toJSVal i = JNum (JNumber i 0)
@@ -24,9 +26,13 @@ instance ToJSVal Utf8 where toJSVal = JStr
 instance ToJSVal a => ToJSVal [a] where toJSVal = JArr . fmap toJSVal
 
 instance ToJSVal a => ToJSVal (Maybe a) where toJSVal = maybe JNull toJSVal
+
+instance (ToJSVal a, ToJSVal b) => ToJSVal (a, b) where toJSVal (a, b) = toJSVal [toJSVal a, toJSVal b]
 --------------------------------------------------------------------------------
 
 class FromJSVal a where fromJSVal :: JValue -> Maybe a
+
+instance FromJSVal JValue where fromJSVal = pure
 
 instance FromJSVal Bool where
   fromJSVal = \case JBool a -> Just a; _ -> Nothing
@@ -57,3 +63,8 @@ instance FromJSVal a => FromJSVal [a] where
 
 instance FromJSVal a => FromJSVal (Maybe a) where
   fromJSVal = fmap Just . fromJSVal @a
+
+instance (FromJSVal a, FromJSVal b) => FromJSVal (a, b) where
+  fromJSVal j = fromJSVal j >>= \case
+    Just [a, b] -> (,) <$> fromJSVal a <*> fromJSVal b
+    _ -> Nothing
