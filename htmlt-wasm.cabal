@@ -56,16 +56,16 @@ common common-config
 
 executable voting
   import: common-config
-  if !arch(wasm32)
-    buildable: False
-  else
+  if arch(wasm32)
     ghc-options:
       -no-hs-main -optl-mexec-model=reactor
       -optl-Wl,--export=init_greadymem,--export=init_debug,--export=app,--export=hs_malloc,--export=hs_free
     c-sources: cbits/init_greadymem.c
     include-dirs: cbits
+    main-is: reactor.hs
+  else
+    main-is: devserver.hs
   hs-source-dirs: examples/voting
-  main-is: voting.hs
 
   build-depends:
     base,

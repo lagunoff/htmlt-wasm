@@ -1,13 +1,10 @@
-import JsmMain where
+module JsmMain where
 
 import Control.Monad
 import Control.Monad.Reader
 import Data.ByteString.Char8 qualified as Char8
 import Data.List qualified as List
 import Data.Ord
-import Data.Word
-import Foreign.Marshal.Alloc qualified as Alloc
-import Foreign.Ptr
 import HtmlT.Wasm
 
 data VotingCandidate = VotingCandidate

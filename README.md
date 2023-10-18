@@ -28,7 +28,32 @@ The choice of binary commands to interface with JavaScript has following drawbac
 
 Unfortunately I encountered a bug in WebAssembly Backend — reactor module crashes after several GC sweeps. To counteract that I tweak RTS options (greadymem examples) that prolong application lifetime in exchange for high memory consumption. Hopefully the bug will be addressed in near future
 
-# 💡 Examples
+# 🛠️How to build examples
+
+First thing you'll need is [nix](https://nixos.org/download.html) package manager. The last thing you need — is to have any server for hosting static files for WebAssembly examples
+
+```sh
+# Clone this repository with submodules
+git clone --recurse-submodules https://github.com/lagunoff/htmlt-wasm.git
+cd htmlt-wasm
+```
+### Build For WebAssemly Backend
+```sh
+# Build examples with cabal inside ghc-meta-wasm shell
+nix shell ./ghc-wasm-meta -c wasm32-wasi-cabal build todomvc voting --offline 
+# Now enter dist-newstyle and run a static server of your choice
+cd dist-newstyle
+php -S 0.0.0.0:8001
+# Now you can open http://localhost:8001/todomvc.html in your browser
+```
+### Run hot-reloading server with Native GHC
+```sh
+# Start dev-server for todomvc example
+nix-shell --run 'ghcid -c "cabal repl todomvc --offline" --test main'
+# Now you can open http://localhost:8002/ in your browser
+```
+
+# 💡 Examples built with WebAssembly
 
 <table>
   <tbody>
@@ -46,10 +71,10 @@ Unfortunately I encountered a bug in WebAssembly Backend — reactor module cras
       <td>TodoMVC</td>
       <td><a href=./examples/todomvc/todomvc.hs target=_blank>source</a></td>
       <td>
-        <a href=https://lagunoff.github.io/htmt-wasm/examples/todomvc.html target=_blank>open</a>
+        <a href=https://lagunoff.github.io/htmlt-wasm/examples/todomvc.html target=_blank>open</a>
       </td>
       <td>
-        <a href=https://lagunoff.github.io/htmt-wasm/examples/todomvc-greadymem.html target=_blank>greadymem hack</a>
+        <a href=https://lagunoff.github.io/htmlt-wasm/examples/todomvc-greadymem.html target=_blank>greadymem hack</a>
       </td>
     </tr>
   </tbody>

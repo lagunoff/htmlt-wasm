@@ -485,10 +485,10 @@ namespace domBuilder {
     let nestedCounter = 0;
     for (;;){
       if (!end.previousSibling ||
-        (nestedCounter == 0 && isBoundaryOpening(end.previousSibling))
+        (nestedCounter == 0 && isOpeningBoundary(end.previousSibling))
          ) break;
-      if (isBoundaryClosing(end.previousSibling)) nestedCounter++;
-      else if (isBoundaryOpening(end.previousSibling)) nestedCounter--;
+      if (isClosingBoundary(end.previousSibling)) nestedCounter++;
+      else if (isOpeningBoundary(end.previousSibling)) nestedCounter--;
       end.previousSibling!.parentNode!.removeChild(end.previousSibling!);
     }
     if (detach) {
@@ -504,14 +504,14 @@ namespace domBuilder {
     return builder;
   }
 
-  function isBoundaryOpening(node: Node): boolean {
+  function isOpeningBoundary(node: Node): boolean {
     if (node instanceof Comment && node.textContent == 'ContentBoundary {{') {
       return true;
     }
     return false;
   }
 
-  function isBoundaryClosing(node: Node): boolean {
+  function isClosingBoundary(node: Node): boolean {
     if (node instanceof Comment && node.textContent == '}}') {
       return true;
     }

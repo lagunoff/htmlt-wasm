@@ -12,7 +12,7 @@ STATIC_INLINE void hs_init_with_rtsopts_(char *argv[]) {
 // setting up RTS options here to make the app live longer at the cost
 // of high memory consumption
 void init_greadymem() {
-  char *argv[] = {"uknown.wasm", "+RTS", "--nonmoving-gc", "-H2G", "-DS", "-RTS", NULL};
+  char *argv[] = {"uknown.wasm", "+RTS", "--nonmoving-gc", "-A1G", "-DS", "-RTS", NULL};
   hs_init_with_rtsopts_(argv);
 }
 
