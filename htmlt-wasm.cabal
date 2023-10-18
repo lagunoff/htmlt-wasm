@@ -79,16 +79,16 @@ executable voting
 
 executable todomvc
   import: common-config
-  if !arch(wasm32)
-    buildable: False
-  else
+  if arch(wasm32)
     ghc-options:
       -no-hs-main -optl-mexec-model=reactor -dlint -debug
       -optl-Wl,--export=init_greadymem,--export=init_debug,--export=app,--export=hs_malloc,--export=hs_free
     c-sources: cbits/init_greadymem.c
     include-dirs: cbits
+    main-is: reactor.hs
+  else
+    main-is: devserver.hs
   hs-source-dirs: examples/todomvc
-  main-is: todomvc.hs
   other-modules:
     Utils
     TodoList
@@ -102,33 +102,6 @@ executable todomvc
     htmlt-wasm,
     mtl,
     text,
-
-executable todomvc-server
-  import: common-config
-  if arch(wasm32)
-    buildable: False
-  hs-source-dirs: examples/todomvc
-  main-is: todomvc-server.hs
-  other-modules:
-    Utils
-    TodoList
-    TodoItem
-  build-depends:
-    base,
-    binary,
-    bytestring,
-    containers,
-    exceptions,
-    htmlt-wasm,
-    mtl,
-    text,
-    wai,
-    wai-websockets,
-    warp,
-    websockets,
-    wuss,
-    wai-app-static,
-    http-types,
 
 library
   import: common-config

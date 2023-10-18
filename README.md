@@ -9,7 +9,7 @@ Here I try to migrate my other UI library [htmlt](https://github.com/lagunoff/ht
   - Faster compilation times
   - More compact executables
   - Fast hot-reloading capabilities (when you see the chages in browser in less than a second after source file is saved)
-  - Faster runtime speeds (it seems to be faster bit I wasn't really counting on that, in interactive applications WebAssembly has perfomance trade-offs)
+  - Faster runtime speeds (it does seem to be faster, but I wasn't really counting on that, WebAssembly has perfomance trade-offs for interactive applications)
   - All that with fewer dependencies as possible (compiling to WebAssembly only requires base packages, while the Native GHC will need a few WAI packages to run a dev server)
 
 # 🔄 How It Interacts With JavaScript
@@ -33,7 +33,7 @@ Unfortunately I encountered a bug in WebAssembly Backend — reactor module cras
 <table>
   <tbody>
     <tr>
-      <td>Simple Voting app example</td>
+      <td>Simple Voting</td>
       <td><a href=./examples/voting/voting.hs target=_blank>source</a></td>
       <td>
         <a href=https://lagunoff.github.io/htmt-wasm/examples/voting.html target=_blank>open</a>

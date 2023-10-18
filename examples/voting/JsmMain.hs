@@ -1,3 +1,5 @@
+import JsmMain where
+
 import Control.Monad
 import Control.Monad.Reader
 import Data.ByteString.Char8 qualified as Char8
@@ -7,15 +9,6 @@ import Data.Word
 import Foreign.Marshal.Alloc qualified as Alloc
 import Foreign.Ptr
 import HtmlT.Wasm
-
-foreign export ccall app :: Ptr Word8 -> IO (Ptr Word8)
-app = wasmApp wasmMain
-foreign export ccall hs_malloc :: Int -> IO (Ptr a)
-hs_malloc = Alloc.callocBytes
-foreign export ccall hs_free :: Ptr a -> IO ()
-hs_free = Alloc.free
-
-main = return ()
 
 data VotingCandidate = VotingCandidate
   { language :: Utf8
@@ -36,8 +29,8 @@ candidates =
   , VotingCandidate "Haskell" 423
   ]
 
-wasmMain :: JSM ()
-wasmMain = attachToBody do
+jsmMain :: JSM ()
+jsmMain = attachToBody do
   link_ [rel_ "stylesheet", href_ "./awsm.css"] (pure ())
   votingListRef <- lift $ newRef $ normalize candidates
   main_ do
