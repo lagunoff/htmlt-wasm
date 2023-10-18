@@ -6,7 +6,8 @@ import { UpCmd, DownCmd, DownCmdTag, UpCommandTag, Bindings, List } from './prot
 export type HaskellPointer = number;
 
 export type HaskellExports = {
-  hs_init: (argc: number, argv: HaskellPointer) => void;
+  init_greadymem: () => void;
+  init_debug: () => void;
   hs_malloc: (size: number) => HaskellPointer;
   hs_free: (ptr: HaskellPointer) => void;
   app: (input: HaskellPointer) => HaskellPointer;
@@ -73,11 +74,17 @@ function interactWithHaskell(inst: HaskellIstance, down: DownCmd): UpCmd {
   return p.upCmd.decode(upBuf);
 }
 
-export async function startReactor(wasmUri: string): Promise<void> {
+export type StartReactorOptions = {
+  greedyMem?: boolean;
+};
+
+export async function startReactor(wasmUri: string, opt: StartReactorOptions = {}): Promise<void> {
+  const stdoutLogger = consoleLineBuffering(console.log);
+  const stderrLogger = consoleLineBuffering(console.log);
   const wasi = new WASI([], [], [
     new OpenFile(new File([])), // stdin
-    new OpenFile(new File([])), // stdout
-    new OpenFile(new File([])), // stderr
+    new OpenFileDebug(new File([]), stdoutLogger), // stdout
+    new OpenFileDebug(new File([]), stderrLogger), // stderr
   ]);
 
   const wasm = await WebAssembly.compileStreaming(fetch(wasmUri));
@@ -86,7 +93,53 @@ export async function startReactor(wasmUri: string): Promise<void> {
   }) as HaskellIstance;
   wasi.inst = inst;
 
-  inst.exports.hs_init(0, 0);
+  if (opt.greedyMem) {
+    inst.exports.init_greadymem();
+  } else {
+    inst.exports.init_debug();
+  }
 
   haskellApp(inst);
 };
+
+export class OpenFileDebug extends OpenFile {
+  public printDebug: (s: Uint8Array) => void;
+
+  constructor(file: File, printDebug: (s: Uint8Array) => void) {
+    super(file);
+    this.printDebug = printDebug;
+  }
+
+  fd_write(view8: Uint8Array, iovs: Array<any /*wasi.Ciovec*/>): {
+    ret: number;
+    nwritten: number;
+  } {
+    const result = super.fd_write(view8, iovs);
+    iovs.forEach(iov => {
+      this.printDebug(view8.subarray(iovs[0].buf, iov.buf + iov.buf_len));
+    });
+    return result;
+  }
+}
+
+// Split given chunks of memory into lines and pass decoded strings
+// into the given logger function, buffer unfinished lines if neccessary
+function consoleLineBuffering(logger: (s: string) => void): (u8: Uint8Array) => void {
+  let buffer: Uint8Array[] = [];
+  return (u8: Uint8Array) => {
+    const go = (bytes: Uint8Array) => {
+      if (bytes.byteLength == 0) return;
+      const newLineIndex = bytes.findIndex(b => b == '\n'.charCodeAt(0));
+      if (newLineIndex >= 0) {
+        const olderBits = buffer.map(u8s => new TextDecoder('utf8').decode(u8s)).join('');
+        buffer = [];
+        const lastBits = new TextDecoder('utf8').decode(bytes.subarray(0, newLineIndex));
+        logger(olderBits + lastBits);
+        go(bytes.subarray(newLineIndex + 1));
+      } else {
+        buffer.push(bytes.slice());
+      }
+    };
+    go(u8);
+  };
+}

@@ -61,7 +61,9 @@ executable voting
   else
     ghc-options:
       -no-hs-main -optl-mexec-model=reactor
-      -optl-Wl,--export=hs_init,--export=app,--export=hs_malloc,--export=hs_free
+      -optl-Wl,--export=init_greadymem,--export=init_debug,--export=app,--export=hs_malloc,--export=hs_free
+    c-sources: cbits/init_greadymem.c
+    include-dirs: cbits
   hs-source-dirs: examples/voting
   main-is: voting.hs
 
@@ -81,8 +83,10 @@ executable todomvc
     buildable: False
   else
     ghc-options:
-      -no-hs-main -optl-mexec-model=reactor
-      -optl-Wl,--export=hs_init,--export=app,--export=hs_malloc,--export=hs_free
+      -no-hs-main -optl-mexec-model=reactor -dlint -debug
+      -optl-Wl,--export=init_greadymem,--export=init_debug,--export=app,--export=hs_malloc,--export=hs_free
+    c-sources: cbits/init_greadymem.c
+    include-dirs: cbits
   hs-source-dirs: examples/todomvc
   main-is: todomvc.hs
   other-modules:
