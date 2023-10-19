@@ -27,7 +27,7 @@ The choice of binary commands to interface with JavaScript has following drawbac
 
 # 🌟 Benefits compare to Reflex+GHCJS+JSaddle
 
-The key benefit of htmlt-wasm is that is has much fewer dependencies and much fewer lines in actual implementation, providing similar value. Also the code is much more understandable. This is my personal opinion of course and other people will have different perspectives, I admit it's far from being ideal at the time of writing, but I'll try my best. Also if you use 'JSaddle' with 'GHCJS' you might noticed an annoying fact that you have to write two versions of FFI for 'GHCJS' and 'JSaddle' that can potentially diverge and can lead to production bugs. In contrast htmlt-wasm you don't have this distinction it works similar way to 'JSaddle' either throught websockets (on a devserver) or throught WASM shared memory (in production) using same protocol. This protocol also optimized to reduce round-trips and feels significatly faster compare to JSaddle in my experience.
+The key benefit of htmlt-wasm is that is has much fewer dependencies and much fewer lines in actual implementation, providing similar value. Also the code is much more understandable. This is my personal opinion of course and other people will have different perspectives, I admit it's far from being ideal at the time of writing, but I'll try my best. Also if you use 'JSaddle' with 'GHCJS' you might noticed an annoying fact that you have to write two versions of FFI for 'GHCJS' and 'JSaddle' that can potentially diverge and can lead to production bugs. In contrast htmlt-wasm you don't have this distinction it works similar way to 'JSaddle' either throught websockets (on a devserver) or throught WASM shared memory (in production) using the same protocol. This protocol also optimized to minimize round-trips resulting in faster hot-reloading experience compared to JSaddle.
 
 
 # 🐞 WebAssembly Backend Bug
@@ -58,6 +58,15 @@ php -S 0.0.0.0:8001
 nix-shell --run 'ghcid -c "cabal repl todomvc --offline" --test main'
 # Now you can open http://localhost:8002/ in your browser
 ```
+### Update JavaScript Runtime
+You'll need nodejs and yarn package manager
+```sh
+# Install dependencies
+yarn install
+# Update dist-newstyle/index.bundle.js
+yarn run webpack --mode production
+# Don't forget to update the runtime for DevServer in src/HtmlT/Wasm/DevServer.hs
+```
 
 # 💡 Examples built with WebAssembly
 
@@ -85,3 +94,10 @@ nix-shell --run 'ghcid -c "cabal repl todomvc --offline" --test main'
     </tr>
   </tbody>
 </table>
+
+# 💡 TODOs
+
+ - [ ] Gather data for the WebAssmebly Backend bug report, make an isolated counterexample
+ - [ ] Add Benchmarks
+ - [ ] Improve messaging protocol (make a version that is readable JSON and another compact and fast binary version)
+ - [ ] Review, cleanup the code and write documentation

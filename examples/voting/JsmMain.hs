@@ -139,7 +139,7 @@ styles = "\
   \  height: 38px;\n\
   \}\n\
   \.voting-results tr:nth-child(odd) {\n\
-  \  background: #fafafa;\n\
+  \  background: #f2f2f2;\n\
   \}\n\
   \.voting-results td:nth-child(1) {\n\
   \  text-align: right;\n\
