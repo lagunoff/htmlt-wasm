@@ -22,3 +22,7 @@ pack = Utf8 . Text.encodeUtf8 . Text.pack
 unpack :: Utf8 -> String
 unpack = Text.unpack . Text.decodeUtf8 . unUtf8
 {-# INLINE unpack #-}
+
+utf8Show :: Show a => a -> Utf8
+utf8Show = pack . show
+{-# INLINE utf8Show #-}

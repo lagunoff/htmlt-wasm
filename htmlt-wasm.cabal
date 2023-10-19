@@ -132,10 +132,11 @@ library
     exposed-modules:
       HtmlT.Wasm.DevServer
     build-depends:
-      wai,
-      wai-websockets,
-      websockets,
-      http-types,
       foreign-store,
+      http-types,
+      wai,
+      wai-app-static,
+      wai-websockets,
       warp,
+      websockets,
  

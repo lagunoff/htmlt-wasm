@@ -15,66 +15,54 @@ import Data.Map qualified as Map
 import Data.Maybe
 import Foreign.Store
 import GHC.IO.Exception
+import GHC.Generics
 import Network.HTTP.Types as H
 import Network.Wai as WAI
 import Network.Wai.Handler.Warp as Warp
 import Network.Wai.Handler.WebSockets
 import Network.WebSockets
+import Network.Wai.Application.Static
 import System.IO
 
 import "this" HtmlT.Wasm.Base
 import "this" HtmlT.Wasm.JSM
 import "this" HtmlT.Wasm.Protocol
 
-data DevServerInstance = DevServerInstance
-  { conn_state_ref :: IORef ConnectionState
-  , app_state_ref :: IORef RunningApp
-  }
 
-data ConnectionState = ConnectionState
-  { connections :: Map ConnectionId ConnectionInfo
-  , id_supply :: ConnectionId
-  }
-
-data ConnectionInfo = ConnectionInfo
-  { connection :: Connection
-  , options :: WasmInstance
-  }
-
-data DebugConfig a = DebugConfig
+data DevServerConfig a = DevServerConfig
   { open_resource :: IO a
   , close_resource :: a -> IO ()
   , init_app :: a -> IO (JSM (), Application)
   , html_template :: BSL.ByteString -> BSL.ByteString
+  , docroots :: [FilePath]
+  } deriving Generic
+
+defaultDevServerConfig :: JSM () -> DevServerConfig ()
+defaultDevServerConfig clientApp = DevServerConfig
+  { open_resource = pure ()
+  , close_resource = const (pure ())
+  , init_app = const $ pure (clientApp, defaultFallbackApp)
+  , html_template = defaultHtmlTemplate
+  , docroots = []
   }
 
-data RunningApp = forall a. Typeable a => RunningApp
-  { resource :: a
-  , debug_config :: DebugConfig a
-  , client_app :: JSM ()
-  , server_app :: Application
-  }
-
-newtype ConnectionId = ConnectionId {unConnectionId :: Int}
-  deriving newtype (Ord, Eq, Num, Enum)
-
-runDebug :: Typeable a => Warp.Settings -> DebugConfig a -> IO ()
-runDebug settings debugCfg = do
+runDebug :: Typeable a => Warp.Settings -> DevServerConfig a -> IO ()
+runDebug settings devCfg = do
   let storeId = 183
   hSetBuffering stderr LineBuffering
   lookupStore storeId >>= \case
     Nothing -> do
-      devInst <- newInstance debugCfg
+      devInst <- newInstance devCfg
       writeStore (Store storeId) devInst
       let
         useCurrentApp req resp = do
-          reloadState <- readIORef devInst.app_state_ref
-          reloadState.server_app req resp
+          RunningApp{devserver_config, server_app} <- readIORef devInst.app_state_ref
+          withStaticApp devserver_config.docroots server_app req resp
       void $ forkIO $ tryPort settings $
         devserverMiddleware devInst useCurrentApp
     Just store -> do
       oldInst <- readStore store
-      updateInstance debugCfg oldInst
+      updateInstance devCfg oldInst
       connState <- readIORef oldInst.conn_state_ref
       forM_ connState.connections \connInfo ->
         sendDataMessage connInfo.connection . Binary $ Binary.encode HotReload
@@ -91,15 +79,20 @@ runDebug settings debugCfg = do
             hPutStrLn stderr $ "Already in use, trying next port…"
             tryPort (setPort (getPort settings + 1) settings) application
           | otherwise -> throwIO e
+    withStaticApp :: [FilePath] -> Middleware
+    withStaticApp [] next = next
+    withStaticApp (docroot:docroots) next =
+      staticApp (defaultFileServerSettings docroot)
+        {ss404Handler = Just (withStaticApp docroots next)}
+
+runDebugPort :: Typeable a => Warp.Port -> DevServerConfig a -> IO ()
+runDebugPort port devCfg =
+  runDebug (Warp.setPort port Warp.defaultSettings) devCfg
 
 runDebugDefault :: Warp.Port -> JSM () -> IO ()
-runDebugDefault port wasmApp =
-  runDebug (Warp.setPort port Warp.defaultSettings) DebugConfig
-    { open_resource = pure ()
-    , close_resource = const (pure ())
-    , init_app = const $ pure (wasmApp, defaultFallbackApp)
-    , html_template = defaultHtmlTemplate
-    }
+runDebugDefault port clientApp = runDebug
+  (Warp.setPort port Warp.defaultSettings)
+  (defaultDevServerConfig clientApp)
 
 devserverMiddleware :: DevServerInstance -> Middleware
 devserverMiddleware opts next req resp =
@@ -110,13 +103,14 @@ devserverMiddleware opts next req resp =
     _ -> next req resp
   where
     devserverApp =
-      websocketsOr defaultConnectionOptions (devserverWebsocket opts) defaultFallbackApp
+      websocketsOr defaultConnectionOptions (devserverWebsocket opts)
+      defaultFallbackApp
     indexHtmlApp req resp = do
       let origin = inferOrigin req
-      RunningApp{debug_config} <- readIORef opts.app_state_ref
+      RunningApp{devserver_config} <- readIORef opts.app_state_ref
       resp $ responseLBS status200
         [(hContentType, "text/html; charset=utf-8")] $
-        debug_config.html_template (BSL.fromStrict origin)
+        devserver_config.html_template (BSL.fromStrict origin)
     inferOrigin req = WAI.requestHeaders req
       & List.lookup "Host"
       & fromMaybe "localhost"
@@ -181,50 +175,75 @@ devserverWebsocket opt p =
         Left (_::ConnectionException) ->
           return ()
 
-newInstance :: Typeable a => DebugConfig a -> IO DevServerInstance
-newInstance debugCfg = do
-  resource <- debugCfg.open_resource
-  (client_app, server_app) <- debugCfg.init_app resource
+newInstance :: Typeable a => DevServerConfig a -> IO DevServerInstance
+newInstance devCfg = do
+  resource <- devCfg.open_resource
+  (client_app, server_app) <- devCfg.init_app resource
   app_state_ref <- newIORef RunningApp
     { resource
-    , debug_config = debugCfg
+    , devserver_config = devCfg
     , client_app
     , server_app
     }
   conn_state_ref <- newIORef $ ConnectionState Map.empty 0
   return DevServerInstance {conn_state_ref, app_state_ref}
 
-updateInstance :: Typeable a => DebugConfig a -> DevServerInstance -> IO ()
-updateInstance debugCfg devInst = do
+updateInstance :: Typeable a => DevServerConfig a -> DevServerInstance -> IO ()
+updateInstance devCfg devInst = do
   oldApp <- readIORef devInst.app_state_ref
-  let tryOld = tryOldResource debugCfg oldApp
+  let tryOld = tryOldResource devCfg oldApp
   case tryOld of
     Right oldResource -> do
-      (client_app, server_app) <- debugCfg.init_app oldResource
+      (client_app, server_app) <- devCfg.init_app oldResource
       writeIORef devInst.app_state_ref RunningApp
         { resource = oldResource
-        , debug_config = debugCfg
+        , devserver_config = devCfg
         , client_app
         , server_app
         }
     Left closeOld -> do
       closeOld
-      newResource <- debugCfg.open_resource
-      (client_app, server_app) <- debugCfg.init_app newResource
+      newResource <- devCfg.open_resource
+      (client_app, server_app) <- devCfg.init_app newResource
       writeIORef devInst.app_state_ref RunningApp
         { resource = newResource
-        , debug_config = debugCfg
+        , devserver_config = devCfg
         , client_app
         , server_app
         }
   where
-    tryOldResource :: forall a. Typeable a => DebugConfig a -> RunningApp -> Either (IO ()) a
-    tryOldResource _ RunningApp {resource, debug_config}
+    tryOldResource :: forall a. Typeable a => DevServerConfig a -> RunningApp -> Either (IO ()) a
+    tryOldResource _ RunningApp {resource, devserver_config}
       | Just Refl <- eqT0 @a resource = Right resource
-      | otherwise = Left (debug_config.close_resource resource)
+      | otherwise = Left (devserver_config.close_resource resource)
 
     eqT0 :: forall a b. (Typeable a, Typeable b) => b -> Maybe (a :~: b)
     eqT0 _ = eqT @a @b
+
+data DevServerInstance = DevServerInstance
+  { conn_state_ref :: IORef ConnectionState
+  , app_state_ref :: IORef RunningApp
+  } deriving Generic
+
+data ConnectionState = ConnectionState
+  { connections :: Map ConnectionId ConnectionInfo
+  , id_supply :: ConnectionId
+  } deriving Generic
+
+data ConnectionInfo = ConnectionInfo
+  { connection :: Connection
+  , options :: WasmInstance
+  } deriving Generic
+
+data RunningApp = forall a. Typeable a => RunningApp
+  { resource :: a
+  , devserver_config :: DevServerConfig a
+  , client_app :: JSM ()
+  , server_app :: Application
+  }
+
+newtype ConnectionId = ConnectionId {unConnectionId :: Int}
+  deriving newtype (Ord, Eq, Num, Enum)
 
 -- | Run @yarn run webpack --mode production@ and copy contents here
 -- from @./dist-newstyle/index.bundle.js@

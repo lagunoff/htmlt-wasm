@@ -2,15 +2,15 @@
 ;;; For more information see (info "(emacs) Directory Variables")
 
 ((haskell-mode
-   (haskell-process-type . ghci)
-   (haskell-process-args-ghci . ("-ferror-spans" "-fdiagnostics-color=never"))
+   (haskell-process-type . cabal-repl)
+   (haskell-process-args-cabal-repl . ("--offline"))
    (eval .
        (setq
-         nix-bins/proj-dir
+         proj-dir
            (file-name-directory
              (let ((d (dir-locals-find-file ".")))
                (if (stringp d) d (car d))))
-         haskell-process-path-ghci (concat nix-bins/proj-dir "bin/ghci")
+         haskell-process-path-cabal (concat proj-dir "bin/cabal")
          haskell-hoogle-server-command (lambda (port)
            (list (concat nix-bins/proj-dir "bin/hoogle") "server"
              "--local"
