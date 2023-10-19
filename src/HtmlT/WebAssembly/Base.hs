@@ -125,5 +125,10 @@ handleMessage opt wasmMain = \case
     case result of
       Left exp -> return $ EvalExpr exp
       Right _ -> return Exit
+  BeforeUnload -> do
+    result <- runUntillInterruption opt wasmEnv (finalizeNamespace wasmEnv.finalizer_ns)
+    case result of
+      Left exp -> return $ EvalExpr exp
+      Right _ -> return Exit
   where
     wasmEnv = JSMEnv (-1)

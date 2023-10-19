@@ -99,6 +99,8 @@ export async function startReactor(wasmUri: string, opt: StartReactorOptions = {
     inst.exports.init_debug();
   }
 
+  window.addEventListener("beforeunload", () => haskellApp(inst, { tag: JavaScriptMessageTag.BeforeUnload }));
+
   haskellApp(inst);
 };
 

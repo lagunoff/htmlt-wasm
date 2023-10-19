@@ -27,7 +27,7 @@ The choice of binary commands to interface with JavaScript has following drawbac
 
 # 🌟 Benefits compare to Reflex+GHCJS+JSaddle
 
-The key benefit of htmlt-wasm is that is has much fewer dependencies and much fewer lines in actual implementation, providing similar value. Also the code is much more understandable. This is my personal opinion of course and other people will have different perspectives, I admit it's far from being ideal at the time of writing, but I'll try my best. Also if you use `JSaddle` with `GHCJS` you might noticed an annoying fact that you have to write two versions of FFI for `GHCJS` and `JSaddle` that can potentially diverge and can lead to production bugs. In contrast htmlt-wasm you don't have this distinction it works similar way to `JSaddle` either throught websockets (on a devserver) or throught WASM shared memory (in production) using the same protocol. This protocol also optimized to minimize round-trips resulting in faster hot-reloading experience compared to `JSaddle`.
+The key benefit of htmlt-wasm is that is has much fewer dependencies and much fewer lines in actual implementation, providing similar value. Also the code is much more understandable. This is my personal opinion of course and other people will have different perspectives, I admit it's far from being ideal at the time of writing, but I'll try my best to cleanup the code abd provide documentation as the codebase matures. Also if you use `JSaddle` with `GHCJS` you might noticed an annoying fact that you have to write two versions of FFI for `GHCJS` and `JSaddle` that can potentially diverge and can lead to production bugs. In contrast htmlt-wasm you don't have this distinction it works similar way to `JSaddle` either throught websockets (on a devserver) or throught WASM shared memory (in production) using the same protocol. This protocol also optimized to minimize round-trips resulting in faster hot-reloading experience compared to `JSaddle`.
 
 
 # 🐞 WebAssembly Backend Bug
@@ -79,7 +79,7 @@ yarn run webpack --mode production
         <a href=https://lagunoff.github.io/htmlt-wasm/examples/voting.html target=_blank>open</a>
       </td>
       <td>
-        <a href=https://lagunoff.github.io/htmlt-wasm/examples/voting-greadymem.html target=_blank>greadymem hack</a>
+        <a href=https://lagunoff.github.io/htmlt-wasm/examples/voting-greedymem.html target=_blank>greadymem hack</a>
       </td>
     </tr>
     <tr>
@@ -89,13 +89,13 @@ yarn run webpack --mode production
         <a href=https://lagunoff.github.io/htmlt-wasm/examples/todomvc.html target=_blank>open</a>
       </td>
       <td>
-        <a href=https://lagunoff.github.io/htmlt-wasm/examples/todomvc-greadymem.html target=_blank>greadymem hack</a>
+        <a href=https://lagunoff.github.io/htmlt-wasm/examples/todomvc-greedymem.html target=_blank>greadymem hack</a>
       </td>
     </tr>
   </tbody>
 </table>
 
-# 💡 TODOs
+# ✅ TODOs
 
  - [ ] Gather data for the WebAssmebly Backend bug report, make an isolated counterexample
  - [ ] Add Benchmarks

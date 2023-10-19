@@ -3,11 +3,9 @@ module TodoList where
 import Control.Monad
 import Data.ByteString.Char8 qualified as Char8
 import Data.List qualified as List
-import Data.Maybe
 import GHC.Int
 import HtmlT.WebAssembly
 
-import "this" Utils
 import "this" TodoItem qualified as TodoItem
 
 
@@ -25,7 +23,7 @@ data Filter = All | Active | Completed
   deriving (Show, Eq)
 
 data TodoListAction a where
-  InitAction :: TodoListAction (DynRef TodoListState)
+  InitAction :: [TodoItem.TodoItemState] -> TodoListAction (DynRef TodoListState)
   ToggleAllAction :: TodoListConfig -> Bool -> TodoListAction ()
   InputAction :: TodoListConfig -> Utf8 -> TodoListAction ()
   CommitAction :: TodoListConfig -> TodoListAction ()
@@ -35,8 +33,7 @@ data TodoListAction a where
 
 eval :: TodoListAction a -> JSM a
 eval = \case
-  InitAction -> do
-    items <- fromMaybe [] <$> readLocalStorage "todo-items"
+  InitAction items -> do
     newRef TodoListState
       { title = ""
       , items = items

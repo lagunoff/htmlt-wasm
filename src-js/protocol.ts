@@ -423,12 +423,14 @@ export enum JavaScriptMessageTag {
   Start,
   Return,
   ExecCallback,
+  BeforeUnload,
 }
 
 export const javascriptMessage = b.discriminate({
   [JavaScriptMessageTag.Start]: b.record({}),
   [JavaScriptMessageTag.Return]: b.record({ 0: jvalue }),
   [JavaScriptMessageTag.ExecCallback]: b.record({ arg: jvalue, callbackId: b.int64 }),
+  [JavaScriptMessageTag.BeforeUnload]: b.record({}),
 });
 
 export type HaskellMessage = typeof haskellMessage['_A'];
