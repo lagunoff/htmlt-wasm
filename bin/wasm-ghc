@@ -1,5 +1,0 @@
-CWD=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
-CABAL_CARGS=$(ghc $CWD/cabal-cargs.hs -e 'printGhcArgs (FromCabalFile "./htmlt-wasm.cabal" (Just [Executable "wasm-app"]))')
-OUTPUT_DIR=$CWD/../dist/build/ghc-wasm-tmp/
-
-nix shell $CWD/../ghc-wasm-meta -c wasm32-wasi-ghc $CABAL_CARGS -j -outputdir=$OUTPUT_DIR $@

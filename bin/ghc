@@ -1,7 +1,0 @@
-#!/usr/bin/env cached-nix-shell
-#!nix-shell ../default.nix -A shell.native -i sh
-
-CWD=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
-OUTPUT_DIR=$CWD/../dist/ghc-tmp/
-
-ghc $CABAL_CARGS -j -outputdir=$OUTPUT_DIR $@

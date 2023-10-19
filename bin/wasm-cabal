@@ -1,3 +1,0 @@
-CWD=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
-
-nix shell $CWD/../ghc-wasm-meta -c wasm32-wasi-cabal $@

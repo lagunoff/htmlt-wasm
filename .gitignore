@@ -7,6 +7,7 @@
 **/.directory
 **/*.drv
 /bin
+/.dir-locals.el
 /dist
 /dist-newstyle/build
 /dist-newstyle/cache
