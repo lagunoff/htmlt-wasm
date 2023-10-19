@@ -1,10 +1,10 @@
 {-| Shortcuts for common HTML5 attributes and properties
 -}
-module HtmlT.Wasm.Property where
+module HtmlT.WebAssembly.Property where
 
-import "this" HtmlT.Wasm.Event
-import "this" HtmlT.Wasm.Html
-import "this" HtmlT.Wasm.Protocol.Utf8 (Utf8(..))
+import "this" HtmlT.WebAssembly.Event
+import "this" HtmlT.WebAssembly.Html
+import "this" HtmlT.WebAssembly.Protocol.Utf8 (Utf8(..))
 
 dynStyles :: Dynamic Utf8 -> Html ()
 dynStyles = dynProp "style"

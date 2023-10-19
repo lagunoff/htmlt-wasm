@@ -1,4 +1,4 @@
-module HtmlT.Wasm.Html where
+module HtmlT.WebAssembly.Html where
 
 import Control.Monad
 import Control.Monad.IO.Class
@@ -11,12 +11,12 @@ import Data.IORef
 import Data.String
 import GHC.Generics
 
-import "this" HtmlT.Wasm.Base
-import "this" HtmlT.Wasm.Event
-import "this" HtmlT.Wasm.JSM
-import "this" HtmlT.Wasm.Marshal
-import "this" HtmlT.Wasm.Protocol
-import "this" HtmlT.Wasm.Protocol.Utf8 (Utf8(..))
+import "this" HtmlT.WebAssembly.Base
+import "this" HtmlT.WebAssembly.Event
+import "this" HtmlT.WebAssembly.JSM
+import "this" HtmlT.WebAssembly.Marshal
+import "this" HtmlT.WebAssembly.Protocol
+import "this" HtmlT.WebAssembly.Protocol.Utf8 (Utf8(..))
 
 newtype HtmlT m a = HtmlT {unHtmlT :: StateT HtmlState m a}
 

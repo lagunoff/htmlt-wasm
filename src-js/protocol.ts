@@ -23,7 +23,7 @@ export function cdr<T>(pair: Cons<T>): List<T> {
   return pair[1];
 }
 
-export type HaskellCallback = (down: DownCmd) => void;
+export type HaskellCallback = (jsmsg: JavaScriptMessage) => void;
 
 export function evalExpr(ctx: List<Bindings>, argCtx: List<IArguments>, hscb: HaskellCallback, exp: Expr): unknown {
   switch(exp.tag) {
@@ -190,7 +190,7 @@ export function evalExpr(ctx: List<Bindings>, argCtx: List<IArguments>, hscb: Ha
     case ExprTag.ExecCallback: {
       const arg = evalExpr(ctx, argCtx, hscb, exp.arg);
       return hscb({
-        tag: DownCmdTag.ExecCallback,
+        tag: JavaScriptMessageTag.ExecCallback,
         arg: unknownToJValue(arg),
         callbackId: exp.callbackId
       });
@@ -407,32 +407,32 @@ export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.UncaughtException]: b.record({ message: b.string }),
 }));
 
-export enum UpCommandTag {
+export enum HaskellMessageTag {
   EvalExpr,
   HotReload,
   Exit,
 }
 
-export const upCmd = b.discriminate({
-  [UpCommandTag.EvalExpr]: b.record({ expr: expr }),
-  [UpCommandTag.HotReload]: b.record({ }),
-  [UpCommandTag.Exit]: b.record({ }),
+export const haskellMessage = b.discriminate({
+  [HaskellMessageTag.EvalExpr]: b.record({ expr: expr }),
+  [HaskellMessageTag.HotReload]: b.record({ }),
+  [HaskellMessageTag.Exit]: b.record({ }),
 });
 
-export enum DownCmdTag {
+export enum JavaScriptMessageTag {
   Start,
   Return,
   ExecCallback,
 }
 
-export const downCmd = b.discriminate({
-  [DownCmdTag.Start]: b.record({}),
-  [DownCmdTag.Return]: b.record({ 0: jvalue }),
-  [DownCmdTag.ExecCallback]: b.record({ arg: jvalue, callbackId: b.int64 }),
+export const javascriptMessage = b.discriminate({
+  [JavaScriptMessageTag.Start]: b.record({}),
+  [JavaScriptMessageTag.Return]: b.record({ 0: jvalue }),
+  [JavaScriptMessageTag.ExecCallback]: b.record({ arg: jvalue, callbackId: b.int64 }),
 });
 
-export type UpCmd = typeof upCmd['_A'];
-export type DownCmd = typeof downCmd['_A'];
+export type HaskellMessage = typeof haskellMessage['_A'];
+export type JavaScriptMessage = typeof javascriptMessage['_A'];
 
 export const varStorage = new Map<number, unknown>();
 

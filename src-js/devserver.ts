@@ -1,20 +1,20 @@
 import { absurd } from './lib';
 import * as p from './protocol';
-import { UpCmd, DownCmd, DownCmdTag, UpCommandTag, Bindings, List } from './protocol';
+import { HaskellMessage, JavaScriptMessage, JavaScriptMessageTag, HaskellMessageTag, Bindings, List } from './protocol';
 
 export async function devClient(devSocketUri: string) {
   const websocket = new WebSocket(devSocketUri);
 
   websocket.onopen = (_event) => {
-    const binaryData = p.downCmd.encode({ tag: DownCmdTag.Start });
+    const binaryData = p.javascriptMessage.encode({ tag: JavaScriptMessageTag.Start });
     websocket.send(binaryData);
   };
 
   // Event handler for receiving messages from the server
   websocket.onmessage = async (event) => {
     const binaryDataReceived = await convertBlobToUint8Array(event.data);
-    const upCommand = p.upCmd.decode(binaryDataReceived);
-    haskellApp(upCommand, (downCmd: DownCmd) => websocket.send(p.downCmd.encode(downCmd)));
+    const upCommand = p.haskellMessage.decode(binaryDataReceived);
+    haskellApp(upCommand, (downCmd: JavaScriptMessage) => websocket.send(p.javascriptMessage.encode(downCmd)));
   };
 
   // Event handler for errors
@@ -28,18 +28,18 @@ export async function devClient(devSocketUri: string) {
   };
 }
 
-export async function haskellApp(upCmd: UpCmd, send: (downCmd: DownCmd) => void) {
+export async function haskellApp(upCmd: HaskellMessage, send: (downCmd: JavaScriptMessage) => void) {
   switch (upCmd.tag) {
-    case UpCommandTag.EvalExpr: {
+    case HaskellMessageTag.EvalExpr: {
       const result = p.evalExpr(globalContext, null, send, upCmd.expr);
       const jvalue = p.unknownToJValue(result);
-      return send({ tag: DownCmdTag.Return, 0: jvalue });
+      return send({ tag: JavaScriptMessageTag.Return, 0: jvalue });
     }
-    case UpCommandTag.HotReload: {
+    case HaskellMessageTag.HotReload: {
       window.location.reload();
       return;
     }
-    case UpCommandTag.Exit: {
+    case HaskellMessageTag.Exit: {
       return;
     }
   }

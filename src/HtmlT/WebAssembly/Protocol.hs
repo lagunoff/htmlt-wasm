@@ -1,4 +1,4 @@
-module HtmlT.Wasm.Protocol where
+module HtmlT.WebAssembly.Protocol where
 
 import Data.Binary (Binary)
 import Data.Int
@@ -6,18 +6,20 @@ import Data.Text ()
 import Data.Word
 import GHC.Generics
 
-import "this" HtmlT.Wasm.Protocol.JNumber (JNumber)
-import "this" HtmlT.Wasm.Protocol.Utf8 (Utf8)
+import "this" HtmlT.WebAssembly.Protocol.JNumber (JNumber)
+import "this" HtmlT.WebAssembly.Protocol.Utf8 (Utf8)
 
-data UpCmd
-  = EvalExpr { expr :: Expr }
+data HaskellMessage
+  = EvalExpr Expr
   | HotReload -- ^ Used under dev server
   | Exit
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
-data DownCmd
+data JavaScriptMessage
   = Start
+  -- Add some initial data (like current URL and window size) to
+  -- further reduce round-trips
   | Return JValue
   | ExecCallbackCommand JValue CallbackId
   deriving stock (Generic, Show)

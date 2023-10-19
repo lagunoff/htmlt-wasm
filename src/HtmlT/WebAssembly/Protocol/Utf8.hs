@@ -1,4 +1,4 @@
-module HtmlT.Wasm.Protocol.Utf8 where
+module HtmlT.WebAssembly.Protocol.Utf8 where
 
 import Data.Binary (Binary)
 import Data.ByteString (ByteString)

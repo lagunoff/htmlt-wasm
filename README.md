@@ -5,10 +5,10 @@ This repository is currently in experimental phase, and it may contain bugs. The
 
 # 🎯 Project Objectives
 
-Here I try to migrate my other UI library [htmlt](https://github.com/lagunoff/htmlt) into GHC WebAssembly Backend. Alongside this, I also wanted to try some experimental changes in underlying implementation, while keep API relatively unchanged. If this project is successfull I hope to gain following benefits:
+Here I try to migrate my other UI library [htmlt](https://github.com/lagunoff/htmlt) into GHC WebAssembly Backend. Alongside this, I also wanted to try some experimental changes in underlying implementation, while keep API relatively the same. If this project is successfull I hope to gain following benefits:
   - Faster compilation times
   - More compact executables
-  - Fast hot-reloading capabilities (when you see the chages in browser in less than a second after source file is saved)
+  - Fast hot-reloading capabilities (when the changes appear in the browser under a second after source file is saved)
   - Faster runtime speeds (it does seem to be faster, but I wasn't really counting on that, WebAssembly has perfomance trade-offs for interactive applications)
   - All that with fewer dependencies as possible (compiling to WebAssembly only requires base packages, while the Native GHC will need a few WAI packages to run a dev server)
 
@@ -27,7 +27,7 @@ The choice of binary commands to interface with JavaScript has following drawbac
 
 # 🌟 Benefits compare to Reflex+GHCJS+JSaddle
 
-The key benefit of htmlt-wasm is that is has much fewer dependencies and much fewer lines in actual implementation, providing similar value. Also the code is much more understandable. This is my personal opinion of course and other people will have different perspectives, I admit it's far from being ideal at the time of writing, but I'll try my best. Also if you use 'JSaddle' with 'GHCJS' you might noticed an annoying fact that you have to write two versions of FFI for 'GHCJS' and 'JSaddle' that can potentially diverge and can lead to production bugs. In contrast htmlt-wasm you don't have this distinction it works similar way to 'JSaddle' either throught websockets (on a devserver) or throught WASM shared memory (in production) using the same protocol. This protocol also optimized to minimize round-trips resulting in faster hot-reloading experience compared to JSaddle.
+The key benefit of htmlt-wasm is that is has much fewer dependencies and much fewer lines in actual implementation, providing similar value. Also the code is much more understandable. This is my personal opinion of course and other people will have different perspectives, I admit it's far from being ideal at the time of writing, but I'll try my best. Also if you use `JSaddle` with `GHCJS` you might noticed an annoying fact that you have to write two versions of FFI for `GHCJS` and `JSaddle` that can potentially diverge and can lead to production bugs. In contrast htmlt-wasm you don't have this distinction it works similar way to `JSaddle` either throught websockets (on a devserver) or throught WASM shared memory (in production) using the same protocol. This protocol also optimized to minimize round-trips resulting in faster hot-reloading experience compared to `JSaddle`.
 
 
 # 🐞 WebAssembly Backend Bug
@@ -99,5 +99,6 @@ yarn run webpack --mode production
 
  - [ ] Gather data for the WebAssmebly Backend bug report, make an isolated counterexample
  - [ ] Add Benchmarks
+ - [ ] JSM currently has builtin reactive capabilities, decouple reactive stuff into separate `ReactiveT` transformer
  - [ ] Improve messaging protocol (make a version that is readable JSON and another compact and fast binary version)
  - [ ] Review, cleanup the code and write documentation

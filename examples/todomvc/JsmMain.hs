@@ -1,7 +1,7 @@
 module JsmMain where
 
 import Control.Monad.Trans
-import HtmlT.Wasm
+import HtmlT.WebAssembly
 
 import "this" TodoList qualified as TodoList
 

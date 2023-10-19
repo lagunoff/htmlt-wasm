@@ -1,4 +1,4 @@
-module HtmlT.Wasm.Main where
+module HtmlT.WebAssembly.Reactor where
 
 import Data.Binary qualified as Binary
 import Data.ByteString as BS
@@ -12,15 +12,15 @@ import Foreign.Ptr
 import Foreign.Storable
 import System.IO.Unsafe
 
-import "this" HtmlT.Wasm.Base
-import "this" HtmlT.Wasm.JSM
+import "this" HtmlT.WebAssembly.Base
+import "this" HtmlT.WebAssembly.JSM
 
 
-wasmApp :: JSM () -> Ptr Word8 -> IO (Ptr Word8)
-wasmApp wasmMain p = do
-  downCmd <- Binary.decode . BSL.fromStrict <$> loadByteString p
-  upCmd <- handleCommand wasmInstance wasmMain downCmd
-  storeByteString $ BSL.toStrict $ Binary.encode upCmd
+reactorApp :: JSM () -> Ptr Word8 -> IO (Ptr Word8)
+reactorApp wasmMain p = do
+  jsMessage <- Binary.decode . BSL.fromStrict <$> loadByteString p
+  haskMessage <- handleMessage wasmInstance wasmMain jsMessage
+  storeByteString $ BSL.toStrict $ Binary.encode haskMessage
   where
     storeByteString :: ByteString -> IO (Ptr a)
     storeByteString bs = do

@@ -1,7 +1,7 @@
 import { WASI, File, OpenFile } from '@bjorn3/browser_wasi_shim';
 import { absurd } from './lib';
 import * as p from './protocol';
-import { UpCmd, DownCmd, DownCmdTag, UpCommandTag, Bindings, List } from './protocol';
+import { HaskellMessage, JavaScriptMessage, JavaScriptMessageTag, HaskellMessageTag, Bindings, List } from './protocol';
 
 export type HaskellPointer = number;
 
@@ -46,19 +46,19 @@ export function storeBuffer(inst: HaskellIstance, u8array: Uint8Array) {
   return ptr;
 }
 
-export function haskellApp(inst: HaskellIstance, down: DownCmd = { tag: DownCmdTag.Start }) {
+export function haskellApp(inst: HaskellIstance, down: JavaScriptMessage = { tag: JavaScriptMessageTag.Start }) {
   const upCmd = interactWithHaskell(inst, down);
   switch (upCmd.tag) {
-    case UpCommandTag.EvalExpr: {
-      const result = p.evalExpr(globalContext, null, (down: DownCmd) => haskellApp(inst, down), upCmd.expr);
+    case HaskellMessageTag.EvalExpr: {
+      const result = p.evalExpr(globalContext, null, (down: JavaScriptMessage) => haskellApp(inst, down), upCmd.expr);
       const jvalue = p.unknownToJValue(result);
-      return haskellApp(inst, { tag: DownCmdTag.Return, 0: jvalue });
+      return haskellApp(inst, { tag: JavaScriptMessageTag.Return, 0: jvalue });
     }
-    case UpCommandTag.HotReload: {
+    case HaskellMessageTag.HotReload: {
       window.location.reload();
       return;
     }
-    case UpCommandTag.Exit: {
+    case HaskellMessageTag.Exit: {
       return;
     }
   }
@@ -67,11 +67,11 @@ export function haskellApp(inst: HaskellIstance, down: DownCmd = { tag: DownCmdT
 
 const globalContext: List<Bindings> = [window as any, null]
 
-function interactWithHaskell(inst: HaskellIstance, down: DownCmd): UpCmd {
-  const downBuf = p.downCmd.encode(down);
+function interactWithHaskell(inst: HaskellIstance, down: JavaScriptMessage): HaskellMessage {
+  const downBuf = p.javascriptMessage.encode(down);
   const downPtr = storeBuffer(inst, downBuf);
   const upBuf = loadBuffer(inst, inst.exports.app(downPtr));
-  return p.upCmd.decode(upBuf);
+  return p.haskellMessage.decode(upBuf);
 }
 
 export type StartReactorOptions = {

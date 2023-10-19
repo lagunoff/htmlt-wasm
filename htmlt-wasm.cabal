@@ -107,19 +107,19 @@ library
   import: common-config
   hs-source-dirs: src
   exposed-modules:
-    HtmlT.Wasm
-    HtmlT.Wasm.Base
-    HtmlT.Wasm.DOM
-    HtmlT.Wasm.Element
-    HtmlT.Wasm.Event
-    HtmlT.Wasm.Html
-    HtmlT.Wasm.JSM
-    HtmlT.Wasm.Main
-    HtmlT.Wasm.Marshal
-    HtmlT.Wasm.Property
-    HtmlT.Wasm.Protocol
-    HtmlT.Wasm.Protocol.JNumber
-    HtmlT.Wasm.Protocol.Utf8
+    HtmlT.WebAssembly
+    HtmlT.WebAssembly.Base
+    HtmlT.WebAssembly.DOM
+    HtmlT.WebAssembly.Element
+    HtmlT.WebAssembly.Event
+    HtmlT.WebAssembly.Html
+    HtmlT.WebAssembly.JSM
+    HtmlT.WebAssembly.Marshal
+    HtmlT.WebAssembly.Property
+    HtmlT.WebAssembly.Protocol
+    HtmlT.WebAssembly.Protocol.JNumber
+    HtmlT.WebAssembly.Protocol.Utf8
+    HtmlT.WebAssembly.Reactor
   build-depends:
     base,
     binary,
@@ -130,7 +130,7 @@ library
     text,
   if !arch(wasm32)
     exposed-modules:
-      HtmlT.Wasm.DevServer
+      HtmlT.WebAssembly.DevServer
     build-depends:
       foreign-store,
       http-types,

@@ -1,4 +1,4 @@
-module HtmlT.Wasm.Protocol.JNumber where
+module HtmlT.WebAssembly.Protocol.JNumber where
 
 import Control.Exception (throw, ArithException(DivideByZero))
 import Data.Binary (Binary)

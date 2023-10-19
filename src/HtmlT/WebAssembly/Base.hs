@@ -1,4 +1,4 @@
-module HtmlT.Wasm.Base where
+module HtmlT.WebAssembly.Base where
 
 import Control.Exception
 import Control.Monad.State
@@ -9,10 +9,10 @@ import GHC.Exts
 import GHC.Generics
 import Unsafe.Coerce
 
-import "this" HtmlT.Wasm.Event
-import "this" HtmlT.Wasm.JSM
-import "this" HtmlT.Wasm.Protocol
-import "this" HtmlT.Wasm.Protocol.Utf8 qualified as Utf8
+import "this" HtmlT.WebAssembly.Event
+import "this" HtmlT.WebAssembly.JSM
+import "this" HtmlT.WebAssembly.Protocol
+import "this" HtmlT.WebAssembly.Protocol.Utf8 qualified as Utf8
 
 newVar :: JSM VarId
 newVar = reactive \e s0 ->
@@ -89,8 +89,8 @@ runUntillInterruption opt e wasm = do
     coerceResult :: forall a b. JSMResult a -> JSMResult b
     coerceResult = unsafeCoerce
 
-handleCommand :: WasmInstance -> JSM () -> DownCmd -> IO UpCmd
-handleCommand opt wasmMain = \case
+handleMessage :: WasmInstance -> JSM () -> JavaScriptMessage -> IO HaskellMessage
+handleMessage opt wasmMain = \case
   Start -> do
     writeIORef opt.continuations_ref []
     writeIORef opt.wasm_state_ref JSMState

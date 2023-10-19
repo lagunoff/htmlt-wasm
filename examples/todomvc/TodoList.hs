@@ -5,7 +5,7 @@ import Data.ByteString.Char8 qualified as Char8
 import Data.List qualified as List
 import Data.Maybe
 import GHC.Int
-import HtmlT.Wasm
+import HtmlT.WebAssembly
 
 import "this" Utils
 import "this" TodoItem qualified as TodoItem

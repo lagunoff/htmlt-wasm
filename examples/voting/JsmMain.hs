@@ -5,8 +5,8 @@ import Control.Monad.Reader
 import Data.List qualified as List
 import Data.Ord
 import GHC.Generics
-import HtmlT.Wasm
-import HtmlT.Wasm.Protocol.Utf8 qualified as Utf8
+import HtmlT.WebAssembly
+import HtmlT.WebAssembly.Protocol.Utf8 qualified as Utf8
 
 data WidgetState = WidgetState
   { candidates :: [Candidate]
