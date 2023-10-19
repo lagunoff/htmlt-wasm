@@ -58,7 +58,7 @@ executable voting
   import: common-config
   if arch(wasm32)
     ghc-options:
-      -no-hs-main -optl-mexec-model=reactor
+      -no-hs-main -optl-mexec-model=reactor -dlint -debug
       -optl-Wl,--export=init_greadymem,--export=init_debug,--export=app,--export=hs_malloc,--export=hs_free
     c-sources: cbits/init_greadymem.c
     include-dirs: cbits

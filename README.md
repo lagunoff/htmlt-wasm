@@ -23,6 +23,12 @@ The choice of binary commands to interface with JavaScript has following drawbac
 2) It makes possible to run client apps with Native GHC executables 
 3) It makes much easier to implement hot-reloading because the commands can be passed through a wire, other stuff works exacly the same way
 
+[![Hot-Reloading Demo](https://lagunoff.github.io/htmlt-wasm/screen-recorder-thu-oct-19-2023-15-37-20.jpg)](https://lagunoff.github.io/htmlt-wasm/screen-recorder-thu-oct-19-2023-15-37-20.webm "Hot-Reloading Demo")
+
+# 🌟 Benefits compare to Reflex+GHCJS+JSaddle
+
+The key benefit of htmlt-wasm is that is has much fewer dependencies and much fewer lines in actual implementation, providing similar value. Also the code is much more understandable. This is my personal opinion of course and other people will have different perspectives, I admit it's far from being ideal at the time of writing, but I'll try my best. Also if you use 'JSaddle' with 'GHCJS' you might noticed an annoying fact that you have to write two versions of FFI for 'GHCJS' and 'JSaddle' that can potentially diverge and can lead to production bugs. In contrast htmlt-wasm you don't have this distinction it works similar way to 'JSaddle' either throught websockets (on a devserver) or throught WASM shared memory (in production) using same protocol. This protocol also optimized to reduce round-trips and feels significatly faster compare to JSaddle in my experience.
+
 
 # 🐞 WebAssembly Backend Bug
 
@@ -61,10 +67,10 @@ nix-shell --run 'ghcid -c "cabal repl todomvc --offline" --test main'
       <td>Simple Voting</td>
       <td><a href=./examples/voting/voting.hs target=_blank>source</a></td>
       <td>
-        <a href=https://lagunoff.github.io/htmt-wasm/examples/voting.html target=_blank>open</a>
+        <a href=https://lagunoff.github.io/htmlt-wasm/examples/voting.html target=_blank>open</a>
       </td>
       <td>
-        <a href=https://lagunoff.github.io/htmt-wasm/examples/voting-greadymem.html target=_blank>greadymem hack</a>
+        <a href=https://lagunoff.github.io/htmlt-wasm/examples/voting-greadymem.html target=_blank>greadymem hack</a>
       </td>
     </tr>
     <tr>

@@ -65,7 +65,7 @@ jsmMain = attachToBody do
           td_ do
             div_ [class_ "chart-bar"] do
               dynStyles $ chartBarStyles <$> fromRef itemRef
-            span_ $ dynText $ votesText . (.votes) <$> fromRef itemRef
+            span_ $ dynText $ nVotesText . (.votes) <$> fromRef itemRef
     p_ "Choose and vote for your favorite programming language (you can also \
       \downvote languages you dislike)"
     div_ [class_ "bottom-toolbar"] do
@@ -90,8 +90,8 @@ jsmMain = attachToBody do
         text "▼"
     chartBarStyles c =
       "width:" <> Utf8.utf8Show c.percentage <> "%;"
-    votesText 1 = "1 vote"
-    votesText v = Utf8.utf8Show v <> " votes"
+    nVotesText 1 = "1 vote"
+    nVotesText v = Utf8.utf8Show v <> " votes"
 
 normalize :: [Candidate] -> [Candidate]
 normalize candidates =
