@@ -213,7 +213,7 @@ finalizeNamespace ns = do
       (removed, finalizers0) = Map.alterF (,Nothing) ns $ s.finalizers
       removedList = maybe [] Map.toList removed
       subscriptions = unsubscribe removedList s.subscriptions
-      finalizers = removeFinalizer removedList finalizers0
+      finalizers = unlinkParentScope removedList finalizers0
     in
       (removedList, s { subscriptions, finalizers })
   runCustomFinalizers removedList
@@ -225,16 +225,16 @@ finalizeNamespace ns = do
         Map.alter (mfilter (not . List.null) . Just . deleteSubs u . fromMaybe []) e s
     unsubscribe (_ : xs) !s = unsubscribe xs s
 
-    removeFinalizer :: [(FinalizerKey, FinalizerValue)] -> Finalizers -> Finalizers
-    removeFinalizer [] !s = s
-    removeFinalizer ((_, ParentNamespace p) : _) !s = -- Expecting at most one ParentNamespace
+    unlinkParentScope :: [(FinalizerKey, FinalizerValue)] -> Finalizers -> Finalizers
+    unlinkParentScope [] !s = s
+    unlinkParentScope ((_, ParentNamespace p) : _) !s = -- Expecting at most one ParentNamespace
       Map.alter (fmap (Map.delete (FinalizerCustomId (unFinalizerNs p)))) p s
-    removeFinalizer (_ : xs) !s = removeFinalizer xs s
+    unlinkParentScope (_ : xs) !s = unlinkParentScope xs s
 
     runCustomFinalizers :: [(FinalizerKey, FinalizerValue)] -> JSM ()
     runCustomFinalizers [] = return ()
     runCustomFinalizers ((_, CustomFinalizer w) : xs) = w *> runCustomFinalizers xs
-    runCustomFinalizers ((_, NamespaceFinalizer n) : xs) = do
+    runCustomFinalizers ((_, NamespaceFinalizer n) : xs) =
       finalizeNamespace n *> runCustomFinalizers xs
     runCustomFinalizers ((_, _) : xs) = runCustomFinalizers xs
 

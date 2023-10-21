@@ -74,7 +74,7 @@ yarn run webpack --mode production
   <tbody>
     <tr>
       <td>Simple Voting</td>
-      <td><a href=./examples/voting/voting.hs target=_blank>source</a></td>
+      <td><a href=./examples/voting/ target=_blank>source</a></td>
       <td>
         <a href=https://lagunoff.github.io/htmlt-wasm/examples/voting.html target=_blank>open</a>
       </td>
@@ -84,7 +84,7 @@ yarn run webpack --mode production
     </tr>
     <tr>
       <td>TodoMVC</td>
-      <td><a href=./examples/todomvc/todomvc.hs target=_blank>source</a></td>
+      <td><a href=./examples/todomvc/ target=_blank>source</a></td>
       <td>
         <a href=https://lagunoff.github.io/htmlt-wasm/examples/todomvc.html target=_blank>open</a>
       </td>

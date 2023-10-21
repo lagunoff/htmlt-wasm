@@ -5,6 +5,7 @@ import Data.ByteString.Char8 qualified as Char8
 import Data.List qualified as List
 import GHC.Int
 import HtmlT.WebAssembly
+import HtmlT.WebAssembly.Protocol.Utf8 qualified as Utf8
 
 import "this" TodoItem qualified as TodoItem
 
@@ -47,7 +48,7 @@ eval = \case
   InputAction cfg newVal -> do
     modifyRef cfg.state_ref \s -> s {title = newVal}
   CommitAction cfg -> do
-    title <- {-BS.strip .-} (.title) <$> readRef cfg.state_ref
+    title <- Utf8.strip . (.title) <$> readRef cfg.state_ref
     case title of
       "" -> return ()
       t -> modifyRef cfg.state_ref \s -> s
