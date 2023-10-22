@@ -272,6 +272,14 @@ export const jvalue = b.recursive<JValue>(self => b.discriminate({
   [JValueTag.JObj]: b.record({ 0: b.array(b.tuple(b.string, self)) }),
 }));
 
+export type StartFlags = {
+  initial_url: string;
+};
+
+export const startFlags: b.Decoder<StartFlags> = b.record({
+  initial_url: b.string,
+});
+
 export enum ExprTag {
   Null,
   Boolean,
@@ -427,7 +435,7 @@ export enum JavaScriptMessageTag {
 }
 
 export const javascriptMessage = b.discriminate({
-  [JavaScriptMessageTag.Start]: b.record({}),
+  [JavaScriptMessageTag.Start]: b.record({ startFlags }),
   [JavaScriptMessageTag.Return]: b.record({ 0: jvalue }),
   [JavaScriptMessageTag.ExecCallback]: b.record({ arg: jvalue, callbackId: b.int64 }),
   [JavaScriptMessageTag.BeforeUnload]: b.record({}),
@@ -437,6 +445,10 @@ export type HaskellMessage = typeof haskellMessage['_A'];
 export type JavaScriptMessage = typeof javascriptMessage['_A'];
 
 export const varStorage = new Map<number, unknown>();
+
+export function mkStartMessage(): JavaScriptMessage {
+  return { tag: JavaScriptMessageTag.Start, startFlags: { initial_url: location.href } };
+}
 
 namespace domBuilder {
   export function insertIntoBuilder(builder: Element|Comment, child: Node): void {

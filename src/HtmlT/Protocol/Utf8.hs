@@ -1,4 +1,4 @@
-module HtmlT.WebAssembly.Protocol.Utf8
+module HtmlT.Protocol.Utf8
   ( Utf8(..)
   , pack
   , unpack
@@ -10,14 +10,14 @@ module HtmlT.WebAssembly.Protocol.Utf8
   , breakOn
   , splitOn
   , intercalate
-  , HtmlT.WebAssembly.Protocol.Utf8.drop
-  , HtmlT.WebAssembly.Protocol.Utf8.take
+  , HtmlT.Protocol.Utf8.drop
+  , HtmlT.Protocol.Utf8.take
   , encodeURIComponent
   , decodeURIComponent
   , toLower
   , toUpper
   , isInfixOf
-  , HtmlT.WebAssembly.Protocol.Utf8.null
+  , HtmlT.Protocol.Utf8.null
   ) where
 
 import Data.Binary (Binary)

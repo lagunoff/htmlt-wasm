@@ -4,8 +4,8 @@ import Control.Monad
 import Data.ByteString.Char8 qualified as Char8
 import Data.List qualified as List
 import GHC.Int
-import HtmlT.WebAssembly
-import HtmlT.WebAssembly.Protocol.Utf8 qualified as Utf8
+import HtmlT
+import HtmlT.Protocol.Utf8 qualified as Utf8
 
 import "this" TodoItem qualified as TodoItem
 

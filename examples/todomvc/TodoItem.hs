@@ -3,7 +3,7 @@ module TodoItem where
 import Data.List qualified as List
 import Data.Maybe
 import GHC.Int
-import HtmlT.WebAssembly
+import HtmlT
 
 data TodoItemConfig = TodoItemConfig
   { state_ref :: DynRef TodoItemState

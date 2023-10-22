@@ -6,7 +6,7 @@ export async function devClient(devSocketUri: string) {
   const websocket = new WebSocket(devSocketUri);
 
   websocket.onopen = (_event) => {
-    const binaryData = p.javascriptMessage.encode({ tag: JavaScriptMessageTag.Start });
+    const binaryData = p.javascriptMessage.encode(p.mkStartMessage());
     websocket.send(binaryData);
   };
 

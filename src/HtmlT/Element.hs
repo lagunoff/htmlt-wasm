@@ -1,9 +1,9 @@
 {-| Shortcuts for the most common HTML5 elements
 -}
-module HtmlT.WebAssembly.Element where
+module HtmlT.Element where
 
-import "this" HtmlT.WebAssembly.Html
-import "this" HtmlT.WebAssembly.Protocol.Utf8 (Utf8(..))
+import "this" HtmlT.Html
+import "this" HtmlT.Protocol.Utf8 (Utf8(..))
 
 -- | This typeclass allows for tag constructors to have variable
 -- length arguments. Each tag constructor like 'div_' defined below

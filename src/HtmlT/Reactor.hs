@@ -1,4 +1,4 @@
-module HtmlT.WebAssembly.Reactor where
+module HtmlT.Reactor where
 
 import Data.Binary qualified as Binary
 import Data.ByteString as BS
@@ -12,11 +12,12 @@ import Foreign.Ptr
 import Foreign.Storable
 import System.IO.Unsafe
 
-import "this" HtmlT.WebAssembly.Base
-import "this" HtmlT.WebAssembly.JSM
+import "this" HtmlT.Base
+import "this" HtmlT.JSM
+import "this" HtmlT.Protocol
 
 
-reactorApp :: JSM () -> Ptr Word8 -> IO (Ptr Word8)
+reactorApp :: (StartFlags -> JSM ()) -> Ptr Word8 -> IO (Ptr Word8)
 reactorApp wasmMain p = do
   jsMessage <- Binary.decode . BSL.fromStrict <$> loadByteString p
   haskMessage <- handleMessage wasmInstance wasmMain jsMessage

@@ -46,11 +46,12 @@ export function storeBuffer(inst: HaskellIstance, u8array: Uint8Array) {
   return ptr;
 }
 
-export function haskellApp(inst: HaskellIstance, down: JavaScriptMessage = { tag: JavaScriptMessageTag.Start }) {
-  const upCmd = interactWithHaskell(inst, down);
-  switch (upCmd.tag) {
+export function haskellApp(inst: HaskellIstance, maybeJsMsg?: JavaScriptMessage) {
+  const jsMsg = maybeJsMsg ? maybeJsMsg : p.mkStartMessage();
+  const haskMsg = interactWithHaskell(inst, jsMsg);
+  switch (haskMsg.tag) {
     case HaskellMessageTag.EvalExpr: {
-      const result = p.evalExpr(globalContext, null, (down: JavaScriptMessage) => haskellApp(inst, down), upCmd.expr);
+      const result = p.evalExpr(globalContext, null, (jsMsg: JavaScriptMessage) => haskellApp(inst, jsMsg), haskMsg.expr);
       const jvalue = p.unknownToJValue(result);
       return haskellApp(inst, { tag: JavaScriptMessageTag.Return, 0: jvalue });
     }
@@ -62,7 +63,7 @@ export function haskellApp(inst: HaskellIstance, down: JavaScriptMessage = { tag
       return;
     }
   }
-  absurd(upCmd);
+  absurd(haskMsg);
 }
 
 const globalContext: List<Bindings> = [window as any, null]

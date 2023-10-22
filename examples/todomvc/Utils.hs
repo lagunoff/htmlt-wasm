@@ -1,6 +1,6 @@
 module Utils where
 
-import HtmlT.WebAssembly
+import HtmlT
 
 readLocalStorage :: FromJSVal v => Utf8 -> JSM (Maybe v)
 readLocalStorage key = do

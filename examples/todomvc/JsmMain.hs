@@ -1,13 +1,13 @@
 module JsmMain where
 
 import Data.Maybe
-import HtmlT.WebAssembly
+import HtmlT
 
 import "this" TodoList qualified as TodoList
 import "this" Utils
 
-jsmMain :: JSM ()
-jsmMain = do
+jsmMain :: StartFlags -> JSM ()
+jsmMain _ = do
   items <- fromMaybe [] <$> readLocalStorage "todo-items"
   todoListStateRef <- TodoList.eval $ TodoList.InitAction items
   reactive $ installFinalizer $ CustomFinalizer do

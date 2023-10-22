@@ -1,4 +1,4 @@
-module HtmlT.WebAssembly.JSM where
+module HtmlT.JSM where
 
 import Control.Monad.Fix
 import Control.Monad.Reader
@@ -11,7 +11,7 @@ import GHC.Exts
 import GHC.Generics
 import GHC.Int
 
-import "this" HtmlT.WebAssembly.Protocol
+import "this" HtmlT.Protocol
 
 data JSMResult a where
   Pure :: a -> JSMResult a

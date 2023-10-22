@@ -1,4 +1,4 @@
-module HtmlT.WebAssembly.DOM where
+module HtmlT.DOM where
 
 import Control.Monad
 import Control.Monad.Reader
@@ -11,12 +11,12 @@ import Data.List qualified as List
 import Data.Maybe
 import Data.Proxy
 
-import "this" HtmlT.WebAssembly.Base
-import "this" HtmlT.WebAssembly.Marshal
-import "this" HtmlT.WebAssembly.Protocol
-import "this" HtmlT.WebAssembly.JSM
-import "this" HtmlT.WebAssembly.Html
-import "this" HtmlT.WebAssembly.Protocol.Utf8 (Utf8(..))
+import "this" HtmlT.Base
+import "this" HtmlT.Marshal
+import "this" HtmlT.Protocol
+import "this" HtmlT.JSM
+import "this" HtmlT.Html
+import "this" HtmlT.Protocol.Utf8 (Utf8(..))
 
 
 consoleLog :: Expr -> JSM ()

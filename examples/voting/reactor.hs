@@ -1,7 +1,7 @@
 import Data.Word
 import Foreign.Marshal.Alloc qualified as Alloc
 import Foreign.Ptr
-import HtmlT.WebAssembly
+import HtmlT
 
 import "this" JsmMain (jsmMain)
 

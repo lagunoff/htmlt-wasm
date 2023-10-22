@@ -1,12 +1,12 @@
-module HtmlT.WebAssembly.Marshal where
+module HtmlT.Marshal where
 
 import Data.Maybe
 import GHC.Int
 
-import "this" HtmlT.WebAssembly.Protocol
-import "this" HtmlT.WebAssembly.Protocol.JNumber (JNumber(..))
-import "this" HtmlT.WebAssembly.Protocol.JNumber qualified as JNumber
-import "this" HtmlT.WebAssembly.Protocol.Utf8 (Utf8(..))
+import "this" HtmlT.Protocol
+import "this" HtmlT.Protocol.JNumber (JNumber(..))
+import "this" HtmlT.Protocol.JNumber qualified as JNumber
+import "this" HtmlT.Protocol.Utf8 (Utf8(..))
 
 class ToJSVal a where toJSVal :: a -> JValue
 

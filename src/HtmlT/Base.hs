@@ -1,4 +1,4 @@
-module HtmlT.WebAssembly.Base where
+module HtmlT.Base where
 
 import Control.Exception
 import Control.Monad.State
@@ -9,10 +9,10 @@ import GHC.Exts
 import GHC.Generics
 import Unsafe.Coerce
 
-import "this" HtmlT.WebAssembly.Event
-import "this" HtmlT.WebAssembly.JSM
-import "this" HtmlT.WebAssembly.Protocol
-import "this" HtmlT.WebAssembly.Protocol.Utf8 qualified as Utf8
+import "this" HtmlT.Event
+import "this" HtmlT.JSM
+import "this" HtmlT.Protocol
+import "this" HtmlT.Protocol.Utf8 qualified as Utf8
 
 newVar :: JSM VarId
 newVar = reactive \e s0 ->
@@ -89,9 +89,9 @@ runUntillInterruption opt e wasm = do
     coerceResult :: forall a b. JSMResult a -> JSMResult b
     coerceResult = unsafeCoerce
 
-handleMessage :: WasmInstance -> JSM () -> JavaScriptMessage -> IO HaskellMessage
+handleMessage :: WasmInstance -> (StartFlags -> JSM ()) -> JavaScriptMessage -> IO HaskellMessage
 handleMessage opt wasmMain = \case
-  Start -> do
+  Start startFlags -> do
     writeIORef opt.continuations_ref []
     writeIORef opt.wasm_state_ref JSMState
       { var_storage = Set.fromList [0, 1]
@@ -101,7 +101,7 @@ handleMessage opt wasmMain = \case
       , id_supply = 0
       , transaction_queue = Map.empty
       }
-    result <- runUntillInterruption opt wasmEnv wasmMain
+    result <- runUntillInterruption opt wasmEnv (wasmMain startFlags)
     case result of
       Left exp -> return $ EvalExpr exp
       Right () -> return Exit

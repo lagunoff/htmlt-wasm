@@ -5,8 +5,8 @@ import Control.Monad.Reader
 import Data.List qualified as List
 import Data.Ord
 import GHC.Generics
-import HtmlT.WebAssembly
-import HtmlT.WebAssembly.Protocol.Utf8 qualified as Utf8
+import HtmlT
+import HtmlT.Protocol.Utf8 qualified as Utf8
 
 data WidgetState = WidgetState
   { candidates :: [Candidate]
@@ -50,8 +50,8 @@ update action old = case action of
       | x.language == l = x {votes = f x.votes} : xs
       | otherwise = x : overvote f l xs
 
-jsmMain :: JSM ()
-jsmMain = attachToBody do
+jsmMain :: StartFlags -> JSM ()
+jsmMain _ = attachToBody do
   el "style" $ text styles
   votingListRef <- lift $ newRef initialState
   main_ [class_ "wrapper"] do

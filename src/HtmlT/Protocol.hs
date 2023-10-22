@@ -1,4 +1,4 @@
-module HtmlT.WebAssembly.Protocol where
+module HtmlT.Protocol where
 
 import Data.Binary (Binary)
 import Data.Int
@@ -6,8 +6,9 @@ import Data.Text ()
 import Data.Word
 import GHC.Generics
 
-import "this" HtmlT.WebAssembly.Protocol.JNumber (JNumber)
-import "this" HtmlT.WebAssembly.Protocol.Utf8 (Utf8)
+import "this" HtmlT.Protocol.JNumber (JNumber)
+import "this" HtmlT.Protocol.Utf8 (Utf8)
+
 
 data HaskellMessage
   = EvalExpr Expr
@@ -17,9 +18,7 @@ data HaskellMessage
   deriving anyclass (Binary)
 
 data JavaScriptMessage
-  = Start
-  -- TODO: Add some initial data (like current URL and window size) to
-  -- further reduce round-trips
+  = Start StartFlags
   | Return JValue
   | ExecCallbackCommand JValue CallbackId
   | BeforeUnload
@@ -27,6 +26,11 @@ data JavaScriptMessage
   -- work under the DevServer!
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
+
+data StartFlags = StartFlags
+  { initial_url :: Utf8
+  } deriving stock (Generic, Show)
+    deriving anyclass (Binary)
 
 -- | Strict Lambda calculus with arbitrary side-effects, meant to be
 -- used as commands executed in the JavaScript side, optimized for

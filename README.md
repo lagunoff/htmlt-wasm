@@ -102,3 +102,7 @@ yarn run webpack --mode production
  - [ ] JSM currently has builtin reactive capabilities, decouple reactive stuff into separate `ReactiveT` transformer
  - [ ] Improve messaging protocol (make a version that is readable JSON and another compact and fast binary version)
  - [ ] Review, cleanup the code and write documentation
+ - [ ] Try various protocol optimizations (use bounded buffer instead of using malloc/free for each message)
+ - [ ] Explore possible optimizations in the JavaScript implementation of the protocol (use hand written encoders/decoders instead of reflection on datatype description)
+
+

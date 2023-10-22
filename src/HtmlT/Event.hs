@@ -1,4 +1,4 @@
-module HtmlT.WebAssembly.Event where
+module HtmlT.Event where
 
 import Control.Monad
 import Control.Monad.Reader
@@ -12,7 +12,7 @@ import Data.Set qualified as Set
 import Unsafe.Coerce
 import GHC.Exts
 
-import "this" HtmlT.WebAssembly.JSM
+import "this" HtmlT.JSM
 
 newtype Event a = Event { unEvent :: (a -> JSM ()) -> JSM () }
 
