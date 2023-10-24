@@ -28,8 +28,28 @@ data JavaScriptMessage
   deriving anyclass (Binary)
 
 data StartFlags = StartFlags
-  { initial_url :: Utf8
+  { initial_url :: Location
   } deriving stock (Generic, Show)
+    deriving anyclass (Binary)
+
+data Location = Location
+  { protocol :: Utf8
+  -- ^ A string containing the protocol scheme of the URL, including
+  -- the final ':'
+  , hostname :: Utf8
+  -- ^ A string containing the domain of the URL.
+  , port :: Utf8
+  -- ^ A string containing the port number of the URL.
+  , pathname :: Utf8
+  -- ^ A string containing an initial '/' followed by the path of the
+  -- URL, not including the query string or fragment.
+  , search :: Utf8
+  -- ^ A string containing a '?' followed by the parameters or
+  -- "querystring" of the URL
+  , hash :: Utf8
+  -- ^ A string containing a '#' followed by the fragment identifier
+  -- of the URL.
+  } deriving stock (Show, Eq, Generic)
     deriving anyclass (Binary)
 
 -- | Strict Lambda calculus with arbitrary side-effects, meant to be
