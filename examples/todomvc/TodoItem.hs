@@ -71,7 +71,7 @@ html cfg = li_ do
     dynValue valueDyn
     on @"input" $ eval . InputAction cfg
     on @"keydown" $ eval . KeydownAction cfg
-    on @"blur" $ const $ eval (CommitAction cfg)
+    on @"blur" $ eval (CommitAction cfg)
 
 emptyTodoItemState :: TodoItemState
 emptyTodoItemState = TodoItemState "" False Nothing

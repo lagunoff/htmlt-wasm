@@ -192,6 +192,10 @@ withBuilder builder content = do
 attachToBody :: Html a -> JSM a
 attachToBody = attachHtml (Id "document" `Dot` "body")
 
+blank :: Applicative m => m ()
+blank = pure ()
+{-# INLINE blank #-}
+
 deriving newtype instance Functor m => Functor (HtmlT m)
 deriving newtype instance Monad m => Applicative (HtmlT m)
 deriving newtype instance Monad m => Monad (HtmlT m)

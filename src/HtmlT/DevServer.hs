@@ -23,6 +23,7 @@ import Network.Wai.Handler.WebSockets
 import Network.WebSockets
 import Network.Wai.Application.Static
 import System.IO
+import System.Environment
 
 import "this" HtmlT.Base
 import "this" HtmlT.JSM
@@ -58,7 +59,7 @@ runDebug settings devCfg = do
         useCurrentApp req resp = do
           RunningApp{devserver_config, server_app} <- readIORef devInst.app_state_ref
           withStaticApp devserver_config.docroots server_app req resp
-      void $ forkIO $ tryPort settings $
+      forkIfRepl $ tryPort settings $
         devserverMiddleware devInst useCurrentApp
     Just store -> do
       oldInst <- readStore store
@@ -84,6 +85,9 @@ runDebug settings devCfg = do
     withStaticApp (docroot:docroots) next =
       staticApp (defaultFileServerSettings docroot)
         {ss404Handler = Just (withStaticApp docroots next)}
+    forkIfRepl action = do
+      isRepl <- (== "<interactive>") <$> getProgName
+      if isRepl then void (forkIO action) else action
 
 runDebugPort :: Typeable a => Warp.Port -> DevServerConfig a -> IO ()
 runDebugPort port devCfg =
@@ -110,11 +114,14 @@ devserverMiddleware opts next req resp =
       RunningApp{devserver_config} <- readIORef opts.app_state_ref
       resp $ responseLBS status200
         [(hContentType, "text/html; charset=utf-8")] $
-        devserver_config.html_template (BSL.fromStrict origin)
-    inferOrigin req = WAI.requestHeaders req
-      & List.lookup "Host"
-      & fromMaybe "localhost"
-      & ((if WAI.isSecure req then "wss://" else "ws://") <>)
+        devserver_config.html_template origin
+
+inferOrigin :: WAI.Request -> BSL.ByteString
+inferOrigin req = WAI.requestHeaders req
+  & List.lookup "Host"
+  & fromMaybe "localhost"
+  & ((if WAI.isSecure req then "wss://" else "ws://") <>)
+  & BSL.fromStrict
 
 defaultHtmlTemplate :: BSL.ByteString -> BSL.ByteString
 defaultHtmlTemplate origin =

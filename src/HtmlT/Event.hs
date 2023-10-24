@@ -256,6 +256,66 @@ newNamespace = reactive \e s0 ->
   in
     (namespace, s1 {finalizers})
 
+-- | Alternative version if 'fmap' where given function will only be
+-- called once every time 'Dynamic a' value changes, whereas in 'fmap'
+-- it would be called once for each subscription per change event. As
+-- a general guideline, if the function @f! is inexpensive, choose
+-- @fmap f@. Otherwise, consider using @mapDyn f@.
+mapDyn
+  :: (a -> b)
+  -> Dynamic a
+  -> JSM (Dynamic b)
+mapDyn fun adyn = do
+  initialA <- liftIO $ dynamic_read adyn
+  latestA <- liftIO $ newIORef initialA
+  latestB <- liftIO $ newIORef (fun initialA)
+  eventId <- state nextQueueId
+  let
+    updates = Event (reactive_ . unsafeSubscribe (EventId eventId))
+    fire = defer eventId do
+      newB <- liftIO $ fun <$> readIORef latestA
+      liftIO $ writeIORef latestB newB
+      unsafeTrigger (EventId eventId) newB
+  dynamic_updates adyn `subscribe` \newA -> do
+    liftIO $ writeIORef latestA newA
+    defer eventId fire
+  return $ Dynamic (readIORef latestB) updates
+
+-- | Takes a list of Dynamics and a function to generate the
+-- output. The positions of elements in the list of [Any] received by
+-- the function always correspond to the positions of [Dynamic Any]
+-- from which these values were generated. The Dynamic created by this
+-- function will fire at most once per transaction, and only if any of
+-- the input Dynamics change their values.
+unsafeMapDynN
+  :: ([Any] -> IO a)
+  -- ^ Construct the output value, from list of input values from
+  -- corresponding positions of given Dynamics
+  -> [Dynamic Any]
+  -- ^ List of input Dynamics
+  -> JSM (Dynamic a)
+unsafeMapDynN fun dyns = do
+  -- TODO: Try if list of IORefs is better than IORef of list
+  initialInputs <- liftIO $ mapM (.dynamic_read) dyns
+  initialOutput <- liftIO $ fun initialInputs
+  latestInputsRef <- liftIO $ newIORef initialInputs
+  latestOutputRef <- liftIO $ newIORef initialOutput
+  eventId <- state nextQueueId
+  let
+    fire = defer eventId do
+      newOutput <- liftIO $ fun =<< readIORef latestInputsRef
+      liftIO $ writeIORef latestOutputRef newOutput
+      unsafeTrigger (EventId eventId) newOutput
+    updates = Event (reactive_ . unsafeSubscribe (EventId eventId))
+    updateList _ _ [] = []
+    updateList 0 a (_:xs) = a:xs
+    updateList n a (x:xs) = x : updateList (pred n) a xs
+  forM_ (zip [0..] dyns) \(i::Int, adyn) -> do
+    adyn.dynamic_updates `subscribe` \newVal -> do
+      liftIO $ modifyIORef latestInputsRef $ updateList i newVal
+      defer eventId fire
+  return $ Dynamic (readIORef latestOutputRef) updates
+
 -- | Run a reactive transaction.
 dynStep :: JSM a -> JSM a
 dynStep act = loop0 act where
