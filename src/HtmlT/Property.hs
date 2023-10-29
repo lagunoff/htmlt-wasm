@@ -347,7 +347,7 @@ class_ = prop "className"
 {-# INLINE class_ #-}
 
 data_ :: Utf8 -> Utf8 -> Html ()
-data_ k v = prop @Utf8 ("data-" <> k) v
+data_ k v = attr ("data-" <> k) v
 {-# INLINE data_ #-}
 
 role_ :: Utf8 -> Html ()
