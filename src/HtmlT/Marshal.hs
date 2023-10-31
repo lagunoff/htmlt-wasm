@@ -37,6 +37,9 @@ instance ToJSVal a => ToJSVal (Maybe a) where toJSVal = maybe JNull toJSVal
 
 instance (ToJSVal a, ToJSVal b) => ToJSVal (a, b) where
   toJSVal (a, b) = toJSVal [toJSVal a, toJSVal b]
+
+instance (ToJSVal a, ToJSVal b, ToJSVal c) => ToJSVal (a, b, c) where
+  toJSVal (a, b, c) = toJSVal [toJSVal a, toJSVal b, toJSVal c]
 --------------------------------------------------------------------------------
 
 class FromJSVal a where
@@ -78,7 +81,12 @@ instance FromJSVal a => FromJSVal (Maybe a) where
 
 instance (FromJSVal a, FromJSVal b) => FromJSVal (a, b) where
   fromJSVal j = fromJSVal j >>= \case
-    Just [a, b] -> (,) <$> fromJSVal a <*> fromJSVal b
+    Just (a:b:_) -> (,) <$> fromJSVal a <*> fromJSVal b
+    _ -> Nothing
+
+instance (FromJSVal a, FromJSVal b, FromJSVal c) => FromJSVal (a, b, c) where
+  fromJSVal j = fromJSVal j >>= \case
+    Just (a:b:c:_) -> (,,) <$> fromJSVal a <*> fromJSVal b <*> fromJSVal c
     _ -> Nothing
 --------------------------------------------------------------------------------
 

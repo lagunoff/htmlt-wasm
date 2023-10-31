@@ -1,16 +1,18 @@
 module HtmlT.Event where
 
+import Control.Applicative
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State
+import Data.IORef
+import Data.List qualified as List
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Data.List qualified as List
-import Data.IORef
 import Data.Maybe
 import Data.Set qualified as Set
-import Unsafe.Coerce
+import Data.Tuple
 import GHC.Exts
+import Unsafe.Coerce
 
 import "this" HtmlT.JSM
 
@@ -315,6 +317,19 @@ unsafeMapDynN fun dyns = do
       liftIO $ modifyIORef latestInputsRef $ updateList i newVal
       defer eventId fire
   return $ Dynamic (readIORef latestOutputRef) updates
+
+type Lens' s a = forall f. Functor f => (a -> f a) -> s -> f s
+
+-- | Apply a lens to the value inside 'DynRef'
+lensMap :: forall s a. Lens' s a -> DynRef s -> DynRef a
+lensMap l (DynRef sdyn (Modifier smod)) =
+  DynRef adyn (Modifier amod)
+    where
+      adyn = Dynamic
+        (fmap (getConst . l Const) $ dynamic_read sdyn)
+        (fmap (getConst . l Const) $ dynamic_updates sdyn)
+      amod :: forall r. Bool -> (a -> (a, r)) -> JSM r
+      amod u f = smod u $ swap . l (swap . f)
 
 -- | Run a reactive transaction.
 dynStep :: JSM a -> JSM a

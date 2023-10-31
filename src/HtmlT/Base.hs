@@ -1,6 +1,7 @@
 module HtmlT.Base where
 
 import Control.Exception
+import Control.Monad
 import Control.Monad.State
 import Data.IORef
 import Data.Map qualified as Map
@@ -52,6 +53,11 @@ queueIfAlive varId e = modify \s ->
         then e : s.evaluation_queue else s.evaluation_queue
   in
     s {evaluation_queue}
+
+flushQueue :: JSM ()
+flushQueue = do
+  queue <- state \s -> (s.evaluation_queue, s {evaluation_queue = []})
+  void $ evalExp $ RevSeq queue
 
 data WasmInstance = WasmInstance
   { continuations_ref :: IORef [JValue -> JSM Any]
