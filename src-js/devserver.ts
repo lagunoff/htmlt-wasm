@@ -5,6 +5,12 @@ import { HaskellMessage, JavaScriptMessage, JavaScriptMessageTag, HaskellMessage
 export async function devClient(devSocketUri: string) {
   const websocket = new WebSocket(devSocketUri);
 
+  const sendToHaskell = async (jsMsg: JavaScriptMessage, argScope: List<IArguments>) => {
+    websocket.send(p.javascriptMessage.encode(jsMsg));
+    const haskMsg = await awaitWebsocketMessage();
+    await haskellApp(haskMsg, argScope, sendToHaskell);
+  };
+
   websocket.onopen = (_event) => {
     const binaryData = p.javascriptMessage.encode(p.mkStartMessage());
     websocket.send(binaryData);
@@ -13,8 +19,8 @@ export async function devClient(devSocketUri: string) {
   // Event handler for receiving messages from the server
   websocket.onmessage = async (event) => {
     const binaryDataReceived = await convertBlobToUint8Array(event.data);
-    const upCommand = p.haskellMessage.decode(binaryDataReceived);
-    haskellApp(upCommand, (downCmd: JavaScriptMessage) => websocket.send(p.javascriptMessage.encode(downCmd)));
+    const haskMsg = p.haskellMessage.decode(binaryDataReceived);
+    haskellApp(haskMsg, null, sendToHaskell);
   };
 
   // Event handler for errors
@@ -26,14 +32,34 @@ export async function devClient(devSocketUri: string) {
   websocket.onclose = (event) => {
     console.log("WebSocket connection closed:", event);
   };
+
+  function awaitWebsocketMessage(): Promise<HaskellMessage> {
+    return new Promise((resolve, reject) => {
+      const prevCallback = websocket.onmessage;
+      websocket.onmessage = async (event) => {
+        websocket.onmessage = prevCallback;
+        try {
+          const binaryDataReceived = await convertBlobToUint8Array(event.data);
+          const haskMsg = p.haskellMessage.decode(binaryDataReceived);
+          resolve(haskMsg);
+        } catch (e) { reject(e) }
+      };
+    })
+  }
 }
 
-export async function haskellApp(upCmd: HaskellMessage, send: (downCmd: JavaScriptMessage) => void) {
-  switch (upCmd.tag) {
+export type HaskellAsyncCallback = (jsMsg: JavaScriptMessage, argScope: List<IArguments>) => Promise<void>;
+
+export async function haskellApp (
+  haskMsg: HaskellMessage,
+  argScope: List<IArguments>,
+  send: HaskellAsyncCallback
+): Promise<void> {
+  switch (haskMsg.tag) {
     case HaskellMessageTag.EvalExpr: {
-      const result = p.evalExpr(globalContext, null, send, upCmd.expr);
+      const result = p.evalExpr(globalContext, argScope, jsSend, haskMsg.expr);
       const jvalue = p.unknownToJValue(result);
-      return send({ tag: JavaScriptMessageTag.Return, 0: jvalue });
+      return send({ tag: JavaScriptMessageTag.Return, 0: jvalue }, argScope);
     }
     case HaskellMessageTag.HotReload: {
       window.location.reload();
@@ -43,7 +69,16 @@ export async function haskellApp(upCmd: HaskellMessage, send: (downCmd: JavaScri
       return;
     }
   }
-  absurd(upCmd);
+  absurd(haskMsg);
+
+  function jsSend(arg: unknown, callbackId: number, argScope: List<IArguments>) {
+    const jsMsg: JavaScriptMessage = {
+      tag: JavaScriptMessageTag.ExecCallback,
+      callbackId,
+      arg: p.unknownToJValue(arg),
+    };
+    return send(jsMsg, argScope);
+  };
 }
 
 const globalContext: List<Bindings> = [window as any, null]

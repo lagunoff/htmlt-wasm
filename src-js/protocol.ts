@@ -23,9 +23,9 @@ export function cdr<T>(pair: Cons<T>): List<T> {
   return pair[1];
 }
 
-export type HaskellCallback = (jsmsg: JavaScriptMessage) => void;
+export type HaskellCallback = (arg: unknown, callbackId: number, argScope: List<IArguments>) => void;
 
-export function evalExpr(ctx: List<Bindings>, argCtx: List<IArguments>, hscb: HaskellCallback, exp: Expr): unknown {
+export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, hscb: HaskellCallback, exp: Expr): unknown {
   switch(exp.tag) {
     case ExprTag.Null: {
        return null;
@@ -40,48 +40,48 @@ export function evalExpr(ctx: List<Bindings>, argCtx: List<IArguments>, hscb: Ha
       return exp[0];
     }
     case ExprTag.Arr: {
-      return exp[0].map(evalExpr.bind(undefined, ctx, argCtx, hscb));
+      return exp[0].map(evalExpr.bind(undefined, idenScope, argScope, hscb));
     }
     case ExprTag.Obj: {
-      return Object.fromEntries(exp[0].map(([k, e]) => [k, evalExpr(ctx, argCtx, hscb, e)]));
+      return Object.fromEntries(exp[0].map(([k, e]) => [k, evalExpr(idenScope, argScope, hscb, e)]));
     }
     case ExprTag.Dot: {
-      const lhs = evalExpr(ctx, argCtx, hscb, exp[0]) as any;
+      const lhs = evalExpr(idenScope, argScope, hscb, exp[0]) as any;
       return lhs[exp[1]];
     }
     case ExprTag.AssignProp: {
-      const rhs = evalExpr(ctx, argCtx, hscb, exp[2]);
-      const obj = evalExpr(ctx, argCtx, hscb, exp[0]) as any;
+      const rhs = evalExpr(idenScope, argScope, hscb, exp[2]);
+      const obj = evalExpr(idenScope, argScope, hscb, exp[0]) as any;
       obj[exp[1]] = rhs;
       return rhs;
     }
     case ExprTag.Ix: {
-      const rhs: any = evalExpr(ctx, argCtx, hscb, exp.exp);
+      const rhs: any = evalExpr(idenScope, argScope, hscb, exp.exp);
       return rhs[exp.ix];
     }
     case ExprTag.Add: {
-      const lhs = evalExpr(ctx, argCtx, hscb, exp[0]) as number;
-      const rhs = evalExpr(ctx, argCtx, hscb, exp[1]) as number;
+      const lhs = evalExpr(idenScope, argScope, hscb, exp[0]) as number;
+      const rhs = evalExpr(idenScope, argScope, hscb, exp[1]) as number;
       return lhs + rhs;
     }
     case ExprTag.Subtract: {
-      const lhs = evalExpr(ctx, argCtx, hscb, exp[0]) as number;
-      const rhs = evalExpr(ctx, argCtx, hscb, exp[1]) as number;
+      const lhs = evalExpr(idenScope, argScope, hscb, exp[0]) as number;
+      const rhs = evalExpr(idenScope, argScope, hscb, exp[1]) as number;
       return lhs - rhs;
     }
     case ExprTag.Multiply: {
-      const lhs = evalExpr(ctx, argCtx, hscb, exp[0]) as number;
-      const rhs = evalExpr(ctx, argCtx, hscb, exp[1]) as number;
+      const lhs = evalExpr(idenScope, argScope, hscb, exp[0]) as number;
+      const rhs = evalExpr(idenScope, argScope, hscb, exp[1]) as number;
       return lhs * rhs;
     }
     case ExprTag.Divide: {
-      const lhs = evalExpr(ctx, argCtx, hscb, exp[0]) as number;
-      const rhs = evalExpr(ctx, argCtx, hscb, exp[1]) as number;
+      const lhs = evalExpr(idenScope, argScope, hscb, exp[0]) as number;
+      const rhs = evalExpr(idenScope, argScope, hscb, exp[1]) as number;
       return lhs / rhs;
     }
     case ExprTag.Id: {
       const ident = exp[0];
-      for (let iter = ctx; iter; iter = cdr(iter)) {
+      for (let iter = idenScope; iter; iter = cdr(iter)) {
         const bindings = car(iter);
         if (ident in bindings) {
           // Found bound value
@@ -92,33 +92,33 @@ export function evalExpr(ctx: List<Bindings>, argCtx: List<IArguments>, hscb: Ha
     }
     case ExprTag.Lam: {
       return function() {
-        return evalExpr(ctx, Cons(arguments, argCtx), hscb, exp.body);
+        return evalExpr(idenScope, Cons(arguments, argScope), hscb, exp.body);
       };
     }
     case ExprTag.Arg: {
-      let iter = argCtx;
+      let iter = argScope;
       let j = 0;
       while (iter) {
         if (j == exp.scopeIx) {
           const iarguments = car(iter);
-          return iarguments[j];
+          return iarguments[exp.argIx];
         }
         iter = cdr(iter);
         j++;
       }
-      throw new Error('Argument scope out of a rabge: ' + exp.scopeIx);
+      throw new Error('Argument scope out of a range: ' + exp.scopeIx);
     }
     case ExprTag.Apply: {
-      const lhs = evalExpr(ctx, argCtx, hscb, exp[0]) as Function;
-      return lhs.apply(undefined, exp[1].map(evalExpr.bind(undefined, ctx, argCtx, hscb)));
+      const lhs = evalExpr(idenScope, argScope, hscb, exp[0]) as Function;
+      return lhs.apply(undefined, exp[1].map(evalExpr.bind(undefined, idenScope, argScope, hscb)));
     }
     case ExprTag.Call: {
-      const lhs = evalExpr(ctx, argCtx, hscb, exp[0]) as any;
+      const lhs = evalExpr(idenScope, argScope, hscb, exp[0]) as any;
       const fn = lhs[exp[1]];
-      return fn.apply(lhs, exp[2].map(evalExpr.bind(undefined, ctx, argCtx, hscb)));
+      return fn.apply(lhs, exp[2].map(evalExpr.bind(undefined, idenScope, argScope, hscb)));
     }
     case ExprTag.AssignVar: {
-      const rhs = evalExpr(ctx, argCtx, hscb, exp.rhs);
+      const rhs = evalExpr(idenScope, argScope, hscb, exp.rhs);
       varStorage.set(exp.lhs, rhs);
       return rhs;
     }
@@ -129,14 +129,14 @@ export function evalExpr(ctx: List<Bindings>, argCtx: List<IArguments>, hscb: Ha
       return varStorage.get(exp.varId);
     }
     case ExprTag.InsertNode: {
-      const parent = evalExpr(ctx, argCtx, hscb, exp.parent) as Element|Comment;
-      const child = evalExpr(ctx, argCtx, hscb, exp.child) as Node;
+      const parent = evalExpr(idenScope, argScope, hscb, exp.parent) as Element|Comment;
+      const child = evalExpr(idenScope, argScope, hscb, exp.child) as Node;
       domBuilder.insertIntoBuilder(parent, child);
       return null;
     }
     case ExprTag.WithBuilder: {
-      const builder = evalExpr(ctx, argCtx, hscb, exp.builder) as Element|Comment;
-      const builderContent = evalExpr(ctx, argCtx, hscb, exp.builderContent) as Function;
+      const builder = evalExpr(idenScope, argScope, hscb, exp.builder) as Element|Comment;
+      const builderContent = evalExpr(idenScope, argScope, hscb, exp.builderContent) as Function;
       builderContent(builder);
       return builder;
     }
@@ -147,53 +147,49 @@ export function evalExpr(ctx: List<Bindings>, argCtx: List<IArguments>, hscb: Ha
       return document.createTextNode(exp.content);
     }
     case ExprTag.ElementProp: {
-      const parent = evalExpr(ctx, argCtx, hscb, exp.node) as Element|Comment;
-      const propValue = evalExpr(ctx, argCtx, hscb, exp.propValue);
+      const parent = evalExpr(idenScope, argScope, hscb, exp.node) as Element|Comment;
+      const propValue = evalExpr(idenScope, argScope, hscb, exp.propValue);
       domBuilder.assignProperty(parent, exp.propName, propValue);
       return null;
     }
     case ExprTag.ElementAttr: {
-      const parent = evalExpr(ctx, argCtx, hscb, exp.node) as Element|Comment;
+      const parent = evalExpr(idenScope, argScope, hscb, exp.node) as Element|Comment;
       domBuilder.assignAttribute(parent, exp.attrName, exp.attrValue);
       return null;
     }
     case ExprTag.AddEventListener: {
-      const parent = evalExpr(ctx, argCtx, hscb, exp.node) as Element|Comment;
-      const listener = evalExpr(ctx, argCtx, hscb, exp.listener) as EventListener;
+      const parent = evalExpr(idenScope, argScope, hscb, exp.node) as Element|Comment;
+      const listener = evalExpr(idenScope, argScope, hscb, exp.listener) as EventListener;
       domBuilder.addEventListener(parent, exp.eventName, listener);
       return null;
     }
     case ExprTag.ToggleClass: {
-      const parent = evalExpr(ctx, argCtx, hscb, exp.node) as Element|Comment;
+      const parent = evalExpr(idenScope, argScope, hscb, exp.node) as Element|Comment;
       domBuilder.toggleClass(parent, exp.className, Boolean(exp.enable));
       return null;
     }
     case ExprTag.AssignText: {
-      const node = evalExpr(ctx, argCtx, hscb, exp.node) as Text;
+      const node = evalExpr(idenScope, argScope, hscb, exp.node) as Text;
       node.textContent = exp.content;
       return null;
     }
     case ExprTag.InsertBoundary: {
-      const parent = evalExpr(ctx, argCtx, hscb, exp.parent) as Element|Comment;
+      const parent = evalExpr(idenScope, argScope, hscb, exp.parent) as Element|Comment;
       return domBuilder.insertBoundary(parent);
     }
     case ExprTag.ClearBoundary: {
-      const boundary = evalExpr(ctx, argCtx, hscb, exp.boundary) as Comment;
+      const boundary = evalExpr(idenScope, argScope, hscb, exp.boundary) as Comment;
       return domBuilder.clearBoundary(boundary, Boolean(exp.detach));
     }
     case ExprTag.RevSeq: {
-      return exp.exprs.reduceRight<unknown>((_, e) => evalExpr(ctx, argCtx, hscb, e), null);
+      return exp.exprs.reduceRight<unknown>((_, e) => evalExpr(idenScope, argScope, hscb, e), null);
     }
     case ExprTag.Eval: {
       return eval(exp.rawJavaScript);
     }
     case ExprTag.ExecCallback: {
-      const arg = evalExpr(ctx, argCtx, hscb, exp.arg);
-      return hscb({
-        tag: JavaScriptMessageTag.ExecCallback,
-        arg: unknownToJValue(arg),
-        callbackId: exp.callbackId
-      });
+      const arg = evalExpr(idenScope, argScope, hscb, exp.arg);
+      return hscb(arg, exp.callbackId, argScope);
     }
     case ExprTag.UncaughtException: {
       throw new Error(exp.message);
