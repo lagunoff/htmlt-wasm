@@ -98,7 +98,7 @@ yarn run webpack --mode production
 # ✅ TODOs
 
  - [ ] Gather data for the WebAssmebly Backend bug report, make an isolated counterexample
- - [ ] Add Benchmarks
+ - [x] Add Benchmarks
  - [ ] JSM currently has builtin reactive capabilities, decouple reactive stuff into separate `ReactiveT` transformer
  - [ ] Improve messaging protocol (make a version that is readable JSON and another compact and fast binary version)
  - [ ] Review, cleanup the code and write documentation

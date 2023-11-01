@@ -143,7 +143,7 @@ executable todomvc
 benchmark benchmark_01
   import: common-config
   type: exitcode-stdio-1.0
-  main-is: 01.hs
+  main-is: benchmark_01.hs
   ghc-options: -O3 -funbox-strict-fields
   hs-source-dirs: ./benchmarks ./examples/todomvc ./src
   other-modules:
