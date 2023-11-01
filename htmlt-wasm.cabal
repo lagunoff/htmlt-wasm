@@ -54,6 +54,43 @@ common common-config
     UndecidableInstances
     ViewPatterns
 
+library
+  import: common-config
+  hs-source-dirs: src
+  exposed-modules:
+    HtmlT
+    HtmlT.Base
+    HtmlT.DOM
+    HtmlT.Element
+    HtmlT.Event
+    HtmlT.Html
+    HtmlT.JSM
+    HtmlT.Marshal
+    HtmlT.Property
+    HtmlT.Protocol
+    HtmlT.Protocol.JNumber
+    HtmlT.Protocol.Utf8
+    HtmlT.Reactor
+  build-depends:
+    base,
+    binary,
+    bytestring,
+    containers,
+    exceptions,
+    mtl,
+    text,
+  if !arch(wasm32)
+    exposed-modules:
+      HtmlT.DevServer
+    build-depends:
+      foreign-store,
+      http-types,
+      wai,
+      wai-app-static,
+      wai-websockets,
+      warp,
+      websockets,
+ 
 executable voting
   import: common-config
   if arch(wasm32)
@@ -103,10 +140,13 @@ executable todomvc
     mtl,
     text,
 
-library
+benchmark benchmark_01
   import: common-config
-  hs-source-dirs: src
-  exposed-modules:
+  type: exitcode-stdio-1.0
+  main-is: 01.hs
+  ghc-options: -O3 -funbox-strict-fields
+  hs-source-dirs: ./benchmarks ./examples/todomvc ./src
+  other-modules:
     HtmlT
     HtmlT.Base
     HtmlT.DOM
@@ -120,23 +160,14 @@ library
     HtmlT.Protocol.JNumber
     HtmlT.Protocol.Utf8
     HtmlT.Reactor
+    TodoItem
+    TodoList
   build-depends:
     base,
     binary,
     bytestring,
     containers,
     exceptions,
+    gauge,
     mtl,
     text,
-  if !arch(wasm32)
-    exposed-modules:
-      HtmlT.DevServer
-    build-depends:
-      foreign-store,
-      http-types,
-      wai,
-      wai-app-static,
-      wai-websockets,
-      warp,
-      websockets,
- 

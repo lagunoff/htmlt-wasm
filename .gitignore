@@ -13,6 +13,7 @@
 /dist-newstyle/cache
 /dist-newstyle/packagedb
 /dist-newstyle/tmp
+/dist-newstyle/src
 /result
 /tmp
 /.envrc

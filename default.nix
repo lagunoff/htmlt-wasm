@@ -4,7 +4,7 @@
 }:
 
 let
-  inherit (pkgs.haskell.lib) doJailbreak;
+  inherit (pkgs.haskell.lib) doJailbreak doBenchmark;
 
   haskellPackages = pkgs.haskell.packages.ghcHEAD.override {
     overrides = self: super: {
@@ -17,7 +17,7 @@ let
         enableExecutableProfiling = false;
       } // args);
 
-      htmlt-wasm = self.callCabal2nix "htmlt-wasm" ./. {};
+      htmlt-wasm = doBenchmark (self.callCabal2nix "htmlt-wasm" ./. {});
 
       semigroupoids = doJailbreak super.semigroupoids;
     };
