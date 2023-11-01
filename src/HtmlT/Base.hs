@@ -15,49 +15,6 @@ import "this" HtmlT.JSM
 import "this" HtmlT.Protocol
 import "this" HtmlT.Protocol.Utf8 qualified as Utf8
 
-newVar :: JSM VarId
-newVar = reactive \e s0 ->
-  let
-    (newQueueId, s1) = nextQueueId s0
-    newVarId = VarId (unQueueId newQueueId)
-    var_storage = Set.insert newVarId s1.var_storage
-    (_, s2) = installFinalizer (CustomFinalizer (freeVar newVarId)) e s1
-  in
-    (newVarId, s2 {var_storage})
-
-freeVar :: VarId -> JSM ()
-freeVar varId = do
-  modify \s -> s { var_storage = Set.delete varId s.var_storage}
-  queueExp $ FreeVar varId
-
-newCallbackEvent :: (JValue -> JSM ()) -> JSM CallbackId
-newCallbackEvent k = reactive \e s0 ->
-  let
-    (queueId, s1) = nextQueueId s0
-    s2 = unsafeSubscribe (EventId queueId) k e s1
-  in
-    (CallbackId (unQueueId queueId), s2)
-
-evalExp :: Expr -> JSM JValue
-evalExp e = JSM \_ s -> return (s, Cmd e)
-
-queueExp :: Expr -> JSM ()
-queueExp e = modify \s ->
-  s {evaluation_queue = e : s.evaluation_queue}
-
-queueIfAlive :: VarId -> Expr -> JSM ()
-queueIfAlive varId e = modify \s ->
-  let
-    evaluation_queue =
-      if Set.member varId s.var_storage
-        then e : s.evaluation_queue else s.evaluation_queue
-  in
-    s {evaluation_queue}
-
-flushQueue :: JSM ()
-flushQueue = do
-  queue <- state \s -> (s.evaluation_queue, s {evaluation_queue = []})
-  void $ evalExp $ RevSeq queue
 
 data WasmInstance = WasmInstance
   { continuations_ref :: IORef [JValue -> JSM Any]
