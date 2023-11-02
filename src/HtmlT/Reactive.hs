@@ -14,27 +14,32 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Tuple
 import GHC.Exts
+import GHC.Int
 import GHC.Generics
 import Unsafe.Coerce
 
-import "this" HtmlT.JS (JS(..), QueueId)
-
 newtype ReactiveT m a = ReactiveT
-  {unReactiveT :: ReactiveScope -> ReactiveState -> m (ReactiveState, a)}
+  {unReactiveT :: ReactiveScope -> ReactiveState m -> m (ReactiveState m, a)}
 
 newtype ReactiveScope = ReactiveScope {unReactiveScope :: QueueId}
   deriving newtype (Eq, Ord)
 
-data ReactiveState = ReactiveState
-  { subscriptions :: Map EventId [(SubscriptionId, Any -> RJS ())]
-  , finalizers :: Map ReactiveScope (Map FinalizerKey FinalizerValue)
+data ReactiveState m = ReactiveState
+  { subscriptions :: Map EventId [(SubscriptionId, Any -> ReactiveT m ())]
+  , finalizers :: Map ReactiveScope (Map FinalizerKey (FinalizerValue m))
   , id_supply :: QueueId
-  , transaction_queue :: Map QueueId (RJS ())
+  , transaction_queue :: Map QueueId (ReactiveT m ())
   } deriving (Generic)
 
-type RJS = ReactiveT JS
+emptyReactiveState :: ReactiveState m
+emptyReactiveState = ReactiveState
+  { subscriptions = Map.empty
+  , finalizers = Map.empty
+  , id_supply = 0
+  , transaction_queue = Map.empty
+  }
 
-newtype Event a = Event { unEvent :: (a -> RJS ()) -> RJS () }
+newtype Event m a = Event { unEvent :: (a -> ReactiveT m ()) -> ReactiveT m () }
 
 newtype EventId = EventId { unEventId :: QueueId }
   deriving newtype (Eq, Ord, Show, Num, Enum)
@@ -47,19 +52,19 @@ data FinalizerKey
   | FinalizerCustomId QueueId
   deriving (Eq, Ord, Generic)
 
-data FinalizerValue
+data FinalizerValue m
   = SubscriptionSet (Set SubscriptionId)
-  | CustomFinalizer (RJS ())
+  | CustomFinalizer (ReactiveT m ())
   | NamespaceFinalizer ReactiveScope
   | ParentNamespace ReactiveScope
 
 -- | Contains a value that is subject to change over time. Provides
 -- operations for reading the current value ('readDyn') and
 -- subscribing to its future changes ('updates').
-data Dynamic a = Dynamic
+data Dynamic m a = Dynamic
   { dynamic_read :: IO a
   -- ^ Read current value. Use public alias 'readDyn' instead
-  , dynamic_updates :: Event a
+  , dynamic_updates :: Event m a
   -- ^ Event that fires when the value changes. Use public alias
   -- 'updates' instead
   }
@@ -67,17 +72,17 @@ data Dynamic a = Dynamic
 -- | A mutable variable that allows for subscription to new values. It
 -- shares a similar API to 'IORef' (see 'readRef', 'writeRef',
 -- 'modifyRef')
-data DynRef a = DynRef
-  { dynref_value :: Dynamic a
+data DynRef m a = DynRef
+  { dynref_value :: Dynamic m a
   -- ^ Holds the current value and an event that notifies about value
   -- modifications
-  , dynref_modifier :: Modifier a
+  , dynref_modifier :: Modifier m a
   -- ^ Funtion to update the value
   }
 
 -- | Function that updates the value inside the 'DynRef'
-newtype Modifier a = Modifier
-  { unModifier :: forall r. Bool -> (a -> (a, r)) -> RJS r
+newtype Modifier m a = Modifier
+  { unModifier :: forall r. Bool -> (a -> (a, r)) -> ReactiveT m r
   -- ^ 'Bool' argument controls whether the modification should
   -- trigger an update event. It's possible to update the 'DynRef'
   -- without notifying the subscribers for optimization purposes, in
@@ -85,7 +90,11 @@ newtype Modifier a = Modifier
   -- the DOM
   }
 
-unsafeSubscribe :: EventId -> (a -> RJS ()) -> ReactiveScope -> ReactiveState -> ReactiveState
+-- execRJS :: ReactiveScope -> (ReactiveState, JSState) -> ReactiveT m a -> IO ((ReactiveState, JSState), JSResult a)
+-- execRJS rs rsjs act = do
+--   (jsst, res) <- unJS $ unReactiveT act rs
+
+unsafeSubscribe :: EventId -> (a -> ReactiveT m ()) -> ReactiveScope -> ReactiveState m -> ReactiveState m
 unsafeSubscribe eventId k e s0 =
   let
     (subId, s1) = nextQueueId1 s0
@@ -103,17 +112,20 @@ unsafeSubscribe eventId k e s0 =
   in
     s1 {subscriptions, finalizers}
 
-unsafeTrigger :: EventId -> a -> RJS ()
+unsafeTrigger :: EventId -> a -> ReactiveT m ()
 unsafeTrigger eventId a = defer (unEventId eventId) do
   callbacks <- gets $ fromMaybe [] .
     Map.lookup eventId . (.subscriptions)
   forM_ callbacks $ ($ unsafeCoerce @_ @Any a) . snd
 
-nextQueueId1 :: ReactiveState -> (QueueId, ReactiveState)
+newtype QueueId = QueueId { unQueueId :: Int64 }
+  deriving newtype (Eq, Ord, Show, Num, Enum)
+
+nextQueueId1 :: ReactiveState m -> (QueueId, ReactiveState m)
 nextQueueId1 s =
   (s.id_supply, s {id_supply = succ s.id_supply})
 
-installFinalizer :: FinalizerValue -> ReactiveScope -> ReactiveState -> (FinalizerKey, ReactiveState)
+installFinalizer :: FinalizerValue m -> ReactiveScope -> ReactiveState m -> (FinalizerKey, ReactiveState m)
 installFinalizer fin e s0 =
   let
     (finalizerId, s1) = nextQueueId1 s0
@@ -126,11 +138,11 @@ installFinalizer fin e s0 =
 -- | Defers a computation (typically an event firing) until the end of
 -- the current reactive transaction. This allows for the avoidance of
 -- double firing of events constructed from multiple other events.
-defer :: QueueId -> RJS () -> RJS ()
+defer :: QueueId -> ReactiveT m () -> ReactiveT m ()
 defer k act = modify \s ->
   s {transaction_queue = Map.insert k act s.transaction_queue}
 
-newEvent :: RJS (Event a, a -> RJS ())
+newEvent :: ReactiveT m (Event m a, a -> ReactiveT m ())
 newEvent = state \s0 ->
   let
     (eventId, s1) = nextQueueId1 s0
@@ -139,7 +151,7 @@ newEvent = state \s0 ->
   in
     ((event, trig), s1)
 
-newRef :: a -> RJS (DynRef a)
+newRef :: a -> ReactiveT m (DynRef m a)
 newRef initial = do
   ioRef <- liftIO $ newIORef initial
   (event, push) <- newEvent
@@ -156,11 +168,11 @@ newRef initial = do
     }
 
 -- | Create a Dynamic that never changes its value
-constDyn :: a -> Dynamic a
+constDyn :: a -> Dynamic m a
 constDyn a = Dynamic (pure a) never
 
 -- | Event that will never fire
-never :: Event a
+never :: Event m a
 never = Event \_ -> return ()
 -- | Write new value into a 'DynRef'
 --
@@ -168,7 +180,7 @@ never = Event \_ -> return ()
 -- > transactionWrite ref "New value"
 -- > readRef ref
 -- "New value"
-writeRef :: DynRef a -> a -> RJS ()
+writeRef :: DynRef m a -> a -> ReactiveT m ()
 writeRef ref a = modifyRef ref (const a)
 
 -- | Read the current value held by given 'DynRef'
@@ -176,7 +188,7 @@ writeRef ref a = modifyRef ref (const a)
 -- > ref <- newRef "Hello there!"
 -- > readRef ref
 -- "Hello there!"
-readRef :: MonadIO m => DynRef a -> m a
+readRef :: MonadIO m => DynRef m a -> m a
 readRef = readDyn . dynref_value
 
 -- | Update a 'DynRef' by applying given function to the current value
@@ -184,43 +196,43 @@ readRef = readDyn . dynref_value
 -- > ref <- newRef [1..3]
 -- > modifyRef ref $ fmap (*2)
 -- [2, 4, 6]
-modifyRef :: DynRef a -> (a -> a) -> RJS ()
+modifyRef :: DynRef m a -> (a -> a) -> ReactiveT m ()
 modifyRef (DynRef _ (Modifier mod)) f = mod True $ (,()) . f
 
 -- | Update a 'DynRef' with first field of the tuple and return back
 -- the second field. The name is intended to be similar to
 -- 'atomicModifyIORef' but there are no atomicity guarantees
 -- whatsoever
-atomicModifyRef :: DynRef a -> (a -> (a, r)) -> RJS r
+atomicModifyRef :: DynRef m a -> (a -> (a, r)) -> ReactiveT m r
 atomicModifyRef (DynRef _ (Modifier mod)) f = mod True f
 
 -- | Extract a 'Dynamic' out of 'DynRef'
-fromRef :: DynRef a -> Dynamic a
+fromRef :: DynRef m a -> Dynamic m a
 fromRef = dynref_value
 
 -- | Read the value held by a 'Dynamic'
-readDyn :: MonadIO m => Dynamic a -> m a
+readDyn :: MonadIO m => Dynamic m a -> m a
 readDyn = liftIO . dynamic_read
 
 -- | Extract the updates Event from a 'Dynamic'
-updates :: Dynamic a -> Event a
+updates :: Dynamic m a -> Event m a
 updates = dynamic_updates
 
 -- | Attach a listener to the event and return an action to detach the
 -- listener
-subscribe :: Event a -> (a -> RJS ()) -> RJS ()
+subscribe :: Event m a -> (a -> ReactiveT m ()) -> ReactiveT m ()
 subscribe (Event s) k = s k
 
 -- | Executes an action currently held inside the 'Dynamic' and every
 -- time the value changes.
-performDyn :: Dynamic (RJS ()) -> RJS ()
+performDyn :: Dynamic m (ReactiveT m ()) -> ReactiveT m ()
 performDyn d = do
   join $ liftIO $ dynamic_read d
   subscribe d.dynamic_updates id
 
 -- | Return a 'Dynamic' for which updates only fire when the value
 -- actually changes according to Eq instance
-holdUniqDyn :: Eq a => Dynamic a -> Dynamic a
+holdUniqDyn :: Eq a => Dynamic m a -> Dynamic m a
 holdUniqDyn = holdUniqDynBy (==)
 {-# INLINE holdUniqDyn #-}
 
@@ -229,7 +241,7 @@ holdUniqDyn = holdUniqDynBy (==)
 -- comparison for each subscription
 -- | Same as 'holdUniqDyn' but accepts arbitrary equality test
 -- function
-holdUniqDynBy :: (a -> a -> Bool) -> Dynamic a -> Dynamic a
+holdUniqDynBy :: (a -> a -> Bool) -> Dynamic m a -> Dynamic m a
 holdUniqDynBy equalFn Dynamic{..} = Dynamic dynamic_read
   (Event \k -> do
     old <- liftIO dynamic_read
@@ -239,11 +251,11 @@ holdUniqDynBy equalFn Dynamic{..} = Dynamic dynamic_read
       unless (old `equalFn` new) $ k new
   )
 
-type Subscriptions = Map EventId [(SubscriptionId, Any -> RJS ())]
+type Subscriptions m = Map EventId [(SubscriptionId, Any -> ReactiveT m ())]
 
-type Finalizers = Map ReactiveScope (Map FinalizerKey FinalizerValue)
+type Finalizers m = Map ReactiveScope (Map FinalizerKey (FinalizerValue m))
 
-finalizeReactiveScope :: ReactiveScope -> RJS ()
+finalizeReactiveScope :: ReactiveScope -> ReactiveT m ()
 finalizeReactiveScope ns = do
   removedList <- state \s ->
     let
@@ -268,7 +280,7 @@ finalizeReactiveScope ns = do
       Map.alter (fmap (Map.delete (FinalizerCustomId (unReactiveScope p)))) p s
     unlinkParentScope (_ : xs) !s = unlinkParentScope xs s
 
-    runCustomFinalizers :: [(FinalizerKey, FinalizerValue)] -> RJS ()
+    runCustomFinalizers :: [(FinalizerKey, FinalizerValue)] -> ReactiveT m ()
     runCustomFinalizers [] = return ()
     runCustomFinalizers ((_, CustomFinalizer w) : xs) = w *> runCustomFinalizers xs
     runCustomFinalizers ((_, NamespaceFinalizer n) : xs) =
@@ -280,7 +292,7 @@ finalizeReactiveScope ns = do
       | Set.member s ss = xs
       | otherwise = (s, c) : deleteSubs ss xs
 
-newReactiveScope :: RJS ReactiveScope
+newReactiveScope :: ReactiveT m ReactiveScope
 newReactiveScope = reactive \e s0 ->
   let
     (namespaceId, s1) = nextQueueId1 s0
@@ -300,8 +312,8 @@ newReactiveScope = reactive \e s0 ->
 -- @fmap f@. Otherwise, consider using @mapDyn f@.
 mapDyn
   :: (a -> b)
-  -> Dynamic a
-  -> RJS (Dynamic b)
+  -> Dynamic m a
+  -> ReactiveT m (Dynamic m b)
 mapDyn fun adyn = do
   initialA <- liftIO $ dynamic_read adyn
   latestA <- liftIO $ newIORef initialA
@@ -328,9 +340,9 @@ unsafeMapDynN
   :: ([Any] -> IO a)
   -- ^ Construct the output value, from list of input values from
   -- corresponding positions of given Dynamics
-  -> [Dynamic Any]
+  -> [Dynamic m Any]
   -- ^ List of input Dynamics
-  -> RJS (Dynamic a)
+  -> ReactiveT m (Dynamic m a)
 unsafeMapDynN fun dyns = do
   -- TODO: Try if list of IORefs is better than IORef of list
   initialInputs <- liftIO $ mapM (.dynamic_read) dyns
@@ -356,25 +368,25 @@ unsafeMapDynN fun dyns = do
 type Lens' s a = forall f. Functor f => (a -> f a) -> s -> f s
 
 -- | Apply a lens to the value inside 'DynRef'
-lensMap :: forall s a. Lens' s a -> DynRef s -> DynRef a
+lensMap :: forall s a m. Lens' s a -> DynRef m s -> DynRef m a
 lensMap l (DynRef sdyn (Modifier smod)) =
   DynRef adyn (Modifier amod)
     where
       adyn = Dynamic
         (fmap (getConst . l Const) $ dynamic_read sdyn)
         (fmap (getConst . l Const) $ dynamic_updates sdyn)
-      amod :: forall r. Bool -> (a -> (a, r)) -> RJS r
+      amod :: forall r. Bool -> (a -> (a, r)) -> ReactiveT m r
       amod u f = smod u $ swap . l (swap . f)
 
 -- | Run a reactive transaction.
-dynStep :: RJS a -> RJS a
+dynStep :: ReactiveT m a -> ReactiveT m a
 dynStep act = loop0 act where
-  loop0 :: RJS a -> RJS a
+  loop0 :: ReactiveT m a -> ReactiveT m a
   loop0 act = do
     r <- act
     loop1 =<< gets (.transaction_queue)
     return r
-  loop1 :: Map QueueId (RJS ()) -> RJS ()
+  loop1 :: Map QueueId (ReactiveT m ()) -> ReactiveT m ()
   loop1 q =
     case Map.minViewWithKey q of
       Nothing -> return ()
@@ -383,13 +395,13 @@ dynStep act = loop0 act where
         newAct
         loop1 =<< gets (.transaction_queue)
 
-instance Functor Event where
+instance Functor (Event m) where
   fmap f (Event s) = Event \k -> s . (. f) $ k
 
-instance Functor Dynamic where
+instance Functor (Dynamic m) where
   fmap f (Dynamic s u) = Dynamic (fmap f s) (fmap f u)
 
-instance Applicative Dynamic where
+instance Applicative (Dynamic m) where
   pure = constDyn
   (<*>) df da =
     let
@@ -409,12 +421,12 @@ instance Applicative Dynamic where
         , dynamic_updates = updatesEvent
         }
 
-class MonadReactive m where
-  reactive :: (ReactiveScope -> ReactiveState -> (a, ReactiveState)) -> m a
+-- class MonadReactive m where
+--   reactive :: (ReactiveScope -> ReactiveState m -> (a, ReactiveState m)) -> m a
 
-reactive_ :: MonadReactive m => (ReactiveScope -> ReactiveState -> ReactiveState) -> m ()
-reactive_ f = reactive \e s -> ((), f e s)
-{-# INLINE reactive_ #-}
+-- reactive_ :: MonadReactive m => (ReactiveScope -> ReactiveState -> ReactiveState) -> m ()
+-- reactive_ f = reactive \e s -> ((), f e s)
+-- {-# INLINE reactive_ #-}
 
 instance Functor m => Functor (ReactiveT m) where
   fmap f (ReactiveT g) = ReactiveT \e s -> fmap (fmap f) (g e s)
@@ -440,7 +452,7 @@ instance Monad m => MonadReader ReactiveScope (ReactiveT m) where
   ask = ReactiveT \e s -> return (s, e)
   {-# INLINE ask #-}
 
-instance Monad m => MonadState ReactiveState (ReactiveT m) where
+instance Monad m => MonadState (ReactiveState m) (ReactiveT m) where
   state f = ReactiveT \_ s -> let (a, s') = f s in pure (s', a)
   {-# INLINE state #-}
 
@@ -456,6 +468,6 @@ instance MonadFix m => MonadFix (ReactiveT m) where
   mfix f = ReactiveT \e s -> mfix \ ~(_, a) -> unReactiveT (f a) e s
   {-# INLINE mfix #-}
 
-instance Monad m => MonadReactive (ReactiveT m) where
-  reactive f = ReactiveT \e s -> let (a, s') = f e s in pure (s', a)
-  {-# INLINE reactive #-}
+-- instance Monad m => MonadReactive (ReactiveT m) where
+--   reactive f = ReactiveT \e s -> let (a, s') = f e s in pure (s', a)
+--   {-# INLINE reactive #-}
