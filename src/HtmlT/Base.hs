@@ -77,7 +77,7 @@ handleMessage inst jsMain = \case
       Left exp -> return $ EvalExpr exp
       Right _ -> return Exit
   BeforeUnload -> do
-    result <- runUntillInterruption inst rootScope (finalizeNamespace rootScope)
+    result <- runUntillInterruption inst rootScope (freeScope rootScope)
     case result of
       Left exp -> return $ EvalExpr exp
       Right _ -> return Exit

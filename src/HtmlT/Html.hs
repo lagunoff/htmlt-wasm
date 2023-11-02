@@ -88,11 +88,11 @@ dynText (holdUniqDyn -> dynContent) = do
 dyn :: Dynamic (Html ()) -> Html ()
 dyn d = do
   boundary <- insertBoundary
-  reactiveScope <- lift newNamespace
+  reactiveScope <- lift newScope
   let
     update html = do
       lift $ clearBoundary boundary
-      lift $ finalizeNamespace reactiveScope
+      lift $ freeScope reactiveScope
       html
   initialVal <- readDyn d
   monohoist (local (const reactiveScope)) $ withBuilder (Var boundary) initialVal
@@ -101,9 +101,9 @@ dyn d = do
 
 -- | Auxilliary datatype that helps to implement 'simpleList'
 data ElemEnv a = ElemEnv
-  { ee_boundary :: VarId
-  , ee_dyn_ref :: DynRef a
-  , ee_namespace :: ReactiveScope
+  { elem_boundary :: VarId
+  , elem_state_ref :: DynRef a
+  , reactive_scope :: ReactiveScope
   }
 
 simpleList
@@ -123,8 +123,8 @@ simpleList listDyn h = do
       -- New list is longer, append new elements
       ([], x:xs) -> do
         newElem <- newElemEnv x
-        withBuilder (Var newElem.ee_boundary) $
-          monohoist (local (const newElem.ee_namespace)) $ h idx newElem.ee_dyn_ref
+        withBuilder (Var newElem.elem_boundary) $
+          monohoist (local (const newElem.reactive_scope)) $ h idx newElem.elem_state_ref
         fmap (newElem:) $ setup (idx + 1) xs []
       -- New list is shorter, delete the elements that no longer
       -- present in the new list
@@ -133,19 +133,19 @@ simpleList listDyn h = do
         return []
       -- Update existing elements along the way
       (r:rs, y:ys) -> do
-        lift $ writeRef r.ee_dyn_ref y
+        lift $ writeRef r.elem_state_ref y
         fmap (r:) $ setup (idx + 1) ys rs
     newElemEnv :: a -> Html (ElemEnv a)
     newElemEnv a = do
-      ee_namespace <- lift newNamespace
-      monohoist (local (const ee_namespace)) do
-        ee_dyn_ref <- lift $ newRef a
-        ee_boundary <- insertBoundary
+      reactive_scope <- lift newScope
+      monohoist (local (const reactive_scope)) do
+        elem_state_ref <- lift $ newRef a
+        elem_boundary <- insertBoundary
         return ElemEnv {..}
     finalizeElems :: Bool -> [ElemEnv a] -> Html ()
     finalizeElems remove = mapM_ \ee -> do
-      when remove $ lift $ destroyBoundary ee.ee_boundary
-      lift $ finalizeNamespace ee.ee_namespace
+      when remove $ lift $ destroyBoundary ee.elem_boundary
+      lift $ freeScope ee.reactive_scope
     updateList new = do
       eenvs <- liftIO $ readIORef internalStateRef
       newEenvs <- setup 0 new eenvs

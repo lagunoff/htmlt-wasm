@@ -4,15 +4,16 @@ import Control.Monad
 import Control.Monad.Fix
 import Control.Monad.Reader
 import Control.Monad.State
-import Unsafe.Coerce
-import Data.Maybe
+import Data.List qualified as List
 import Data.Map (Map)
 import Data.Map qualified as Map
+import Data.Maybe
 import Data.Set (Set)
 import Data.Set qualified as Set
 import GHC.Exts
 import GHC.Generics
 import GHC.Int
+import Unsafe.Coerce
 
 import "this" HtmlT.Protocol
 
@@ -66,8 +67,8 @@ data FinalizerKey
 data FinalizerValue
   = SubscriptionSet (Set SubscriptionId)
   | CustomFinalizer (RJS ())
-  | NamespaceFinalizer ReactiveScope
-  | ParentNamespace ReactiveScope
+  | ScopeFinalizer ReactiveScope
+  | ParentScope ReactiveScope
 
 newtype ReactiveScope = ReactiveScope {unReactiveScope :: QueueId}
   deriving newtype (Eq, Ord, Num)
@@ -86,6 +87,60 @@ freeVar :: VarId -> RJS ()
 freeVar varId = do
   modify \s -> s { var_storage = Set.delete varId s.var_storage}
   queueExp $ FreeVar varId
+
+newScope :: RJS ReactiveScope
+newScope = reactive \e s0 ->
+  let
+    (scopeId, s1) = nextQueueId s0
+    finalizerKey = FinalizerCustomId scopeId
+    scope = ReactiveScope scopeId
+    finalizers = Map.alter
+      (Just . Map.insert finalizerKey
+        (ScopeFinalizer scope) . fromMaybe Map.empty
+      ) e s1.finalizers
+  in
+    (scope, s1 {finalizers})
+
+type Subscriptions = Map EventId [(SubscriptionId, Any -> RJS ())]
+
+type Finalizers = Map ReactiveScope (Map FinalizerKey FinalizerValue)
+
+freeScope :: ReactiveScope -> RJS ()
+freeScope ns = do
+  removedList <- state \s ->
+    let
+      (removed, finalizers0) = Map.alterF (,Nothing) ns $ s.finalizers
+      removedList = maybe [] Map.toList removed
+      subscriptions = unsubscribe removedList s.subscriptions
+      finalizers = unlinkParentScope removedList finalizers0
+    in
+      (removedList, s { subscriptions, finalizers })
+  runCustomFinalizers removedList
+  where
+    unsubscribe :: [(FinalizerKey, FinalizerValue)] -> Subscriptions -> Subscriptions
+    unsubscribe [] !s = s
+    unsubscribe ((FinalizerEventId e, SubscriptionSet u) : xs) !s =
+      unsubscribe xs $
+        Map.alter (mfilter (not . List.null) . Just . deleteSubs u . fromMaybe []) e s
+    unsubscribe (_ : xs) !s = unsubscribe xs s
+
+    unlinkParentScope :: [(FinalizerKey, FinalizerValue)] -> Finalizers -> Finalizers
+    unlinkParentScope [] !s = s
+    unlinkParentScope ((_, ParentScope p) : _) !s = -- Expecting at most one ParentScope
+      Map.alter (fmap (Map.delete (FinalizerCustomId (unReactiveScope p)))) p s
+    unlinkParentScope (_ : xs) !s = unlinkParentScope xs s
+
+    runCustomFinalizers :: [(FinalizerKey, FinalizerValue)] -> RJS ()
+    runCustomFinalizers [] = return ()
+    runCustomFinalizers ((_, CustomFinalizer w) : xs) = w *> runCustomFinalizers xs
+    runCustomFinalizers ((_, ScopeFinalizer n) : xs) =
+      freeScope n *> runCustomFinalizers xs
+    runCustomFinalizers ((_, _) : xs) = runCustomFinalizers xs
+
+    deleteSubs _ss [] = []
+    deleteSubs ss ((s, c):xs)
+      | Set.member s ss = xs
+      | otherwise = (s, c) : deleteSubs ss xs
 
 newCallbackEvent :: (JValue -> RJS ()) -> RJS CallbackId
 newCallbackEvent k = reactive \e s0 ->

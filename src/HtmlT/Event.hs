@@ -5,11 +5,9 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.IORef
-import Data.List qualified as List
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe
-import Data.Set qualified as Set
 import Data.Tuple
 import GHC.Exts
 import Unsafe.Coerce
@@ -171,60 +169,6 @@ holdUniqDynBy equalFn Dynamic{..} = Dynamic dynamic_read
       old <- liftIO $ atomicModifyIORef' oldRef (new,)
       unless (old `equalFn` new) $ k new
   )
-
-type Subscriptions = Map EventId [(SubscriptionId, Any -> RJS ())]
-
-type Finalizers = Map ReactiveScope (Map FinalizerKey FinalizerValue)
-
-finalizeNamespace :: ReactiveScope -> RJS ()
-finalizeNamespace ns = do
-  removedList <- state \s ->
-    let
-      (removed, finalizers0) = Map.alterF (,Nothing) ns $ s.finalizers
-      removedList = maybe [] Map.toList removed
-      subscriptions = unsubscribe removedList s.subscriptions
-      finalizers = unlinkParentScope removedList finalizers0
-    in
-      (removedList, s { subscriptions, finalizers })
-  runCustomFinalizers removedList
-  where
-    unsubscribe :: [(FinalizerKey, FinalizerValue)] -> Subscriptions -> Subscriptions
-    unsubscribe [] !s = s
-    unsubscribe ((FinalizerEventId e, SubscriptionSet u) : xs) !s =
-      unsubscribe xs $
-        Map.alter (mfilter (not . List.null) . Just . deleteSubs u . fromMaybe []) e s
-    unsubscribe (_ : xs) !s = unsubscribe xs s
-
-    unlinkParentScope :: [(FinalizerKey, FinalizerValue)] -> Finalizers -> Finalizers
-    unlinkParentScope [] !s = s
-    unlinkParentScope ((_, ParentNamespace p) : _) !s = -- Expecting at most one ParentNamespace
-      Map.alter (fmap (Map.delete (FinalizerCustomId (unReactiveScope p)))) p s
-    unlinkParentScope (_ : xs) !s = unlinkParentScope xs s
-
-    runCustomFinalizers :: [(FinalizerKey, FinalizerValue)] -> RJS ()
-    runCustomFinalizers [] = return ()
-    runCustomFinalizers ((_, CustomFinalizer w) : xs) = w *> runCustomFinalizers xs
-    runCustomFinalizers ((_, NamespaceFinalizer n) : xs) =
-      finalizeNamespace n *> runCustomFinalizers xs
-    runCustomFinalizers ((_, _) : xs) = runCustomFinalizers xs
-
-    deleteSubs _ss [] = []
-    deleteSubs ss ((s, c):xs)
-      | Set.member s ss = xs
-      | otherwise = (s, c) : deleteSubs ss xs
-
-newNamespace :: RJS ReactiveScope
-newNamespace = reactive \e s0 ->
-  let
-    (namespaceId, s1) = nextQueueId s0
-    finalizerKey = FinalizerCustomId namespaceId
-    namespace = ReactiveScope namespaceId
-    finalizers = Map.alter
-      (Just . Map.insert finalizerKey
-        (NamespaceFinalizer namespace) . fromMaybe Map.empty
-      ) e s1.finalizers
-  in
-    (namespace, s1 {finalizers})
 
 -- | Alternative version if 'fmap' where given function will only be
 -- called once every time 'Dynamic a' value changes, whereas in 'fmap'

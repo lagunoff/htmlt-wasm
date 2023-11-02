@@ -8,7 +8,6 @@ import Data.List qualified as List
 import GHC.Generics
 import GHC.Int
 
-import "this" HtmlT.Base
 import "this" HtmlT.Marshal
 import "this" HtmlT.Protocol
 import "this" HtmlT.RJS
