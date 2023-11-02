@@ -195,4 +195,4 @@ applyListenerOptions elo = List.concat
   ]
 
 consoleLog :: Expr -> RJS ()
-consoleLog e = queueExp (Call (Id "console") "log" [e])
+consoleLog e = enqueueExpr (Call (Id "console") "log" [e])

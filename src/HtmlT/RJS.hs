@@ -60,8 +60,8 @@ newtype SubscriptionId = SubscriptionId { unSubscriptionId :: QueueId }
   deriving newtype (Eq, Ord, Show, Num, Enum)
 
 data FinalizerKey
-  = FinalizerEventId EventId
-  | FinalizerCustomId QueueId
+  = EventKey EventId
+  | CustomKey QueueId
   deriving (Eq, Ord, Generic)
 
 data FinalizerValue
@@ -86,13 +86,13 @@ newVar = reactive \e s0 ->
 freeVar :: VarId -> RJS ()
 freeVar varId = do
   modify \s -> s { var_storage = Set.delete varId s.var_storage}
-  queueExp $ FreeVar varId
+  enqueueExpr $ FreeVar varId
 
 newScope :: RJS ReactiveScope
 newScope = reactive \e s0 ->
   let
     (scopeId, s1) = nextQueueId s0
-    finalizerKey = FinalizerCustomId scopeId
+    finalizerKey = CustomKey scopeId
     scope = ReactiveScope scopeId
     finalizers = Map.alter
       (Just . Map.insert finalizerKey
@@ -119,7 +119,7 @@ freeScope ns = do
   where
     unsubscribe :: [(FinalizerKey, FinalizerValue)] -> Subscriptions -> Subscriptions
     unsubscribe [] !s = s
-    unsubscribe ((FinalizerEventId e, SubscriptionSet u) : xs) !s =
+    unsubscribe ((EventKey e, SubscriptionSet u) : xs) !s =
       unsubscribe xs $
         Map.alter (mfilter (not . List.null) . Just . deleteSubs u . fromMaybe []) e s
     unsubscribe (_ : xs) !s = unsubscribe xs s
@@ -127,7 +127,7 @@ freeScope ns = do
     unlinkParentScope :: [(FinalizerKey, FinalizerValue)] -> Finalizers -> Finalizers
     unlinkParentScope [] !s = s
     unlinkParentScope ((_, ParentScope p) : _) !s = -- Expecting at most one ParentScope
-      Map.alter (fmap (Map.delete (FinalizerCustomId (unReactiveScope p)))) p s
+      Map.alter (fmap (Map.delete (CustomKey (unReactiveScope p)))) p s
     unlinkParentScope (_ : xs) !s = unlinkParentScope xs s
 
     runCustomFinalizers :: [(FinalizerKey, FinalizerValue)] -> RJS ()
@@ -150,15 +150,15 @@ newCallbackEvent k = reactive \e s0 ->
   in
     (CallbackId (unQueueId queueId), s2)
 
-evalExp :: Expr -> RJS JValue
-evalExp e = RJS \_ s -> return (s, EvalResult e)
+evalExpr :: Expr -> RJS JValue
+evalExpr e = RJS \_ s -> return (s, EvalResult e)
 
-queueExp :: Expr -> RJS ()
-queueExp e = modify \s ->
+enqueueExpr :: Expr -> RJS ()
+enqueueExpr e = modify \s ->
   s {evaluation_queue = e : s.evaluation_queue}
 
-queueIfAlive :: VarId -> Expr -> RJS ()
-queueIfAlive varId e = modify \s ->
+enqueueIfAlive :: VarId -> Expr -> RJS ()
+enqueueIfAlive varId e = modify \s ->
   let
     evaluation_queue =
       if Set.member varId s.var_storage
@@ -169,7 +169,7 @@ queueIfAlive varId e = modify \s ->
 flushQueue :: RJS ()
 flushQueue = do
   queue <- state \s -> (s.evaluation_queue, s {evaluation_queue = []})
-  void $ evalExp $ RevSeq queue
+  void $ evalExpr $ RevSeq queue
 
 nextQueueId :: RjsState -> (QueueId, RjsState)
 nextQueueId s =
@@ -181,13 +181,13 @@ unsafeSubscribe eventId k e s0 =
     (subId, s1) = nextQueueId s0
     newSubscription = (SubscriptionId subId, k . unsafeCoerce)
     f (SubscriptionSet s1) (SubscriptionSet s2) = SubscriptionSet (s1 <> s2)
-    -- Unreacheable because FinalizerEventId always should map into
+    -- Unreacheable because EventKey always should map into
     -- SubscriptionSet
     f _ s = s
     subscriptions = Map.alter (Just . (newSubscription :) . fromMaybe [])
       eventId s1.subscriptions
     finalizers = Map.alter (Just .
-      (Map.insertWith f (FinalizerEventId eventId)
+      (Map.insertWith f (EventKey eventId)
         (SubscriptionSet (Set.singleton (SubscriptionId subId)))
       ) . fromMaybe Map.empty) e s1.finalizers
   in
@@ -197,7 +197,7 @@ installFinalizer :: FinalizerValue -> ReactiveScope -> RjsState -> (FinalizerKey
 installFinalizer fin e s0 =
   let
     (finalizerId, s1) = nextQueueId s0
-    finalizerKey = FinalizerCustomId finalizerId
+    finalizerKey = CustomKey finalizerId
     insertFin = Just . Map.insert finalizerKey fin . fromMaybe Map.empty
     finalizers = Map.alter insertFin e s1.finalizers
   in

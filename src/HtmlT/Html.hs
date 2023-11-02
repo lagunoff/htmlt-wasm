@@ -55,7 +55,7 @@ dynProp propName (holdUniqDyn -> valueDyn) = do
     saveNode = AssignVar currentNodeVar (Arg 0 0)
   modify \s -> s {rev_queue = saveNode : initProp : s.rev_queue }
   lift $ subscribe (updates valueDyn)
-    $ queueIfAlive currentNodeVar
+    $ enqueueIfAlive currentNodeVar
     . ElementProp (Var currentNodeVar) propName . fromJValue . toJSVal
 
 toggleClass :: Utf8 -> Dynamic Bool -> Html ()
@@ -67,7 +67,7 @@ toggleClass className (holdUniqDyn -> enableDyn) = do
     saveNode = AssignVar currentNodeVar (Arg 0 0)
   modify \s -> s {rev_queue = saveNode : initClass : s.rev_queue }
   lift $ subscribe (updates enableDyn) $
-    queueIfAlive currentNodeVar . ToggleClass (Var currentNodeVar) className
+    enqueueIfAlive currentNodeVar . ToggleClass (Var currentNodeVar) className
 
 text :: Utf8 -> Html ()
 text contents = do
@@ -83,7 +83,7 @@ dynText (holdUniqDyn -> dynContent) = do
       (AssignVar textNodeVar (CreateText initialContent))
   modify \s -> s {rev_queue = insertText : s.rev_queue }
   lift $ subscribe (updates dynContent) $
-    queueIfAlive textNodeVar . AssignText (Var textNodeVar)
+    enqueueIfAlive textNodeVar . AssignText (Var textNodeVar)
 
 dyn :: Dynamic (Html ()) -> Html ()
 dyn d = do
@@ -164,10 +164,10 @@ insertBoundary = do
   return boundary
 
 clearBoundary :: VarId -> RJS ()
-clearBoundary boundary = queueExp (ClearBoundary (Var boundary) False)
+clearBoundary boundary = enqueueExpr (ClearBoundary (Var boundary) False)
 
 destroyBoundary :: VarId -> RJS ()
-destroyBoundary boundary = queueExp (ClearBoundary (Var boundary) True)
+destroyBoundary boundary = enqueueExpr (ClearBoundary (Var boundary) True)
 
 attachHtml :: Expr -> Html a -> RJS a
 attachHtml builder html = do
