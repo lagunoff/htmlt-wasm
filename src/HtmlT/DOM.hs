@@ -41,11 +41,11 @@ addEventListener :: forall hsCallback
   -> hsCallback
   -> Html ()
 addEventListener args k = do
-  wasmEnv <- lift ask
+  reactiveScope <- lift ask
   let
     mkExpr callbackId = AddEventListener (Arg 0 0) args.event_name
       (args.mk_js_callback args.listener_options callbackId)
-  callbackId <- lift $ newCallbackEvent (local (const wasmEnv) . args.mk_hs_callback k)
+  callbackId <- lift $ newCallbackEvent (local (const reactiveScope) . args.mk_hs_callback k)
   modify \s -> s {rev_queue = mkExpr callbackId : s.rev_queue}
 
 -- https://developer.mozilla.org/en-US/docs/Web/API/Element/click_event
@@ -55,7 +55,7 @@ pointerEventArgs event_name = AddEventListenerArgs
   , listener_options = defaultEventListenerOptions
   , mk_hs_callback = \k _ -> k
   , mk_js_callback = \opts callbackId ->
-    Lam $ RevSeq $ ExecCallback callbackId Null : applyListenerOptions opts
+    Lam $ RevSeq $ TriggerEvent callbackId Null : applyListenerOptions opts
   }
 
 -- https://developer.mozilla.org/en-US/docs/Web/API/HTMLFormElement/submit_event
@@ -65,7 +65,7 @@ submitEventArgs = AddEventListenerArgs
   , listener_options = defaultSubmitOptions
   , mk_hs_callback = \k _ -> k
   , mk_js_callback = \opts callbackId ->
-    Lam $ RevSeq $ ExecCallback callbackId Null : applyListenerOptions opts
+    Lam $ RevSeq $ TriggerEvent callbackId Null : applyListenerOptions opts
   }
   where
     defaultSubmitOptions = EventListenerOptions True True
@@ -77,7 +77,7 @@ inputEventArgs = AddEventListenerArgs
   , listener_options = defaultEventListenerOptions
   , mk_hs_callback = \k j -> forM_ (fromJSVal j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
-    $ ExecCallback callbackId (Arg 0 0 `Dot` "target" `Dot` "value")
+    $ TriggerEvent callbackId (Arg 0 0 `Dot` "target" `Dot` "value")
     : applyListenerOptions opts
   }
 
@@ -89,7 +89,7 @@ keyboardEventArgs event_name = AddEventListenerArgs
   , listener_options = defaultEventListenerOptions
   , mk_hs_callback = \k j -> forM_ (fromJSVal j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
-    $ ExecCallback callbackId (Arg 0 0 `Dot` "keyCode")
+    $ TriggerEvent callbackId (Arg 0 0 `Dot` "keyCode")
     : applyListenerOptions opts
   }
 
@@ -103,7 +103,7 @@ focusEventArgs event_name = AddEventListenerArgs
   , listener_options = defaultEventListenerOptions
   , mk_hs_callback = \k _ -> k
   , mk_js_callback = \opts callbackId ->
-    Lam $ RevSeq $ ExecCallback callbackId Null : applyListenerOptions opts
+    Lam $ RevSeq $ TriggerEvent callbackId Null : applyListenerOptions opts
   }
 
 -- https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/change_event
@@ -113,7 +113,7 @@ checkboxChangeEventArgs = AddEventListenerArgs
   , listener_options = defaultEventListenerOptions
   , mk_hs_callback = \k j -> forM_ (fromJSVal j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
-    $ ExecCallback callbackId (Arg 0 0 `Dot` "target" `Dot` "checked")
+    $ TriggerEvent callbackId (Arg 0 0 `Dot` "target" `Dot` "checked")
     : applyListenerOptions opts
   }
 
@@ -124,7 +124,7 @@ selectChangeEventArgs = AddEventListenerArgs
   , listener_options = defaultEventListenerOptions
   , mk_hs_callback = \k j -> forM_ (fromJSVal j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
-    $ ExecCallback callbackId (Arg 0 0 `Dot` "target" `Dot` "value")
+    $ TriggerEvent callbackId (Arg 0 0 `Dot` "target" `Dot` "value")
     : applyListenerOptions opts
   }
 

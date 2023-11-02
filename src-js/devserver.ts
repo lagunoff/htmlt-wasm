@@ -57,9 +57,13 @@ export async function haskellApp (
 ): Promise<void> {
   switch (haskMsg.tag) {
     case HaskellMessageTag.EvalExpr: {
-      const result = p.evalExpr(globalContext, argScope, jsSend, haskMsg.expr);
+      const result = p.evalExpr(globalContext, argScope, send, haskMsg.expr);
       const jvalue = p.unknownToJValue(result);
       return send({ tag: JavaScriptMessageTag.Return, 0: jvalue }, argScope);
+    }
+    case HaskellMessageTag.Yield: {
+      p.evalExpr(globalContext, argScope, send, haskMsg.expr);
+      return;
     }
     case HaskellMessageTag.HotReload: {
       window.location.reload();
@@ -70,15 +74,6 @@ export async function haskellApp (
     }
   }
   absurd(haskMsg);
-
-  function jsSend(arg: unknown, callbackId: number, argScope: List<IArguments>) {
-    const jsMsg: JavaScriptMessage = {
-      tag: JavaScriptMessageTag.ExecCallback,
-      callbackId,
-      arg: p.unknownToJValue(arg),
-    };
-    return send(jsMsg, argScope);
-  };
 }
 
 const globalContext: List<Bindings> = [window as any, null]

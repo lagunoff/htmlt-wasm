@@ -4,7 +4,6 @@ import Data.Binary qualified as Binary
 import Data.ByteString as BS
 import Data.ByteString.Lazy qualified as BSL
 import Data.ByteString.Unsafe qualified as BSU
-import Data.IORef
 import Data.Word
 import Foreign.Marshal.Alloc qualified as Alloc
 import Foreign.Marshal.Utils
@@ -13,8 +12,8 @@ import Foreign.Storable
 import System.IO.Unsafe
 
 import "this" HtmlT.Base
-import "this" HtmlT.RJS
 import "this" HtmlT.Protocol
+import "this" HtmlT.RJS
 
 
 reactorApp :: (StartFlags -> RJS ()) -> Ptr Word8 -> IO (Ptr Word8)
@@ -39,7 +38,4 @@ reactorApp jsMain p = do
       BSU.unsafePackCStringFinalizer contentPtr (fromIntegral len) (Alloc.free ptr)
 
 rjsInstance :: RjsInstance
-rjsInstance = unsafePerformIO do
-  rjs_state_ref <- newIORef emptyRjsState
-  continuations_ref <- newIORef []
-  return RjsInstance {rjs_state_ref, continuations_ref}
+rjsInstance = unsafePerformIO newRjsInstance

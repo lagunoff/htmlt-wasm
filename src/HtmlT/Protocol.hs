@@ -12,15 +12,23 @@ import "this" HtmlT.Protocol.Utf8 (Utf8)
 
 data HaskellMessage
   = EvalExpr Expr
-  | HotReload -- ^ Used under dev server
+  -- ^ Evaluate expression, expect JValue result
+  | Yield Expr
+  -- ^ Evaluate expression for side-effects only and wait for some
+  -- asynchronous event to continue the execution, won't return
+  -- anything
+  | HotReload
+  -- ^ Used under dev server, won't return anything
   | Exit
+  -- ^ Signal that current process completed, won't return anything
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
 data JavaScriptMessage
   = Start StartFlags
   | Return JValue
-  | ExecCallbackCommand JValue CallbackId
+  | TriggerEventMsg JValue CallbackId
+  | AsyncCallbackMsg JValue CallbackId
   | BeforeUnload
   -- ^ Fired from addEventListener("beforeunload") listener. Won't
   -- work under the DevServer!
@@ -135,7 +143,8 @@ data Expr
   -- ^ Evaluate arbitrary JavaScript code @(Eval "setTimeout(() =>
   -- console.log('Hi!'), 1000)")@ will print a message with one second
   -- delay
-  | ExecCallback CallbackId Expr
+  | TriggerEvent CallbackId Expr
+  | AsyncCallback CallbackId Expr
   | UncaughtException Utf8
   deriving stock (Generic, Show)
   deriving anyclass (Binary)

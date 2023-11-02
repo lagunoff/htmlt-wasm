@@ -50,12 +50,7 @@ export function storeBuffer(inst: HaskellIstance, u8array: Uint8Array) {
 export function haskellApp(inst: HaskellIstance, maybeJsMsg?: JavaScriptMessage, argScope: List<IArguments> = null) {
   const jsMsg = maybeJsMsg ? maybeJsMsg : p.mkStartMessage();
   const haskMsg = interactWithHaskell(inst, jsMsg);
-  const jsCallback = (arg: unknown, callbackId: number, argScope: List<IArguments>) => {
-    const jsMsg: JavaScriptMessage = {
-      tag: JavaScriptMessageTag.ExecCallback,
-      callbackId,
-      arg: p.unknownToJValue(arg),
-    };
+  const jsCallback = (jsMsg: JavaScriptMessage, argScope: List<IArguments>) => {
     haskellApp(inst, jsMsg, argScope);
   };
   switch (haskMsg.tag) {
@@ -63,6 +58,10 @@ export function haskellApp(inst: HaskellIstance, maybeJsMsg?: JavaScriptMessage,
       const result = p.evalExpr(globalContext, argScope, jsCallback, haskMsg.expr);
       const jvalue = p.unknownToJValue(result);
       return haskellApp(inst, { tag: JavaScriptMessageTag.Return, 0: jvalue }, argScope);
+    }
+    case HaskellMessageTag.Yield: {
+      p.evalExpr(globalContext, argScope, jsCallback, haskMsg.expr);
+      return;
     }
     case HaskellMessageTag.HotReload: {
       window.location.reload();

@@ -97,12 +97,13 @@ yarn run webpack --mode production
 
 # ✅ TODOs
 
- - [ ] Gather data for the WebAssmebly Backend bug report, make an isolated counterexample
+ - [ ] Gather data for the WebAssembly Backend bug report, make an isolated counterexample
  - [x] Add Benchmarks
- - [ ] JSM currently has builtin reactive capabilities, decouple reactive stuff into separate `ReactiveT` transformer
+ - [ ] <s>Decouple RJS's built-in reactive capabilities into a separate ReactiveT transformer</s>. Tried it, didn't work, polymorphic ReactiveT quickly became overly complex, so I'm keeping it all concreete and straightforward inside a single RJS monad
  - [ ] Improve messaging protocol (make a version that is readable JSON and another compact and fast binary version)
  - [ ] Review, cleanup the code and write documentation
  - [ ] Try various protocol optimizations (use bounded buffer instead of using malloc/free for each message)
  - [ ] Explore possible optimizations in the JavaScript implementation of the protocol (use hand written encoders/decoders instead of reflection on datatype description)
+ - [ ] Use `Data.Text` instead of `HtmlT.Protocol.Utf8`?
 
 

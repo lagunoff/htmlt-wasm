@@ -23,7 +23,7 @@ export function cdr<T>(pair: Cons<T>): List<T> {
   return pair[1];
 }
 
-export type HaskellCallback = (arg: unknown, callbackId: number, argScope: List<IArguments>) => void;
+export type HaskellCallback = (jsMsg: JavaScriptMessage, argScope: List<IArguments>) => void;
 
 export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, hscb: HaskellCallback, exp: Expr): unknown {
   switch(exp.tag) {
@@ -187,9 +187,23 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
     case ExprTag.Eval: {
       return eval(exp.rawJavaScript);
     }
-    case ExprTag.ExecCallback: {
+    case ExprTag.TriggerEvent: {
       const arg = evalExpr(idenScope, argScope, hscb, exp.arg);
-      return hscb(arg, exp.callbackId, argScope);
+      const jsMsg: JavaScriptMessage = {
+        tag: JavaScriptMessageTag.TriggerEvent,
+        arg: unknownToJValue(arg),
+        callbackId: exp.callbackId,
+      }
+      return hscb(jsMsg, argScope);
+    }
+    case ExprTag.AsyncCallback: {
+      const arg = evalExpr(idenScope, argScope, hscb, exp.arg);
+      const jsMsg: JavaScriptMessage = {
+        tag: JavaScriptMessageTag.AsyncCallback,
+        arg: unknownToJValue(arg),
+        callbackId: exp.callbackId,
+      }
+      return hscb(jsMsg, argScope);
     }
     case ExprTag.UncaughtException: {
       throw new Error(exp.message);
@@ -335,7 +349,8 @@ export enum ExprTag {
 
   RevSeq,
   Eval,
-  ExecCallback,
+  TriggerEvent,
+  AsyncCallback,
   UncaughtException,
 }
 
@@ -380,7 +395,8 @@ export type Expr =
 
   | { tag: ExprTag.RevSeq, exprs: Expr[] }
   | { tag: ExprTag.Eval, rawJavaScript: string }
-  | { tag: ExprTag.ExecCallback, callbackId: number, arg: Expr }
+  | { tag: ExprTag.TriggerEvent, callbackId: number, arg: Expr }
+  | { tag: ExprTag.AsyncCallback, callbackId: number, arg: Expr }
   | { tag: ExprTag.UncaughtException, message: string }
 ;
 
@@ -425,18 +441,21 @@ export const expr = b.recursive<Expr>(self => b.discriminate({
 
   [ExprTag.RevSeq]: b.record({ exprs: b.array(self) }),
   [ExprTag.Eval]: b.record({ rawJavaScript: b.string }),
-  [ExprTag.ExecCallback]: b.record({ callbackId: b.int64, arg: self }),
+  [ExprTag.TriggerEvent]: b.record({ callbackId: b.int64, arg: self }),
+  [ExprTag.AsyncCallback]: b.record({ callbackId: b.int64, arg: self }),
   [ExprTag.UncaughtException]: b.record({ message: b.string }),
 }));
 
 export enum HaskellMessageTag {
   EvalExpr,
+  Yield,
   HotReload,
   Exit,
 }
 
 export const haskellMessage = b.discriminate({
   [HaskellMessageTag.EvalExpr]: b.record({ expr: expr }),
+  [HaskellMessageTag.Yield]: b.record({ expr: expr }),
   [HaskellMessageTag.HotReload]: b.record({ }),
   [HaskellMessageTag.Exit]: b.record({ }),
 });
@@ -444,14 +463,16 @@ export const haskellMessage = b.discriminate({
 export enum JavaScriptMessageTag {
   Start,
   Return,
-  ExecCallback,
+  TriggerEvent,
+  AsyncCallback,
   BeforeUnload,
 }
 
 export const javascriptMessage = b.discriminate({
   [JavaScriptMessageTag.Start]: b.record({ startFlags }),
   [JavaScriptMessageTag.Return]: b.record({ 0: jvalue }),
-  [JavaScriptMessageTag.ExecCallback]: b.record({ arg: jvalue, callbackId: b.int64 }),
+  [JavaScriptMessageTag.TriggerEvent]: b.record({ arg: jvalue, callbackId: b.int64 }),
+  [JavaScriptMessageTag.AsyncCallback]: b.record({ arg: jvalue, callbackId: b.int64 }),
   [JavaScriptMessageTag.BeforeUnload]: b.record({}),
 });
 

@@ -1,10 +1,10 @@
 module HtmlT.Marshal where
 
-import Data.Maybe
-import GHC.Int
-import GHC.Generics as G
 import Data.Kind
 import Data.List qualified as List
+import Data.Maybe
+import GHC.Generics as G
+import GHC.Int
 
 import "this" HtmlT.Protocol
 import "this" HtmlT.Protocol.JNumber (JNumber(..))

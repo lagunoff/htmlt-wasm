@@ -25,8 +25,11 @@ newtype RJS a = RJS
 data RjsResult a where
   PureResult :: a -> RjsResult a
   EvalResult :: Expr -> RjsResult JValue
-  InterruptResult :: Expr -> (JValue -> RJS b) -> RjsResult b
+  YieldResult :: CallbackId -> RjsResult JValue
+  InterruptResult :: InterruptReason -> (JValue -> RJS b) -> RjsResult b
   FMapResult :: (a -> b) -> RjsResult a -> RjsResult b
+
+data InterruptReason = EvalReason Expr | YieldReason CallbackId
 
 data RjsState = RjsState
   { var_storage :: Set VarId
@@ -211,16 +214,18 @@ bindRjsResult
   -> IO (RjsState, RjsResult b)
 bindRjsResult r cont e s = case r of
   PureResult a -> unRJS (cont a) e s
-  EvalResult cmd ->
-    return (s, InterruptResult cmd cont)
+  EvalResult expr ->
+    return (s, InterruptResult (EvalReason expr) cont)
+  YieldResult callbackId ->
+    return (s, InterruptResult (YieldReason callbackId) cont)
   FMapResult f i ->
     bindRjsResult i (cont . f) e s
-  InterruptResult cmd c2 -> do
+  InterruptResult reason c2 -> do
     let
       cont' exp = RJS \e s -> do
         (s', r') <- unRJS (c2 exp) e s
         bindRjsResult r' cont e s'
-    return (s, InterruptResult cmd cont')
+    return (s, InterruptResult reason cont')
 
 class MonadReactive m where
   reactive :: (ReactiveScope -> RjsState -> (a, RjsState)) -> m a
