@@ -26,19 +26,19 @@ import System.IO
 import System.Environment
 
 import "this" HtmlT.Base
-import "this" HtmlT.JSM
+import "this" HtmlT.RJS
 import "this" HtmlT.Protocol
 
 
 data DevServerConfig a = DevServerConfig
   { open_resource :: IO a
   , close_resource :: a -> IO ()
-  , init_app :: a -> IO (StartFlags -> JSM (), Application)
+  , init_app :: a -> IO (StartFlags -> RJS (), Application)
   , html_template :: BSL.ByteString -> BSL.ByteString
   , docroots :: [FilePath]
   } deriving Generic
 
-defaultDevServerConfig :: (StartFlags -> JSM ()) -> DevServerConfig ()
+defaultDevServerConfig :: (StartFlags -> RJS ()) -> DevServerConfig ()
 defaultDevServerConfig clientApp = DevServerConfig
   { open_resource = pure ()
   , close_resource = const (pure ())
@@ -93,7 +93,7 @@ runDebugPort :: Typeable a => Warp.Port -> DevServerConfig a -> IO ()
 runDebugPort port devCfg =
   runDebug (Warp.setPort port Warp.defaultSettings) devCfg
 
-runDebugDefault :: Warp.Port -> (StartFlags -> JSM ()) -> IO ()
+runDebugDefault :: Warp.Port -> (StartFlags -> RJS ()) -> IO ()
 runDebugDefault port clientApp = runDebug
   (Warp.setPort port Warp.defaultSettings)
   (defaultDevServerConfig clientApp)
@@ -168,9 +168,9 @@ devserverWebsocket opt p =
       modifyIORef' opt.conn_state_ref \s -> s
         {connections = Map.delete connId s.connections}
     newWasmInstance = do
-      wasm_state_ref <- newIORef emptyWAState
+      rjs_state_ref <- newIORef emptyRjsState
       continuations_ref <- newIORef []
-      return WasmInstance {continuations_ref, wasm_state_ref}
+      return RjsInstance {continuations_ref, rjs_state_ref}
     loop conn options =
       try (receiveData conn) >>= \case
         Right (incomingBytes::ByteString) -> do
@@ -239,13 +239,13 @@ data ConnectionState = ConnectionState
 
 data ConnectionInfo = ConnectionInfo
   { connection :: Connection
-  , options :: WasmInstance
+  , options :: RjsInstance
   } deriving Generic
 
 data RunningApp = forall a. Typeable a => RunningApp
   { resource :: a
   , devserver_config :: DevServerConfig a
-  , client_app :: StartFlags -> JSM ()
+  , client_app :: StartFlags -> RJS ()
   , server_app :: Application
   }
 

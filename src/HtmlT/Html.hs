@@ -11,9 +11,8 @@ import Data.IORef
 import Data.String
 import GHC.Generics
 
-import "this" HtmlT.Base
 import "this" HtmlT.Event
-import "this" HtmlT.JSM
+import "this" HtmlT.RJS
 import "this" HtmlT.Marshal
 import "this" HtmlT.Protocol
 import "this" HtmlT.Protocol.Utf8 (Utf8(..))
@@ -23,7 +22,7 @@ newtype HtmlT m a = HtmlT {unHtmlT :: StateT HtmlState m a}
 execHtmlT :: Monad m => HtmlState -> HtmlT m a -> m (a, HtmlState)
 execHtmlT s = flip runStateT s . unHtmlT
 
-type Html = HtmlT JSM
+type Html = HtmlT RJS
 
 data HtmlState = HtmlState
   { rev_queue :: [Expr]
@@ -89,23 +88,22 @@ dynText (holdUniqDyn -> dynContent) = do
 dyn :: Dynamic (Html ()) -> Html ()
 dyn d = do
   boundary <- insertBoundary
-  finalizerNs <- lift newNamespace
+  reactiveScope <- lift newNamespace
   let
     update html = do
       lift $ clearBoundary boundary
-      lift $ finalizeNamespace finalizerNs
+      lift $ finalizeNamespace reactiveScope
       html
-    applyFinalizer e = e {finalizer_ns = finalizerNs}
   initialVal <- readDyn d
-  monohoist (local applyFinalizer) $ withBuilder (Var boundary) initialVal
+  monohoist (local (const reactiveScope)) $ withBuilder (Var boundary) initialVal
   lift $ subscribe (updates d) $
-    local applyFinalizer . attachHtml (Var boundary) . update
+    local (const reactiveScope) . attachHtml (Var boundary) . update
 
 -- | Auxilliary datatype that helps to implement 'simpleList'
 data ElemEnv a = ElemEnv
   { ee_boundary :: VarId
   , ee_dyn_ref :: DynRef a
-  , ee_namespace :: FinalizerNs
+  , ee_namespace :: ReactiveScope
   }
 
 simpleList
@@ -125,9 +123,8 @@ simpleList listDyn h = do
       -- New list is longer, append new elements
       ([], x:xs) -> do
         newElem <- newElemEnv x
-        let wasmEnv = JSMEnv newElem.ee_namespace
         withBuilder (Var newElem.ee_boundary) $
-          monohoist (local (const wasmEnv)) $ h idx newElem.ee_dyn_ref
+          monohoist (local (const newElem.ee_namespace)) $ h idx newElem.ee_dyn_ref
         fmap (newElem:) $ setup (idx + 1) xs []
       -- New list is shorter, delete the elements that no longer
       -- present in the new list
@@ -141,7 +138,7 @@ simpleList listDyn h = do
     newElemEnv :: a -> Html (ElemEnv a)
     newElemEnv a = do
       ee_namespace <- lift newNamespace
-      monohoist (local (\e -> e {finalizer_ns = ee_namespace})) do
+      monohoist (local (const ee_namespace)) do
         ee_dyn_ref <- lift $ newRef a
         ee_boundary <- insertBoundary
         return ElemEnv {..}
@@ -157,7 +154,7 @@ simpleList listDyn h = do
   withBuilder (Var boundary) $ updateList initialVal
   lift $ subscribe (updates listDyn) $ attachHtml (Var boundary) . updateList
 
-monohoist :: forall a. (forall a. JSM a -> JSM a) -> Html a -> Html a
+monohoist :: forall a. (forall a. RJS a -> RJS a) -> Html a -> Html a
 monohoist f (HtmlT (StateT g)) = HtmlT $ StateT \s -> f (g s)
 
 insertBoundary :: Html VarId
@@ -166,13 +163,13 @@ insertBoundary = do
   modify \s -> s {rev_queue = AssignVar boundary (InsertBoundary (Arg 0 0)) : s.rev_queue}
   return boundary
 
-clearBoundary :: VarId -> JSM ()
+clearBoundary :: VarId -> RJS ()
 clearBoundary boundary = queueExp (ClearBoundary (Var boundary) False)
 
-destroyBoundary :: VarId -> JSM ()
+destroyBoundary :: VarId -> RJS ()
 destroyBoundary boundary = queueExp (ClearBoundary (Var boundary) True)
 
-attachHtml :: Expr -> Html a -> JSM a
+attachHtml :: Expr -> Html a -> RJS a
 attachHtml builder html = do
   (result, newState) <- execHtmlT (HtmlState [] Nothing) html
   let newExpr = WithBuilder builder (Lam (RevSeq newState.rev_queue))
@@ -189,7 +186,7 @@ withBuilder builder content = do
   modify \s -> s {rev_queue = mkExpr s.rev_queue : prevQueue}
   return result
 
-attachToBody :: Html a -> JSM a
+attachToBody :: Html a -> RJS a
 attachToBody = attachHtml (Id "document" `Dot` "body")
 
 blank :: Applicative m => m ()

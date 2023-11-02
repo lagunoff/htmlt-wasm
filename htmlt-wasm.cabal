@@ -64,7 +64,7 @@ library
     HtmlT.Element
     HtmlT.Event
     HtmlT.Html
-    HtmlT.JSM
+    HtmlT.RJS
     HtmlT.Marshal
     HtmlT.Property
     HtmlT.Protocol
@@ -153,7 +153,7 @@ benchmark benchmark_01
     HtmlT.Element
     HtmlT.Event
     HtmlT.Html
-    HtmlT.JSM
+    HtmlT.RJS
     HtmlT.Marshal
     HtmlT.Property
     HtmlT.Protocol

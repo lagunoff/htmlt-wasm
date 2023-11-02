@@ -13,14 +13,14 @@ import Foreign.Storable
 import System.IO.Unsafe
 
 import "this" HtmlT.Base
-import "this" HtmlT.JSM
+import "this" HtmlT.RJS
 import "this" HtmlT.Protocol
 
 
-reactorApp :: (StartFlags -> JSM ()) -> Ptr Word8 -> IO (Ptr Word8)
-reactorApp wasmMain p = do
+reactorApp :: (StartFlags -> RJS ()) -> Ptr Word8 -> IO (Ptr Word8)
+reactorApp jsMain p = do
   jsMessage <- Binary.decode . BSL.fromStrict <$> loadByteString p
-  haskMessage <- handleMessage wasmInstance wasmMain jsMessage
+  haskMessage <- handleMessage rjsInstance jsMain jsMessage
   storeByteString $ BSL.toStrict $ Binary.encode haskMessage
   where
     storeByteString :: ByteString -> IO (Ptr a)
@@ -38,8 +38,8 @@ reactorApp wasmMain p = do
       let contentPtr = ptr `plusPtr` 8
       BSU.unsafePackCStringFinalizer contentPtr (fromIntegral len) (Alloc.free ptr)
 
-wasmInstance :: WasmInstance
-wasmInstance = unsafePerformIO do
-  wasm_state_ref <- newIORef emptyWAState
+rjsInstance :: RjsInstance
+rjsInstance = unsafePerformIO do
+  rjs_state_ref <- newIORef emptyRjsState
   continuations_ref <- newIORef []
-  return WasmInstance {wasm_state_ref, continuations_ref}
+  return RjsInstance {rjs_state_ref, continuations_ref}

@@ -50,7 +50,7 @@ update action old = case action of
       | x.language == l = x {votes = f x.votes} : xs
       | otherwise = x : overvote f l xs
 
-jsmMain :: StartFlags -> JSM ()
+jsmMain :: StartFlags -> RJS ()
 jsmMain _ = attachToBody do
   el "style" $ text styles
   votingListRef <- lift $ newRef initialState

@@ -32,7 +32,7 @@ data TodoListAction a where
   DeleteItemAction :: TodoListConfig -> Int -> TodoListAction ()
   ClearCompletedAction :: TodoListConfig -> TodoListAction ()
 
-eval :: TodoListAction a -> JSM a
+eval :: TodoListAction a -> RJS a
 eval = \case
   InitAction items -> do
     newRef TodoListState

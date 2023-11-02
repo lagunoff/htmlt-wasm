@@ -1,3 +1,4 @@
+import Control.Monad
 import Data.Binary qualified as Binary
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as BSL
@@ -15,16 +16,42 @@ main = defaultMain
     , bench "100" $ whnfIO $ buildTodoMVC 100
     , bench "1000" $ whnfIO $ buildTodoMVC 1000
     ]
+  , bgroup "subscribeAndFire"
+    [ bench "100 10 10" $ whnfIO $ subscribeAndFire 100 10 10
+    , bench "10 100 10" $ whnfIO $ subscribeAndFire 10 100 10
+    , bench "10 10 100" $ whnfIO $ subscribeAndFire 10 10 100
+    ]
   ]
+
+subscribeAndFire :: Int -> Int -> Int -> IO ()
+subscribeAndFire eventsNum subsNum fireNum = reactive do
+  -- Create a bunch of 'DynRef's
+  refsList <- forM [1..eventsNum] $ const (newRef (0 :: Int))
+  outputRef <- newRef Nothing
+  -- Sum all of their values into a single 'Dynamic' using
+  -- 'Applicative' instance
+  let sumDyn = fmap sum . sequenceA . fmap fromRef $ refsList
+  -- Attach subsNum amount of subscriptions
+  sequence_ $ take subsNum $ repeat $ subscribeAndWrite sumDyn outputRef
+  -- And fire modification event for each 'DynRef' fireNum times
+  forM_ [1..fireNum] $ const $
+    forM_ refsList $ dynStep . flip modifyRef succ
+  where
+    subscribeAndWrite from to = void $ subscribe (updates from) $
+      writeRef to . Just
+    reactive act = do
+      (_a, _res) <- unRJS act rootScope emptyRjsState
+      return ()
+    rootScope = ReactiveScope (-1)
 
 buildTodoMVC :: Int -> IO ByteString
 buildTodoMVC ntasks = do
   let tasks = take ntasks (cycle oneHandredTasks)
-  wasmInstance <- do
-    wasm_state_ref <- newIORef emptyWAState
+  rjsInstance <- do
+    rjs_state_ref <- newIORef emptyRjsState
     continuations_ref <- newIORef []
-    return WasmInstance {wasm_state_ref, continuations_ref}
-  haskMessage <- handleMessage wasmInstance (jsmMain tasks) (Start startMessage)
+    return RjsInstance {rjs_state_ref, continuations_ref}
+  haskMessage <- handleMessage rjsInstance (jsmMain tasks) (Start startMessage)
   return $ BSL.toStrict $ Binary.encode haskMessage
   where
     startMessage = StartFlags
@@ -38,7 +65,7 @@ buildTodoMVC ntasks = do
          }
       }
 
-jsmMain :: [TodoItem.TodoItemState] -> StartFlags -> JSM ()
+jsmMain :: [TodoItem.TodoItemState] -> StartFlags -> RJS ()
 jsmMain tasks _ = do
   todoListStateRef <- TodoList.eval $ TodoList.InitAction tasks
   attachToBody do

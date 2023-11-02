@@ -14,9 +14,9 @@ import Data.Tuple
 import GHC.Exts
 import Unsafe.Coerce
 
-import "this" HtmlT.JSM
+import "this" HtmlT.RJS
 
-newtype Event a = Event { unEvent :: (a -> JSM ()) -> JSM () }
+newtype Event a = Event { unEvent :: (a -> RJS ()) -> RJS () }
 
 -- | Contains a value that is subject to change over time. Provides
 -- operations for reading the current value ('readDyn') and
@@ -42,7 +42,7 @@ data DynRef a = DynRef
 
 -- | Function that updates the value inside the 'DynRef'
 newtype Modifier a = Modifier
-  { unModifier :: forall r. Bool -> (a -> (a, r)) -> JSM r
+  { unModifier :: forall r. Bool -> (a -> (a, r)) -> RJS r
   -- ^ 'Bool' argument controls whether the modification should
   -- trigger an update event. It's possible to update the 'DynRef'
   -- without notifying the subscribers for optimization purposes, in
@@ -50,52 +50,20 @@ newtype Modifier a = Modifier
   -- the DOM
   }
 
-unsafeSubscribe :: EventId -> (a -> JSM ()) -> JSMEnv -> JSMState -> JSMState
-unsafeSubscribe eventId k e s0 =
-  let
-    (subId, s1) = nextQueueId s0
-    newSubscription = (SubscriptionId subId, k . unsafeCoerce)
-    f (SubscriptionSet s1) (SubscriptionSet s2) = SubscriptionSet (s1 <> s2)
-    -- Unreacheable because FinalizerEventId always should map into
-    -- SubscriptionSet
-    f _ s = s
-    subscriptions = Map.alter (Just . (newSubscription :) . fromMaybe [])
-      eventId s1.subscriptions
-    finalizers = Map.alter (Just .
-      (Map.insertWith f (FinalizerEventId eventId)
-        (SubscriptionSet (Set.singleton (SubscriptionId subId)))
-      ) . fromMaybe Map.empty) e.finalizer_ns s1.finalizers
-  in
-    s1 {subscriptions, finalizers}
-
-unsafeTrigger :: EventId -> a -> JSM ()
+unsafeTrigger :: EventId -> a -> RJS ()
 unsafeTrigger eventId a = defer (unEventId eventId) do
   callbacks <- gets $ fromMaybe [] .
     Map.lookup eventId . (.subscriptions)
   forM_ callbacks $ ($ unsafeCoerce @_ @Any a) . snd
 
-nextQueueId :: JSMState -> (QueueId, JSMState)
-nextQueueId s =
-  (s.id_supply, s {id_supply = succ s.id_supply})
-
-installFinalizer :: FinalizerValue -> JSMEnv -> JSMState -> (FinalizerKey, JSMState)
-installFinalizer fin e s0 =
-  let
-    (finalizerId, s1) = nextQueueId s0
-    finalizerKey = FinalizerCustomId finalizerId
-    insertFin = Just . Map.insert finalizerKey fin . fromMaybe Map.empty
-    finalizers = Map.alter insertFin e.finalizer_ns s1.finalizers
-  in
-    (finalizerKey, s1 {finalizers})
-
 -- | Defers a computation (typically an event firing) until the end of
 -- the current reactive transaction. This allows for the avoidance of
 -- double firing of events constructed from multiple other events.
-defer :: QueueId -> JSM () -> JSM ()
+defer :: QueueId -> RJS () -> RJS ()
 defer k act = modify \s ->
   s {transaction_queue = Map.insert k act s.transaction_queue}
 
-newEvent :: JSM (Event a, a -> JSM ())
+newEvent :: RJS (Event a, a -> RJS ())
 newEvent = state \s0 ->
   let
     (eventId, s1) = nextQueueId s0
@@ -104,7 +72,7 @@ newEvent = state \s0 ->
   in
     ((event, trig), s1)
 
-newRef :: a -> JSM (DynRef a)
+newRef :: a -> RJS (DynRef a)
 newRef initial = do
   ioRef <- liftIO $ newIORef initial
   (event, push) <- newEvent
@@ -133,7 +101,7 @@ never = Event \_ -> return ()
 -- > transactionWrite ref "New value"
 -- > readRef ref
 -- "New value"
-writeRef :: DynRef a -> a -> JSM ()
+writeRef :: DynRef a -> a -> RJS ()
 writeRef ref a = modifyRef ref (const a)
 
 -- | Read the current value held by given 'DynRef'
@@ -149,14 +117,14 @@ readRef = readDyn . dynref_value
 -- > ref <- newRef [1..3]
 -- > modifyRef ref $ fmap (*2)
 -- [2, 4, 6]
-modifyRef :: DynRef a -> (a -> a) -> JSM ()
+modifyRef :: DynRef a -> (a -> a) -> RJS ()
 modifyRef (DynRef _ (Modifier mod)) f = mod True $ (,()) . f
 
 -- | Update a 'DynRef' with first field of the tuple and return back
 -- the second field. The name is intended to be similar to
 -- 'atomicModifyIORef' but there are no atomicity guarantees
 -- whatsoever
-atomicModifyRef :: DynRef a -> (a -> (a, r)) -> JSM r
+atomicModifyRef :: DynRef a -> (a -> (a, r)) -> RJS r
 atomicModifyRef (DynRef _ (Modifier mod)) f = mod True f
 
 -- | Extract a 'Dynamic' out of 'DynRef'
@@ -173,12 +141,12 @@ updates = dynamic_updates
 
 -- | Attach a listener to the event and return an action to detach the
 -- listener
-subscribe :: Event a -> (a -> JSM ()) -> JSM ()
+subscribe :: Event a -> (a -> RJS ()) -> RJS ()
 subscribe (Event s) k = s k
 
 -- | Executes an action currently held inside the 'Dynamic' and every
 -- time the value changes.
-performDyn :: Dynamic (JSM ()) -> JSM ()
+performDyn :: Dynamic (RJS ()) -> RJS ()
 performDyn d = do
   join $ liftIO $ dynamic_read d
   subscribe d.dynamic_updates id
@@ -204,11 +172,11 @@ holdUniqDynBy equalFn Dynamic{..} = Dynamic dynamic_read
       unless (old `equalFn` new) $ k new
   )
 
-type Subscriptions = Map EventId [(SubscriptionId, Any -> JSM ())]
+type Subscriptions = Map EventId [(SubscriptionId, Any -> RJS ())]
 
-type Finalizers = Map FinalizerNs (Map FinalizerKey FinalizerValue)
+type Finalizers = Map ReactiveScope (Map FinalizerKey FinalizerValue)
 
-finalizeNamespace :: FinalizerNs -> JSM ()
+finalizeNamespace :: ReactiveScope -> RJS ()
 finalizeNamespace ns = do
   removedList <- state \s ->
     let
@@ -230,10 +198,10 @@ finalizeNamespace ns = do
     unlinkParentScope :: [(FinalizerKey, FinalizerValue)] -> Finalizers -> Finalizers
     unlinkParentScope [] !s = s
     unlinkParentScope ((_, ParentNamespace p) : _) !s = -- Expecting at most one ParentNamespace
-      Map.alter (fmap (Map.delete (FinalizerCustomId (unFinalizerNs p)))) p s
+      Map.alter (fmap (Map.delete (FinalizerCustomId (unReactiveScope p)))) p s
     unlinkParentScope (_ : xs) !s = unlinkParentScope xs s
 
-    runCustomFinalizers :: [(FinalizerKey, FinalizerValue)] -> JSM ()
+    runCustomFinalizers :: [(FinalizerKey, FinalizerValue)] -> RJS ()
     runCustomFinalizers [] = return ()
     runCustomFinalizers ((_, CustomFinalizer w) : xs) = w *> runCustomFinalizers xs
     runCustomFinalizers ((_, NamespaceFinalizer n) : xs) =
@@ -245,16 +213,16 @@ finalizeNamespace ns = do
       | Set.member s ss = xs
       | otherwise = (s, c) : deleteSubs ss xs
 
-newNamespace :: JSM FinalizerNs
+newNamespace :: RJS ReactiveScope
 newNamespace = reactive \e s0 ->
   let
     (namespaceId, s1) = nextQueueId s0
     finalizerKey = FinalizerCustomId namespaceId
-    namespace = FinalizerNs namespaceId
+    namespace = ReactiveScope namespaceId
     finalizers = Map.alter
       (Just . Map.insert finalizerKey
         (NamespaceFinalizer namespace) . fromMaybe Map.empty
-      ) e.finalizer_ns s1.finalizers
+      ) e s1.finalizers
   in
     (namespace, s1 {finalizers})
 
@@ -266,7 +234,7 @@ newNamespace = reactive \e s0 ->
 mapDyn
   :: (a -> b)
   -> Dynamic a
-  -> JSM (Dynamic b)
+  -> RJS (Dynamic b)
 mapDyn fun adyn = do
   initialA <- liftIO $ dynamic_read adyn
   latestA <- liftIO $ newIORef initialA
@@ -295,7 +263,7 @@ unsafeMapDynN
   -- corresponding positions of given Dynamics
   -> [Dynamic Any]
   -- ^ List of input Dynamics
-  -> JSM (Dynamic a)
+  -> RJS (Dynamic a)
 unsafeMapDynN fun dyns = do
   -- TODO: Try if list of IORefs is better than IORef of list
   initialInputs <- liftIO $ mapM (.dynamic_read) dyns
@@ -328,18 +296,18 @@ lensMap l (DynRef sdyn (Modifier smod)) =
       adyn = Dynamic
         (fmap (getConst . l Const) $ dynamic_read sdyn)
         (fmap (getConst . l Const) $ dynamic_updates sdyn)
-      amod :: forall r. Bool -> (a -> (a, r)) -> JSM r
+      amod :: forall r. Bool -> (a -> (a, r)) -> RJS r
       amod u f = smod u $ swap . l (swap . f)
 
 -- | Run a reactive transaction.
-dynStep :: JSM a -> JSM a
+dynStep :: RJS a -> RJS a
 dynStep act = loop0 act where
-  loop0 :: JSM a -> JSM a
+  loop0 :: RJS a -> RJS a
   loop0 act = do
     r <- act
     loop1 =<< gets (.transaction_queue)
     return r
-  loop1 :: Map QueueId (JSM ()) -> JSM ()
+  loop1 :: Map QueueId (RJS ()) -> RJS ()
   loop1 q =
     case Map.minViewWithKey q of
       Nothing -> return ()
