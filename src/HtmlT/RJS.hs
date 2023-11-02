@@ -174,6 +174,9 @@ flushQueue = do
   queue <- state \s -> (s.evaluation_queue, s {evaluation_queue = []})
   void $ evalExpr $ RevSeq queue
 
+yield :: CallbackId -> RJS JValue
+yield callbackId = RJS \_ s -> return (s, YieldResult callbackId)
+
 nextQueueId :: RjsState -> (QueueId, RjsState)
 nextQueueId s =
   (s.id_supply, s {id_supply = succ s.id_supply})
