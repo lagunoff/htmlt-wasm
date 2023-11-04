@@ -47,10 +47,7 @@ subscribeAndFire eventsNum subsNum fireNum = reactive do
 buildTodoMVC :: Int -> IO ByteString
 buildTodoMVC ntasks = do
   let tasks = take ntasks (cycle oneHandredTasks)
-  rjsInstance <- do
-    rjs_state_ref <- newIORef emptyRjsState
-    continuations_ref <- newIORef []
-    return RjsInstance {rjs_state_ref, continuations_ref}
+  rjsInstance <- newRjsInstance
   haskMessage <- handleMessage rjsInstance (jsmMain tasks) (Start startMessage)
   return $ BSL.toStrict $ Binary.encode haskMessage
   where

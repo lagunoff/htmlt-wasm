@@ -48,6 +48,7 @@ attr attrName attrVal = modify \s ->
 
 dynProp :: (ToJSVal v, Eq v) => Utf8 -> Dynamic v -> Html ()
 dynProp propName (holdUniqDyn -> valueDyn) = do
+  rscope <- lift ask
   initialVal <- readDyn valueDyn
   currentNodeVar <- lift newVar
   let
@@ -55,11 +56,12 @@ dynProp propName (holdUniqDyn -> valueDyn) = do
     saveNode = AssignVar currentNodeVar (Arg 0 0)
   modify \s -> s {rev_queue = saveNode : initProp : s.rev_queue }
   lift $ subscribe (updates valueDyn)
-    $ enqueueIfAlive currentNodeVar
+    $ enqueueIfAlive rscope
     . ElementProp (Var currentNodeVar) propName . fromJValue . toJSVal
 
 toggleClass :: Utf8 -> Dynamic Bool -> Html ()
 toggleClass className (holdUniqDyn -> enableDyn) = do
+  rscope <- lift ask
   initialVal <- readDyn enableDyn
   currentNodeVar <- lift newVar
   let
@@ -67,7 +69,7 @@ toggleClass className (holdUniqDyn -> enableDyn) = do
     saveNode = AssignVar currentNodeVar (Arg 0 0)
   modify \s -> s {rev_queue = saveNode : initClass : s.rev_queue }
   lift $ subscribe (updates enableDyn) $
-    enqueueIfAlive currentNodeVar . ToggleClass (Var currentNodeVar) className
+    enqueueIfAlive rscope . ToggleClass (Var currentNodeVar) className
 
 text :: Utf8 -> Html ()
 text contents = do
@@ -76,6 +78,7 @@ text contents = do
 
 dynText :: Dynamic Utf8 -> Html ()
 dynText (holdUniqDyn -> dynContent) = do
+  rscope <- lift ask
   initialContent <- readDyn dynContent
   textNodeVar <- lift newVar
   let
@@ -83,7 +86,7 @@ dynText (holdUniqDyn -> dynContent) = do
       (AssignVar textNodeVar (CreateText initialContent))
   modify \s -> s {rev_queue = insertText : s.rev_queue }
   lift $ subscribe (updates dynContent) $
-    enqueueIfAlive textNodeVar . AssignText (Var textNodeVar)
+    enqueueIfAlive rscope . AssignText (Var textNodeVar)
 
 dyn :: Dynamic (Html ()) -> Html ()
 dyn d = do
@@ -123,8 +126,9 @@ simpleList listDyn h = do
       -- New list is longer, append new elements
       ([], x:xs) -> do
         newElem <- newElemEnv x
-        withBuilder (Var newElem.elem_boundary) $
-          monohoist (local (const newElem.reactive_scope)) $ h idx newElem.elem_state_ref
+        withBuilder (Var newElem.elem_boundary)
+          $ monohoist (local (const newElem.reactive_scope))
+          $ h idx newElem.elem_state_ref
         fmap (newElem:) $ setup (idx + 1) xs []
       -- New list is shorter, delete the elements that no longer
       -- present in the new list
@@ -141,7 +145,7 @@ simpleList listDyn h = do
       monohoist (local (const reactive_scope)) do
         elem_state_ref <- lift $ newRef a
         elem_boundary <- insertBoundary
-        return ElemEnv {..}
+        return ElemEnv {reactive_scope, elem_state_ref, elem_boundary}
     finalizeElems :: Bool -> [ElemEnv a] -> Html ()
     finalizeElems remove = mapM_ \ee -> do
       when remove $ lift $ destroyBoundary ee.elem_boundary

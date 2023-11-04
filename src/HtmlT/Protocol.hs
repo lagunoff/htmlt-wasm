@@ -121,6 +121,8 @@ data Expr
   -- ^ Free a variable allocated with @AssignVar@
   | Var VarId
   -- ^ Retrieve the value of the variable
+  | FreeScope Int64
+  -- ^ Free a variable allocated with @AssignVar@
 
   | InsertNode Expr Expr
   | WithBuilder Expr Expr
@@ -171,8 +173,11 @@ fromJValue = \case
   JArr xs -> Arr $ fmap fromJValue xs
   JObj kv -> Obj $ fmap (\(k, v) -> (k, fromJValue v)) kv
 
-newtype VarId = VarId { unVarId :: Int64 }
-  deriving newtype (Show, Num, Binary, Enum, Ord, Eq)
+data VarId = VarId
+  { scope :: Int64
+  , var_id :: Int64
+  } deriving stock (Generic, Show, Ord, Eq)
+    deriving anyclass (Binary)
 
 newtype CallbackId = CallbackId { unCallbackId :: Int64 }
   deriving newtype (Show, Num, Binary, Ord, Eq)

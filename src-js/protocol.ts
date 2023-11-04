@@ -119,14 +119,24 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
     }
     case ExprTag.AssignVar: {
       const rhs = evalExpr(idenScope, argScope, hscb, exp.rhs);
-      varStorage.set(exp.lhs, rhs);
+      if (varStorage.has(exp.scopeId)) {
+        const scopeMap = varStorage.get(exp.scopeId)!;
+        scopeMap.set(exp.varId, rhs);
+      } else {
+        const scopeMap = new Map();
+        scopeMap.set(exp.varId, rhs);
+        varStorage.set(exp.scopeId, scopeMap);
+      }
       return rhs;
     }
     case ExprTag.FreeVar: {
-      return varStorage.delete(exp.varId);
+      return;
     }
     case ExprTag.Var: {
-      return varStorage.get(exp.varId);
+      return varStorage.get(exp.scopeId)?.get(exp.varId);
+    }
+    case ExprTag.FreeScope: {
+      return varStorage.delete(exp.scopeId);
     }
     case ExprTag.InsertNode: {
       const parent = evalExpr(idenScope, argScope, hscb, exp.parent) as Element|Comment;
@@ -334,6 +344,7 @@ export enum ExprTag {
   AssignVar,
   FreeVar,
   Var,
+  FreeScope,
 
   InsertNode,
   WithBuilder,
@@ -377,9 +388,10 @@ export type Expr =
   | { tag: ExprTag.Apply, 0: Expr, 1: Expr[] }
   | { tag: ExprTag.Call, 0: Expr, 1: JSFunctionName, 2: Expr[] }
 
-  | { tag: ExprTag.AssignVar, lhs: number, rhs: Expr }
-  | { tag: ExprTag.FreeVar, varId: number }
-  | { tag: ExprTag.Var, varId: number }
+  | { tag: ExprTag.AssignVar, scopeId: number, varId: number, rhs: Expr }
+  | { tag: ExprTag.FreeVar, scopeId: number, varId: number }
+  | { tag: ExprTag.Var, scopeId: number, varId: number }
+  | { tag: ExprTag.FreeScope, scopeId: number }
 
   | { tag: ExprTag.InsertNode, parent: Expr, child: Expr }
   | { tag: ExprTag.WithBuilder, builder: Expr, builderContent: Expr }
@@ -423,9 +435,10 @@ export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.Apply]: b.record({ 0: self, 1: b.array(self) }),
   [ExprTag.Call]: b.record({ 0: self, 1: b.string, 2: b.array(self) }),
 
-  [ExprTag.AssignVar]: b.record({ lhs: b.int64, rhs: self }),
-  [ExprTag.FreeVar]: b.record({ varId: b.int64 }),
-  [ExprTag.Var]: b.record({ varId: b.int64 }),
+  [ExprTag.AssignVar]: b.record({ scopeId: b.int64, varId: b.int64, rhs: self }),
+  [ExprTag.FreeVar]: b.record({ scopeId: b.int64, varId: b.int64 }),
+  [ExprTag.Var]: b.record({ scopeId: b.int64, varId: b.int64 }),
+  [ExprTag.FreeScope]: b.record({ scopeId: b.int64 }),
 
   [ExprTag.InsertNode]: b.record({ parent: self, child: self }),
   [ExprTag.WithBuilder]: b.record({ builder: self, builderContent: self }),
@@ -479,7 +492,7 @@ export const javascriptMessage = b.discriminate({
 export type HaskellMessage = typeof haskellMessage['_A'];
 export type JavaScriptMessage = typeof javascriptMessage['_A'];
 
-export const varStorage = new Map<number, unknown>();
+export const varStorage = new Map<number, Map<number, unknown>>();
 
 export function mkStartMessage(): JavaScriptMessage {
   const initial_url: StartLocation = {
