@@ -12,10 +12,10 @@ import Data.String
 import GHC.Generics
 
 import "this" HtmlT.Event
-import "this" HtmlT.RJS
-import "this" HtmlT.Marshal
+import "this" HtmlT.JSON
 import "this" HtmlT.Protocol
 import "this" HtmlT.Protocol.Utf8 (Utf8(..))
+import "this" HtmlT.RJS
 
 newtype HtmlT m a = HtmlT {unHtmlT :: StateT HtmlState m a}
 
@@ -32,10 +32,10 @@ data HtmlState = HtmlState
 el :: Utf8 -> Html a -> Html a
 el tagName = withBuilder (CreateElement tagName)
 
-prop :: ToJSVal v => Utf8 -> v -> Html ()
+prop :: ToJSON v => Utf8 -> v -> Html ()
 prop propName propVal = modify \s ->
   let
-    expr = ElementProp (Arg 0 0) propName (fromJValue (toJSVal propVal))
+    expr = ElementProp (Arg 0 0) propName (fromJValue (toJSON propVal))
   in
     s {rev_queue = expr : s.rev_queue }
 
@@ -46,18 +46,18 @@ attr attrName attrVal = modify \s ->
   in
     s {rev_queue = expr : s.rev_queue}
 
-dynProp :: (ToJSVal v, Eq v) => Utf8 -> Dynamic v -> Html ()
+dynProp :: (ToJSON v, Eq v) => Utf8 -> Dynamic v -> Html ()
 dynProp propName (holdUniqDyn -> valueDyn) = do
   rscope <- lift ask
   initialVal <- readDyn valueDyn
   currentNodeVar <- lift newVar
   let
-    initProp = ElementProp (Arg 0 0) propName (fromJValue (toJSVal initialVal))
+    initProp = ElementProp (Arg 0 0) propName (fromJValue (toJSON initialVal))
     saveNode = AssignVar currentNodeVar (Arg 0 0)
   modify \s -> s {rev_queue = saveNode : initProp : s.rev_queue }
   lift $ subscribe (updates valueDyn)
     $ enqueueIfAlive rscope
-    . ElementProp (Var currentNodeVar) propName . fromJValue . toJSVal
+    . ElementProp (Var currentNodeVar) propName . fromJValue . toJSON
 
 toggleClass :: Utf8 -> Dynamic Bool -> Html ()
 toggleClass className (holdUniqDyn -> enableDyn) = do

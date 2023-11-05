@@ -8,11 +8,12 @@ import GHC.Generics
 
 import "this" HtmlT.Protocol.JNumber (JNumber)
 import "this" HtmlT.Protocol.Utf8 (Utf8)
+import "this" HtmlT.JSON qualified as JSON
 
 
 data HaskellMessage
   = EvalExpr Expr
-  -- ^ Evaluate expression, expect JValue result
+  -- ^ Evaluate expression, expect JSON.Value result
   | Yield Expr
   -- ^ Evaluate expression for side-effects only and wait for some
   -- asynchronous event to continue the execution, won't return
@@ -26,9 +27,9 @@ data HaskellMessage
 
 data JavaScriptMessage
   = Start StartFlags
-  | Return JValue
-  | TriggerEventMsg JValue CallbackId
-  | AsyncCallbackMsg JValue CallbackId
+  | Return JSON.Value
+  | TriggerEventMsg JSON.Value CallbackId
+  | AsyncCallbackMsg JSON.Value CallbackId
   | BeforeUnload
   -- ^ Fired from addEventListener("beforeunload") listener. Won't
   -- work under the DevServer!
@@ -109,7 +110,7 @@ data Expr
   -- of the closest outer lambda function
   | Apply Expr [Expr]
   -- ^ Apply a function to arbitrary length arguments. @Apply (Id
-  -- "encodeURIComponent") [Str "#"]@ going to evaluate to @JStr "%23"@
+  -- "encodeURIComponent") [Str "#"]@ going to evaluate to @JSON.String "%23"@
   | Call Expr Utf8 [Expr]
   -- ^ Call a method of an object @Call (Id "console") "log" [Str
   -- "Hi!"]@ is equivalent to @console.log('Hi!')@ JavaScript code
@@ -151,27 +152,14 @@ data Expr
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
--- | Represents a fully-evaluated form of 'Expr' with no lambdas (a
--- JSON basically). This is the result we get from JavaScript after
--- evaluating an 'Expr'.
-data JValue
-  = JNull
-  | JBool Bool
-  | JNum JNumber
-  | JStr Utf8
-  | JArr [JValue]
-  | JObj [(Utf8, JValue)]
-  deriving stock (Generic, Show)
-  deriving anyclass (Binary)
-
-fromJValue :: JValue -> Expr
+fromJValue :: JSON.Value -> Expr
 fromJValue = \case
-  JNull -> Null
-  JBool a -> Boolean a
-  JNum a -> Num a
-  JStr a -> Str a
-  JArr xs -> Arr $ fmap fromJValue xs
-  JObj kv -> Obj $ fmap (\(k, v) -> (k, fromJValue v)) kv
+  JSON.Null -> Null
+  JSON.Bool a -> Boolean a
+  JSON.Number a -> Num a
+  JSON.String a -> Str a
+  JSON.Array xs -> Arr $ fmap fromJValue xs
+  JSON.Object kv -> Obj $ fmap (\(k, v) -> (k, fromJValue v)) kv
 
 data VarId = VarId
   { scope :: Int64

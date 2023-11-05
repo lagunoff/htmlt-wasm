@@ -8,11 +8,11 @@ import Data.List qualified as List
 import GHC.Generics
 import GHC.Int
 
-import "this" HtmlT.Marshal
-import "this" HtmlT.Protocol
-import "this" HtmlT.RJS
 import "this" HtmlT.Html
+import "this" HtmlT.Protocol
 import "this" HtmlT.Protocol.Utf8 (Utf8(..))
+import "this" HtmlT.RJS
+import "this" HtmlT.JSON qualified as JSON
 
 
 data EventListenerOptions = EventListenerOptions
@@ -32,7 +32,7 @@ on k = addEventListener (addEventListenerArgs @eventName) k
 data AddEventListenerArgs hsCallback = AddEventListenerArgs
   { event_name :: Utf8
   , listener_options :: EventListenerOptions
-  , mk_hs_callback :: hsCallback -> JValue -> RJS ()
+  , mk_hs_callback :: hsCallback -> JSON.Value -> RJS ()
   , mk_js_callback :: EventListenerOptions -> CallbackId -> Expr
   } deriving (Generic)
 
@@ -75,7 +75,7 @@ inputEventArgs :: AddEventListenerArgs (Utf8 -> RJS ())
 inputEventArgs = AddEventListenerArgs
   { event_name = "input"
   , listener_options = defaultEventListenerOptions
-  , mk_hs_callback = \k j -> forM_ (fromJSVal j) k
+  , mk_hs_callback = \k j -> forM_ (JSON.fromJSON j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
     $ TriggerEvent callbackId (Arg 0 0 `Dot` "target" `Dot` "value")
     : applyListenerOptions opts
@@ -87,7 +87,7 @@ keyboardEventArgs :: Utf8 -> AddEventListenerArgs (Int64 -> RJS ())
 keyboardEventArgs event_name = AddEventListenerArgs
   { event_name
   , listener_options = defaultEventListenerOptions
-  , mk_hs_callback = \k j -> forM_ (fromJSVal j) k
+  , mk_hs_callback = \k j -> forM_ (JSON.fromJSON j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
     $ TriggerEvent callbackId (Arg 0 0 `Dot` "keyCode")
     : applyListenerOptions opts
@@ -111,7 +111,7 @@ checkboxChangeEventArgs :: AddEventListenerArgs (Bool -> RJS ())
 checkboxChangeEventArgs = AddEventListenerArgs
   { event_name = "change"
   , listener_options = defaultEventListenerOptions
-  , mk_hs_callback = \k j -> forM_ (fromJSVal j) k
+  , mk_hs_callback = \k j -> forM_ (JSON.fromJSON j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
     $ TriggerEvent callbackId (Arg 0 0 `Dot` "target" `Dot` "checked")
     : applyListenerOptions opts
@@ -122,7 +122,7 @@ selectChangeEventArgs :: AddEventListenerArgs (Utf8 -> RJS ())
 selectChangeEventArgs = AddEventListenerArgs
   { event_name = "change"
   , listener_options = defaultEventListenerOptions
-  , mk_hs_callback = \k j -> forM_ (fromJSVal j) k
+  , mk_hs_callback = \k j -> forM_ (JSON.fromJSON j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
     $ TriggerEvent callbackId (Arg 0 0 `Dot` "target" `Dot` "value")
     : applyListenerOptions opts

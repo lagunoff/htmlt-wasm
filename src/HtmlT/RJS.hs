@@ -16,6 +16,7 @@ import GHC.Int
 import Unsafe.Coerce
 
 import "this" HtmlT.Protocol
+import "this" HtmlT.JSON qualified as JSON
 
 -- | A computation capable of interacting with JavaScript.
 newtype RJS a = RJS
@@ -24,9 +25,9 @@ newtype RJS a = RJS
 
 data RjsResult a where
   PureResult :: a -> RjsResult a
-  EvalResult :: Expr -> RjsResult JValue
-  YieldResult :: CallbackId -> RjsResult JValue
-  InterruptResult :: InterruptReason -> (JValue -> RJS b) -> RjsResult b
+  EvalResult :: Expr -> RjsResult JSON.Value
+  YieldResult :: CallbackId -> RjsResult JSON.Value
+  InterruptResult :: InterruptReason -> (JSON.Value -> RJS b) -> RjsResult b
   FMapResult :: (a -> b) -> RjsResult a -> RjsResult b
 
 data InterruptReason = EvalReason Expr | YieldReason CallbackId
@@ -137,7 +138,7 @@ freeScope rscope = do
       | Set.member s ss = xs
       | otherwise = (s, c) : deleteSubs ss xs
 
-newCallbackEvent :: (JValue -> RJS ()) -> RJS CallbackId
+newCallbackEvent :: (JSON.Value -> RJS ()) -> RJS CallbackId
 newCallbackEvent k = reactive \e s0 ->
   let
     (queueId, s1) = nextQueueId s0
@@ -145,7 +146,7 @@ newCallbackEvent k = reactive \e s0 ->
   in
     (CallbackId (unQueueId queueId), s2)
 
-evalExpr :: Expr -> RJS JValue
+evalExpr :: Expr -> RJS JSON.Value
 evalExpr e = RJS \_ s -> return (s, EvalResult e)
 
 enqueueExpr :: Expr -> RJS ()
@@ -166,7 +167,7 @@ flushQueue = do
   queue <- state \s -> (s.evaluation_queue, s {evaluation_queue = []})
   void $ evalExpr $ RevSeq queue
 
-yield :: CallbackId -> RJS JValue
+yield :: CallbackId -> RJS JSON.Value
 yield callbackId = RJS \_ s -> return (s, YieldResult callbackId)
 
 nextQueueId :: RjsState -> (QueueId, RjsState)

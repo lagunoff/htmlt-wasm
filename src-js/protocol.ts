@@ -266,30 +266,30 @@ function toScientific(n: number): { coefficient: number, base10Exponent: number 
 }
 
 export enum JValueTag {
-  JNull,
-  JBool,
-  JNum,
-  JStr,
-  JArr,
   JObj,
+  JArr,
+  JStr,
+  JNum,
+  JBool,
+  JNull,
 }
 
 export type JValue =
-  | { tag: JValueTag.JNull }
-  | { tag: JValueTag.JBool, 0: number }
-  | { tag: JValueTag.JNum, coefficient: number, base10Exponent: number }
-  | { tag: JValueTag.JStr, 0: string }
-  | { tag: JValueTag.JArr, 0: JValue[] }
   | { tag: JValueTag.JObj, 0: [string, JValue][] }
+  | { tag: JValueTag.JArr, 0: JValue[] }
+  | { tag: JValueTag.JStr, 0: string }
+  | { tag: JValueTag.JNum, coefficient: number, base10Exponent: number }
+  | { tag: JValueTag.JBool, 0: number }
+  | { tag: JValueTag.JNull }
 ;
 
 export const jvalue = b.recursive<JValue>(self => b.discriminate({
-  [JValueTag.JNull]: b.record({ }),
-  [JValueTag.JBool]: b.record({ 0: b.int8 }),
-  [JValueTag.JNum]: b.record({ coefficient: b.int64, base10Exponent: b.int8 }),
-  [JValueTag.JStr]: b.record({ 0: b.string }),
-  [JValueTag.JArr]: b.record({ 0: b.array(self) }),
   [JValueTag.JObj]: b.record({ 0: b.array(b.tuple(b.string, self)) }),
+  [JValueTag.JArr]: b.record({ 0: b.array(self) }),
+  [JValueTag.JStr]: b.record({ 0: b.string }),
+  [JValueTag.JNum]: b.record({ coefficient: b.int64, base10Exponent: b.int8 }),
+  [JValueTag.JBool]: b.record({ 0: b.int8 }),
+  [JValueTag.JNull]: b.record({ }),
 }));
 
 export type StartLocation = {

@@ -64,13 +64,14 @@ library
     HtmlT.Element
     HtmlT.Event
     HtmlT.Html
+    HtmlT.JSON
+    HtmlT.JSON.Types
     HtmlT.MVar
-    HtmlT.RJS
-    HtmlT.Marshal
     HtmlT.Property
     HtmlT.Protocol
     HtmlT.Protocol.JNumber
     HtmlT.Protocol.Utf8
+    HtmlT.RJS
     HtmlT.Reactor
   build-depends:
     base,
@@ -154,8 +155,9 @@ benchmark benchmark_01
     HtmlT.Element
     HtmlT.Event
     HtmlT.Html
+    HtmlT.JSON
+    HtmlT.JSON.Types
     HtmlT.MVar
-    HtmlT.Marshal
     HtmlT.Property
     HtmlT.Protocol
     HtmlT.Protocol.JNumber
