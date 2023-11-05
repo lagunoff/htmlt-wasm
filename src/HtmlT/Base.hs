@@ -7,11 +7,11 @@ import Data.Map qualified as Map
 import GHC.Exts
 import GHC.Generics
 import Unsafe.Coerce
+import Data.Text qualified as Text
 
 import "this" HtmlT.Event
 import "this" HtmlT.JSON qualified as JSON
 import "this" HtmlT.Protocol
-import "this" HtmlT.Protocol.Utf8 qualified as Utf8
 import "this" HtmlT.RJS
 
 data RjsInstance = RjsInstance
@@ -33,7 +33,7 @@ runUntillInterruption inst e rjs = do
   (s1, result) <- unRJS rjs e s0 `catch` \(e :: SomeException) ->
     -- UncaughtException command never returns a value from JS side,
     -- therefore we can coerce the result to any type
-    pure (s0, coerceResult (EvalResult (UncaughtException (Utf8.pack (show e)))))
+    pure (s0, coerceResult (EvalResult (UncaughtException (Text.pack (show e)))))
   let
     g :: forall a. RjsResult a -> IO (Either InterruptReason a)
     g r = case r of

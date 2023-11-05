@@ -104,6 +104,6 @@ yarn run webpack --mode production
  - [ ] Review, cleanup the code and write documentation
  - [ ] Try various protocol optimizations (use bounded buffer instead of using malloc/free for each message)
  - [ ] Explore possible optimizations in the JavaScript implementation of the protocol (use hand written encoders/decoders instead of reflection on datatype description)
- - [ ] Use `Data.Text` instead of `HtmlT.Protocol.Utf8`?
+ - [x] Use `Data.Text` instead of `HtmlT.Protocol.Utf8`?
 
 

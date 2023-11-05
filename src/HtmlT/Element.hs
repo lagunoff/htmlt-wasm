@@ -2,8 +2,9 @@
 -}
 module HtmlT.Element where
 
+import Data.Text (Text)
+
 import "this" HtmlT.Html
-import "this" HtmlT.Protocol.Utf8 (Utf8(..))
 
 -- | This typeclass allows for tag constructors to have variable
 -- length arguments. Each tag constructor like 'div_' defined below
@@ -16,7 +17,7 @@ import "this" HtmlT.Protocol.Utf8 (Utf8(..))
 -- https://github.com/chrisdone/lucid/blob/fb3b0e7c189c2acd8d88838d4a13923f24542ee8/src/Lucid/Base.hs#L272
 class Term arg result | result -> arg where
   term
-    :: Utf8 -- ^ Name.
+    :: Text -- ^ Name.
     -> arg -- ^ Some argument.
     -> result -- ^ Result: either an element or an attribute.
 

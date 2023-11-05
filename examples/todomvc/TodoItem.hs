@@ -2,6 +2,7 @@ module TodoItem where
 
 import Data.List qualified as List
 import Data.Maybe
+import Data.Text (Text)
 import GHC.Int
 import HtmlT
 import HtmlT.JSON
@@ -13,15 +14,15 @@ data TodoItemConfig = TodoItemConfig
   }
 
 data TodoItemState = TodoItemState
-  { title :: Utf8
+  { title :: Text
   , completed :: Bool
-  , editing :: Maybe Utf8
+  , editing :: Maybe Text
   } deriving stock (Show, Eq)
 
 data TodoItemAction a where
   CancelAction :: TodoItemConfig -> TodoItemAction ()
   CommitAction :: TodoItemConfig -> TodoItemAction ()
-  InputAction :: TodoItemConfig -> Utf8 -> TodoItemAction ()
+  InputAction :: TodoItemConfig -> Text -> TodoItemAction ()
   DoubleClickAction :: TodoItemConfig -> TodoItemAction ()
   CheckedAction :: TodoItemConfig -> Bool -> TodoItemAction ()
   KeydownAction :: TodoItemConfig -> Int64 -> TodoItemAction ()

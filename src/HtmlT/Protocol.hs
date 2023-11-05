@@ -2,12 +2,11 @@ module HtmlT.Protocol where
 
 import Data.Binary (Binary)
 import Data.Int
-import Data.Text ()
+import Data.Text (Text)
 import Data.Word
 import GHC.Generics
 
 import "this" HtmlT.Protocol.JNumber (JNumber)
-import "this" HtmlT.Protocol.Utf8 (Utf8)
 import "this" HtmlT.JSON qualified as JSON
 
 
@@ -42,20 +41,20 @@ data StartFlags = StartFlags
     deriving anyclass (Binary)
 
 data Location = Location
-  { protocol :: Utf8
+  { protocol :: Text
   -- ^ A string containing the protocol scheme of the URL, including
   -- the final ':'
-  , hostname :: Utf8
+  , hostname :: Text
   -- ^ A string containing the domain of the URL.
-  , port :: Utf8
+  , port :: Text
   -- ^ A string containing the port number of the URL.
-  , pathname :: Utf8
+  , pathname :: Text
   -- ^ A string containing an initial '/' followed by the path of the
   -- URL, not including the query string or fragment.
-  , search :: Utf8
+  , search :: Text
   -- ^ A string containing a '?' followed by the parameters or
   -- "querystring" of the URL
-  , hash :: Utf8
+  , hash :: Text
   -- ^ A string containing a '#' followed by the fragment identifier
   -- of the URL.
   } deriving stock (Show, Eq, Generic)
@@ -71,17 +70,17 @@ data Expr
   -- ^ JavaScript boolean value
   | Num JNumber
   -- ^ JavaScript integer number
-  | Str Utf8
+  | Str Text
   -- ^ JavaScript string
   | Arr [Expr]
   -- ^ JavaScript array
-  | Obj [(Utf8, Expr)]
+  | Obj [(Text, Expr)]
   -- ^ JavaScript object
 
-  | Dot Expr Utf8
+  | Dot Expr Text
   -- ^ Read string property of an object. @(Dot (Id "document")
   -- "body")@ is equivalent to @document.body@ JavaScript expression
-  | AssignProp Expr Utf8 Expr
+  | AssignProp Expr Text Expr
   -- ^ Assign a value to a string property of an object @(AssignProp
   -- (Id "foo") "bar" (Str "baz"))@ is equivalent to @foo['bar'] =
   -- baz;@ JavaScript expression. Evaluates into its right-hand side
@@ -99,7 +98,7 @@ data Expr
   | Divide Expr Expr
   -- ^ Binary division @(Divide 256 5647)@ is equivalent to @256 / 5647@
 
-  | Id Utf8 -- ^ Lookup an identifier in current lexical scope
+  | Id Text -- ^ Lookup an identifier in current lexical scope
   | Lam Expr
   -- ^ Introduce a lambda function. Arguments can be accessed via 'Arg
   -- 0 0'
@@ -111,7 +110,7 @@ data Expr
   | Apply Expr [Expr]
   -- ^ Apply a function to arbitrary length arguments. @Apply (Id
   -- "encodeURIComponent") [Str "#"]@ going to evaluate to @JSON.String "%23"@
-  | Call Expr Utf8 [Expr]
+  | Call Expr Text [Expr]
   -- ^ Call a method of an object @Call (Id "console") "log" [Str
   -- "Hi!"]@ is equivalent to @console.log('Hi!')@ JavaScript code
 
@@ -127,13 +126,13 @@ data Expr
 
   | InsertNode Expr Expr
   | WithBuilder Expr Expr
-  | CreateElement Utf8
-  | CreateText Utf8
-  | ElementProp Expr Utf8 Expr
-  | ElementAttr Expr Utf8 Utf8
-  | AddEventListener Expr Utf8 Expr
-  | ToggleClass Expr Utf8 Bool
-  | AssignText Expr Utf8
+  | CreateElement Text
+  | CreateText Text
+  | ElementProp Expr Text Expr
+  | ElementAttr Expr Text Text
+  | AddEventListener Expr Text Expr
+  | ToggleClass Expr Text Bool
+  | AssignText Expr Text
   | InsertBoundary Expr
   | ClearBoundary Expr Bool
 
@@ -142,13 +141,13 @@ data Expr
   -- evaluating from the end of the list to the beggining. Returns
   -- whatever the last expression evaluetes into (last being the
   -- expression from the tip of the list)
-  | Eval Utf8
+  | Eval Text
   -- ^ Evaluate arbitrary JavaScript code @(Eval "setTimeout(() =>
   -- console.log('Hi!'), 1000)")@ will print a message with one second
   -- delay
   | TriggerEvent CallbackId Expr
   | AsyncCallback CallbackId Expr
-  | UncaughtException Utf8
+  | UncaughtException Text
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 

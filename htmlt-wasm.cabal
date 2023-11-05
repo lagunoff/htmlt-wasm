@@ -70,7 +70,6 @@ library
     HtmlT.Property
     HtmlT.Protocol
     HtmlT.Protocol.JNumber
-    HtmlT.Protocol.Utf8
     HtmlT.RJS
     HtmlT.Reactor
   build-depends:
@@ -161,7 +160,6 @@ benchmark benchmark_01
     HtmlT.Property
     HtmlT.Protocol
     HtmlT.Protocol.JNumber
-    HtmlT.Protocol.Utf8
     HtmlT.RJS
     HtmlT.Reactor
     TodoItem

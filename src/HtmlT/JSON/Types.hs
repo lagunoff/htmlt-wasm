@@ -6,16 +6,16 @@ import Data.Maybe
 import GHC.Generics as G
 import GHC.Int
 import Data.Binary
+import Data.Text (Text)
+import Data.Text qualified as Text
 
 import "this" HtmlT.Protocol.JNumber (JNumber(..))
 import "this" HtmlT.Protocol.JNumber qualified as JNumber
-import "this" HtmlT.Protocol.Utf8 (Utf8(..))
-import "this" HtmlT.Protocol.Utf8 qualified as Utf8
 
 data Value
-  = Object [(Utf8, Value)]
+  = Object [(Text, Value)]
   | Array [Value]
-  | String Utf8
+  | String Text
   | Number JNumber
   | Bool Bool
   | Null
@@ -39,7 +39,7 @@ instance ToJSON Rational where
 instance {-# OVERLAPPABLE #-} Real a => ToJSON a where
   toJSON = toJSON . toRational
 
-instance ToJSON Utf8 where toJSON = String
+instance ToJSON Text where toJSON = String
 
 instance ToJSON a => ToJSON [a] where toJSON = Array . fmap toJSON
 
@@ -78,7 +78,7 @@ instance FromJSON Rational where
 instance {-# OVERLAPPABLE #-} Fractional a => FromJSON a where
   fromJSON = fmap fromRational . fromJSON
 
-instance FromJSON Utf8 where
+instance FromJSON Text where
   fromJSON = \case String a -> Just a; _ -> Nothing
 
 instance FromJSON a => FromJSON [a] where
@@ -128,7 +128,7 @@ instance {-# OVERLAPPING #-} (ToJSON a) => GToJSON (S1 s (Rec0 a)) where
 --------------------------------------------------------------------------------
 
 class GToJSObject (f :: Type -> Type) where
-  gToJSObject :: f x -> [(Utf8, Value)]
+  gToJSObject :: f x -> [(Text, Value)]
 
 instance (GToJSObject x, GToJSObject y) => GToJSObject (x :*: y) where
   gToJSObject (x :*: y) = gToJSObject x <> gToJSObject y
@@ -139,11 +139,11 @@ instance (GToJSObject f) => GToJSObject (M1 m c f) where
 instance {-# OVERLAPPING #-} (ToJSON a, Selector s) => GToJSObject (S1 s (Rec0 a)) where
   gToJSObject (M1 (K1 a)) = [(key, toJSON a)]
     where
-      key = Utf8.pack $ selName (undefined :: M1 S s (Rec0 a) x)
+      key = Text.pack $ selName (undefined :: M1 S s (Rec0 a) x)
 --------------------------------------------------------------------------------
 
 class GFromJSObject (f :: Type -> Type) where
-  gFromJSObject :: [(Utf8, Value)] -> Maybe (f x)
+  gFromJSObject :: [(Text, Value)] -> Maybe (f x)
 
 instance (GFromJSObject x, GFromJSObject y) => GFromJSObject (x :*: y) where
   gFromJSObject kvs = liftA2 (:*:) (gFromJSObject kvs) (gFromJSObject kvs)
@@ -154,4 +154,4 @@ instance (GFromJSObject f) => GFromJSObject (M1 m c f) where
 instance {-# OVERLAPPING #-} (FromJSON a, Selector s) => GFromJSObject (S1 s (Rec0 a)) where
   gFromJSObject kvs = List.lookup key kvs >>= fmap (M1 . K1) . fromJSON
     where
-      key = Utf8.pack $ selName (undefined :: M1 S s (Rec0 a) x)
+      key = Text.pack $ selName (undefined :: M1 S s (Rec0 a) x)

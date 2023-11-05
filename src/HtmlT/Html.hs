@@ -6,15 +6,15 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Fix
-import Data.ByteString.Char8 qualified as Char8
 import Data.IORef
 import Data.String
 import GHC.Generics
+import Data.Text (Text)
+import Data.Text qualified as Text
 
 import "this" HtmlT.Event
 import "this" HtmlT.JSON
 import "this" HtmlT.Protocol
-import "this" HtmlT.Protocol.Utf8 (Utf8(..))
 import "this" HtmlT.RJS
 
 newtype HtmlT m a = HtmlT {unHtmlT :: StateT HtmlState m a}
@@ -29,24 +29,24 @@ data HtmlState = HtmlState
   , save_current_node :: Maybe VarId
   } deriving (Generic)
 
-el :: Utf8 -> Html a -> Html a
+el :: Text -> Html a -> Html a
 el tagName = withBuilder (CreateElement tagName)
 
-prop :: ToJSON v => Utf8 -> v -> Html ()
+prop :: ToJSON v => Text -> v -> Html ()
 prop propName propVal = modify \s ->
   let
     expr = ElementProp (Arg 0 0) propName (fromJValue (toJSON propVal))
   in
     s {rev_queue = expr : s.rev_queue }
 
-attr :: Utf8 -> Utf8 -> Html ()
+attr :: Text -> Text -> Html ()
 attr attrName attrVal = modify \s ->
   let
     expr = ElementAttr (Arg 0 0) attrName attrVal
   in
     s {rev_queue = expr : s.rev_queue}
 
-dynProp :: (ToJSON v, Eq v) => Utf8 -> Dynamic v -> Html ()
+dynProp :: (ToJSON v, Eq v) => Text -> Dynamic v -> Html ()
 dynProp propName (holdUniqDyn -> valueDyn) = do
   rscope <- lift ask
   initialVal <- readDyn valueDyn
@@ -59,7 +59,7 @@ dynProp propName (holdUniqDyn -> valueDyn) = do
     $ enqueueIfAlive rscope
     . ElementProp (Var currentNodeVar) propName . fromJValue . toJSON
 
-toggleClass :: Utf8 -> Dynamic Bool -> Html ()
+toggleClass :: Text -> Dynamic Bool -> Html ()
 toggleClass className (holdUniqDyn -> enableDyn) = do
   rscope <- lift ask
   initialVal <- readDyn enableDyn
@@ -71,12 +71,12 @@ toggleClass className (holdUniqDyn -> enableDyn) = do
   lift $ subscribe (updates enableDyn) $
     enqueueIfAlive rscope . ToggleClass (Var currentNodeVar) className
 
-text :: Utf8 -> Html ()
+text :: Text -> Html ()
 text contents = do
   let expr = InsertNode (Arg 0 0) (CreateText contents)
   modify \s -> s {rev_queue = expr : s.rev_queue}
 
-dynText :: Dynamic Utf8 -> Html ()
+dynText :: Dynamic Text -> Html ()
 dynText (holdUniqDyn -> dynContent) = do
   rscope <- lift ask
   initialContent <- readDyn dynContent
@@ -208,4 +208,4 @@ deriving newtype instance MonadTrans HtmlT
 deriving newtype instance MonadFix m => MonadFix (HtmlT m)
 
 instance a ~ () => IsString (Html a) where
-  fromString = text . Utf8 . Char8.pack
+  fromString = text . Text.pack

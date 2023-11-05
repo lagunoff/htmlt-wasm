@@ -2,7 +2,6 @@ import Control.Monad
 import Data.Binary qualified as Binary
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as BSL
-import Data.IORef
 import Gauge.Main
 import HtmlT
 

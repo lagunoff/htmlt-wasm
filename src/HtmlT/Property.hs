@@ -2,19 +2,20 @@
 -}
 module HtmlT.Property where
 
+import Data.Text (Text)
+
 import "this" HtmlT.Event
 import "this" HtmlT.Html
-import "this" HtmlT.Protocol.Utf8 (Utf8(..))
 
-dynStyles :: Dynamic Utf8 -> Html ()
+dynStyles :: Dynamic Text -> Html ()
 dynStyles = dynProp "style"
 {-# INLINE dynStyles #-}
 
-dynValue :: Dynamic Utf8 -> Html ()
+dynValue :: Dynamic Text -> Html ()
 dynValue = dynProp "value"
 {-# INLINE dynValue #-}
 
-dynClass :: Dynamic Utf8 -> Html ()
+dynClass :: Dynamic Text -> Html ()
 dynClass = dynProp "className"
 {-# INLINE dynClass #-}
 
@@ -26,7 +27,7 @@ dynDisabled :: Dynamic Bool -> Html ()
 dynDisabled = dynProp "disabled"
 {-# INLINE dynDisabled #-}
 
-title_ :: Utf8 -> Html ()
+title_ :: Text -> Html ()
 title_ = prop "title"
 {-# INLINE title_ #-}
 
@@ -38,31 +39,31 @@ hidden_ :: Bool -> Html ()
 hidden_ = prop "hidden"
 {-# INLINE hidden_ #-}
 
-value_ :: Utf8 -> Html ()
+value_ :: Text -> Html ()
 value_ = prop "value"
 {-# INLINE value_ #-}
 
-defaultValue_ :: Utf8 -> Html ()
+defaultValue_ :: Text -> Html ()
 defaultValue_ = prop "defaultValue"
 {-# INLINE defaultValue_ #-}
 
-accept_ :: Utf8 -> Html ()
+accept_ :: Text -> Html ()
 accept_ = prop "accept"
 {-# INLINE accept_ #-}
 
-acceptCharset_ :: Utf8 -> Html ()
+acceptCharset_ :: Text -> Html ()
 acceptCharset_ = prop "acceptCharset"
 {-# INLINE acceptCharset_ #-}
 
-action_ :: Utf8 -> Html ()
+action_ :: Text -> Html ()
 action_ = prop "action"
 {-# INLINE action_ #-}
 
 autocomplete_ :: Bool -> Html ()
-autocomplete_ b = prop @Utf8 "autocomplete" (if b then "on" else "off")
+autocomplete_ b = prop @Text "autocomplete" (if b then "on" else "off")
 {-# INLINE autocomplete_ #-}
 
-autosave_ :: Utf8 -> Html ()
+autosave_ :: Text -> Html ()
 autosave_ = prop "autosave"
 {-# INLINE autosave_ #-}
 
@@ -70,27 +71,27 @@ disabled_ :: Bool -> Html ()
 disabled_ = prop "disabled"
 {-# INLINE disabled_ #-}
 
-enctype_ :: Utf8 -> Html ()
+enctype_ :: Text -> Html ()
 enctype_ = prop "enctype"
 {-# INLINE enctype_ #-}
 
-formation_ :: Utf8 -> Html ()
+formation_ :: Text -> Html ()
 formation_ = prop "formation"
 {-# INLINE formation_ #-}
 
-list_ :: Utf8 -> Html ()
+list_ :: Text -> Html ()
 list_ = prop "list"
 {-# INLINE list_ #-}
 
-maxlength_ :: Utf8 -> Html ()
+maxlength_ :: Text -> Html ()
 maxlength_ = prop "maxlength"
 {-# INLINE maxlength_ #-}
 
-minlength_ :: Utf8 -> Html ()
+minlength_ :: Text -> Html ()
 minlength_ = prop "minlength"
 {-# INLINE minlength_ #-}
 
-method_ :: Utf8 -> Html ()
+method_ :: Text -> Html ()
 method_ = prop "method"
 {-# INLINE method_ #-}
 
@@ -102,7 +103,7 @@ novalidate_ :: Bool -> Html ()
 novalidate_ = prop "noValidate"
 {-# INLINE novalidate_ #-}
 
-pattern_ :: Utf8 -> Html ()
+pattern_ :: Text -> Html ()
 pattern_ = prop "pattern"
 {-# INLINE pattern_ #-}
 
@@ -114,103 +115,103 @@ required_ :: Bool -> Html ()
 required_ = prop "required"
 {-# INLINE required_ #-}
 
-size_ :: Utf8 -> Html ()
+size_ :: Text -> Html ()
 size_ = prop "size"
 {-# INLINE size_ #-}
 
-forProp_ :: Utf8 -> Html ()
+forProp_ :: Text -> Html ()
 forProp_ = prop "for"
 {-# INLINE forProp_ #-}
 
-ref_ :: Utf8 -> Html ()
+ref_ :: Text -> Html ()
 ref_ = prop "ref"
 {-# INLINE ref_ #-}
 
-formProp_ :: Utf8 -> Html ()
+formProp_ :: Text -> Html ()
 formProp_ = prop "form"
 {-# INLINE formProp_ #-}
 
-max_ :: Utf8 -> Html ()
+max_ :: Text -> Html ()
 max_ = prop "max"
 {-# INLINE max_ #-}
 
-min_ :: Utf8 -> Html ()
+min_ :: Text -> Html ()
 min_ = prop "min"
 {-# INLINE min_ #-}
 
-step_ :: Utf8 -> Html ()
+step_ :: Text -> Html ()
 step_ = prop "step"
 {-# INLINE step_ #-}
 
-cols_ :: Utf8 -> Html ()
+cols_ :: Text -> Html ()
 cols_ = prop "cols"
 {-# INLINE cols_ #-}
 
-rows_ :: Utf8 -> Html ()
+rows_ :: Text -> Html ()
 rows_ = prop "rows"
 {-# INLINE rows_ #-}
 
-wrap_ :: Utf8 -> Html ()
+wrap_ :: Text -> Html ()
 wrap_ = prop "wrap"
 {-# INLINE wrap_ #-}
 
-target_ :: Utf8 -> Html ()
+target_ :: Text -> Html ()
 target_ = prop "target"
 {-# INLINE target_ #-}
 
-download_ :: Utf8 -> Html ()
+download_ :: Text -> Html ()
 download_ = prop "download"
 {-# INLINE download_ #-}
 
-downloadAs_ :: Utf8 -> Html ()
+downloadAs_ :: Text -> Html ()
 downloadAs_ = prop "downloadAs"
 {-# INLINE downloadAs_ #-}
 
-hreflang_ :: Utf8 -> Html ()
+hreflang_ :: Text -> Html ()
 hreflang_ = prop "hreflang"
 {-# INLINE hreflang_ #-}
 
-media_ :: Utf8 -> Html ()
+media_ :: Text -> Html ()
 media_ = prop "media"
 {-# INLINE media_ #-}
 
-ping_ :: Utf8 -> Html ()
+ping_ :: Text -> Html ()
 ping_ = prop "ping"
 {-# INLINE ping_ #-}
 
-rel_ :: Utf8 -> Html ()
+rel_ :: Text -> Html ()
 rel_ = prop "rel"
 {-# INLINE rel_ #-}
 
-ismap_ :: Utf8 -> Html ()
+ismap_ :: Text -> Html ()
 ismap_ = prop "ismap"
 {-# INLINE ismap_ #-}
 
-usemap_ :: Utf8 -> Html ()
+usemap_ :: Text -> Html ()
 usemap_ = prop "usemap"
 {-# INLINE usemap_ #-}
 
-shape_ :: Utf8 -> Html ()
+shape_ :: Text -> Html ()
 shape_ = prop "shape"
 {-# INLINE shape_ #-}
 
-coords_ :: Utf8 -> Html ()
+coords_ :: Text -> Html ()
 coords_ = prop "coords"
 {-# INLINE coords_ #-}
 
-src_ :: Utf8 -> Html ()
+src_ :: Text -> Html ()
 src_ = prop "src"
 {-# INLINE src_ #-}
 
-height_ :: Utf8 -> Html ()
+height_ :: Text -> Html ()
 height_ = prop "height"
 {-# INLINE height_ #-}
 
-width_ :: Utf8 -> Html ()
+width_ :: Text -> Html ()
 width_ = prop "width"
 {-# INLINE width_ #-}
 
-alt_ :: Utf8 -> Html ()
+alt_ :: Text -> Html ()
 alt_ = prop "alt"
 {-# INLINE alt_ #-}
 
@@ -226,11 +227,11 @@ loop_ :: Bool -> Html ()
 loop_ = prop "loop"
 {-# INLINE loop_ #-}
 
-preload_ :: Utf8 -> Html ()
+preload_ :: Text -> Html ()
 preload_ = prop "preload"
 {-# INLINE preload_ #-}
 
-poster_ :: Utf8 -> Html ()
+poster_ :: Text -> Html ()
 poster_ = prop "poster"
 {-# INLINE poster_ #-}
 
@@ -238,99 +239,99 @@ default_ :: Bool -> Html ()
 default_ = prop "default"
 {-# INLINE default_ #-}
 
-kind_ :: Utf8 -> Html ()
+kind_ :: Text -> Html ()
 kind_ = prop "kind"
 {-# INLINE kind_ #-}
 
-srclang_ :: Utf8 -> Html ()
+srclang_ :: Text -> Html ()
 srclang_ = prop "srclang"
 {-# INLINE srclang_ #-}
 
-sandbox_ :: Utf8 -> Html ()
+sandbox_ :: Text -> Html ()
 sandbox_ = prop "sandbox"
 {-# INLINE sandbox_ #-}
 
-seamless_ :: Utf8 -> Html ()
+seamless_ :: Text -> Html ()
 seamless_ = prop "seamless"
 {-# INLINE seamless_ #-}
 
-srcdoc_ :: Utf8 -> Html ()
+srcdoc_ :: Text -> Html ()
 srcdoc_ = prop "srcdoc"
 {-# INLINE srcdoc_ #-}
 
-reversed_ :: Utf8 -> Html ()
+reversed_ :: Text -> Html ()
 reversed_ = prop "reversed"
 {-# INLINE reversed_ #-}
 
-start_ :: Utf8 -> Html ()
+start_ :: Text -> Html ()
 start_ = prop "start"
 {-# INLINE start_ #-}
 
-align_ :: Utf8 -> Html ()
+align_ :: Text -> Html ()
 align_ = prop "align"
 {-# INLINE align_ #-}
 
-colspan_ :: Utf8 -> Html ()
+colspan_ :: Text -> Html ()
 colspan_ = attr "colspan"
 {-# INLINE colspan_ #-}
 
-rowspan_ :: Utf8 -> Html ()
+rowspan_ :: Text -> Html ()
 rowspan_ = attr "rowspan"
 {-# INLINE rowspan_ #-}
 
-headers_ :: Utf8 -> Html ()
+headers_ :: Text -> Html ()
 headers_ = prop "headers"
 {-# INLINE headers_ #-}
 
-scope_ :: Utf8 -> Html ()
+scope_ :: Text -> Html ()
 scope_ = prop "scope"
 {-# INLINE scope_ #-}
 
-async_ :: Utf8 -> Html ()
+async_ :: Text -> Html ()
 async_ = prop "async"
 {-# INLINE async_ #-}
 
-charset_ :: Utf8 -> Html ()
+charset_ :: Text -> Html ()
 charset_ = prop "charset"
 {-# INLINE charset_ #-}
 
-content_ :: Utf8 -> Html ()
+content_ :: Text -> Html ()
 content_ = prop "content"
 {-# INLINE content_ #-}
 
-defer_ :: Utf8 -> Html ()
+defer_ :: Text -> Html ()
 defer_ = prop "defer"
 {-# INLINE defer_ #-}
 
-httpEquiv_ :: Utf8 -> Html ()
+httpEquiv_ :: Text -> Html ()
 httpEquiv_ = prop "httpEquiv"
 {-# INLINE httpEquiv_ #-}
 
-language_ :: Utf8 -> Html ()
+language_ :: Text -> Html ()
 language_ = prop "language"
 {-# INLINE language_ #-}
 
-scoped_ :: Utf8 -> Html ()
+scoped_ :: Text -> Html ()
 scoped_ = prop "scoped"
 {-# INLINE scoped_ #-}
 
-type_ :: Utf8 -> Html ()
+type_ :: Text -> Html ()
 type_ = prop "type"
 {-# INLINE type_ #-}
 
-name_ :: Utf8 -> Html ()
+name_ :: Text -> Html ()
 name_ = prop "name"
 {-# INLINE name_ #-}
 
-href_ :: Utf8 -> Html ()
+href_ :: Text -> Html ()
 href_ = prop "href"
 {-# INLINE href_ #-}
 
-id_ :: Utf8 -> Html ()
+id_ :: Text -> Html ()
 id_ = prop "id"
 {-# INLINE id_ #-}
 
-placeholder_ :: Utf8 -> Html ()
+placeholder_ :: Text -> Html ()
 placeholder_ = prop "placeholder"
 {-# INLINE placeholder_ #-}
 
@@ -342,18 +343,18 @@ autofocus_ :: Bool -> Html ()
 autofocus_ = prop "autofocus"
 {-# INLINE autofocus_ #-}
 
-class_ :: Utf8 -> Html ()
+class_ :: Text -> Html ()
 class_ = prop "className"
 {-# INLINE class_ #-}
 
-data_ :: Utf8 -> Utf8 -> Html ()
+data_ :: Text -> Text -> Html ()
 data_ k v = attr ("data-" <> k) v
 {-# INLINE data_ #-}
 
-role_ :: Utf8 -> Html ()
+role_ :: Text -> Html ()
 role_ = attr "role"
 {-# INLINE role_ #-}
 
-style_ :: Utf8 -> Html ()
+style_ :: Text -> Html ()
 style_ = prop "style"
 {-# INLINE style_ #-}

@@ -5,12 +5,12 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.Kind
 import Data.List qualified as List
+import Data.Text (Text)
 import GHC.Generics
 import GHC.Int
 
 import "this" HtmlT.Html
 import "this" HtmlT.Protocol
-import "this" HtmlT.Protocol.Utf8 (Utf8(..))
 import "this" HtmlT.RJS
 import "this" HtmlT.JSON qualified as JSON
 
@@ -30,7 +30,7 @@ on :: forall eventName. IsEventName eventName => HaskellCallback eventName -> Ht
 on k = addEventListener (addEventListenerArgs @eventName) k
 
 data AddEventListenerArgs hsCallback = AddEventListenerArgs
-  { event_name :: Utf8
+  { event_name :: Text
   , listener_options :: EventListenerOptions
   , mk_hs_callback :: hsCallback -> JSON.Value -> RJS ()
   , mk_js_callback :: EventListenerOptions -> CallbackId -> Expr
@@ -49,7 +49,7 @@ addEventListener args k = do
   modify \s -> s {rev_queue = mkExpr callbackId : s.rev_queue}
 
 -- https://developer.mozilla.org/en-US/docs/Web/API/Element/click_event
-pointerEventArgs :: Utf8 -> AddEventListenerArgs (RJS ())
+pointerEventArgs :: Text -> AddEventListenerArgs (RJS ())
 pointerEventArgs event_name = AddEventListenerArgs
   { event_name
   , listener_options = defaultEventListenerOptions
@@ -71,7 +71,7 @@ submitEventArgs = AddEventListenerArgs
     defaultSubmitOptions = EventListenerOptions True True
 
 -- https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/input_event
-inputEventArgs :: AddEventListenerArgs (Utf8 -> RJS ())
+inputEventArgs :: AddEventListenerArgs (Text -> RJS ())
 inputEventArgs = AddEventListenerArgs
   { event_name = "input"
   , listener_options = defaultEventListenerOptions
@@ -83,7 +83,7 @@ inputEventArgs = AddEventListenerArgs
 
 -- https://developer.mozilla.org/en-US/docs/Web/API/Element/keydown_event
 -- https://developer.mozilla.org/en-US/docs/Web/API/Element/keyup_event
-keyboardEventArgs :: Utf8 -> AddEventListenerArgs (Int64 -> RJS ())
+keyboardEventArgs :: Text -> AddEventListenerArgs (Int64 -> RJS ())
 keyboardEventArgs event_name = AddEventListenerArgs
   { event_name
   , listener_options = defaultEventListenerOptions
@@ -97,7 +97,7 @@ keyboardEventArgs event_name = AddEventListenerArgs
 -- https://developer.mozilla.org/en-US/docs/Web/API/Element/blur_event
 -- https://developer.mozilla.org/en-US/docs/Web/API/Element/focusin_event
 -- https://developer.mozilla.org/en-US/docs/Web/API/Element/focusout_event
-focusEventArgs :: Utf8 -> AddEventListenerArgs (RJS ())
+focusEventArgs :: Text -> AddEventListenerArgs (RJS ())
 focusEventArgs event_name = AddEventListenerArgs
   { event_name
   , listener_options = defaultEventListenerOptions
@@ -118,7 +118,7 @@ checkboxChangeEventArgs = AddEventListenerArgs
   }
 
 -- https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/change_event
-selectChangeEventArgs :: AddEventListenerArgs (Utf8 -> RJS ())
+selectChangeEventArgs :: AddEventListenerArgs (Text -> RJS ())
 selectChangeEventArgs = AddEventListenerArgs
   { event_name = "change"
   , listener_options = defaultEventListenerOptions
@@ -153,7 +153,7 @@ instance IsEventName "submit" where
   addEventListenerArgs = submitEventArgs
 
 instance IsEventName "input" where
-  type HaskellCallback "input" = Utf8 -> RJS ()
+  type HaskellCallback "input" = Text -> RJS ()
   addEventListenerArgs = inputEventArgs
 
 instance IsEventName "keydown" where
@@ -173,11 +173,11 @@ instance IsEventName "blur" where
   addEventListenerArgs = pointerEventArgs "blur"
 
 instance IsEventName "input/blur" where
-  type HaskellCallback "input/blur" = Utf8 -> RJS ()
+  type HaskellCallback "input/blur" = Text -> RJS ()
   addEventListenerArgs = inputEventArgs {event_name = "blur"}
 
 instance IsEventName "input/focus" where
-  type HaskellCallback "input/focus" = Utf8 -> RJS ()
+  type HaskellCallback "input/focus" = Text -> RJS ()
   addEventListenerArgs = inputEventArgs {event_name = "focus"}
 
 instance IsEventName "checkbox/change" where
@@ -185,7 +185,7 @@ instance IsEventName "checkbox/change" where
   addEventListenerArgs = checkboxChangeEventArgs
 
 instance IsEventName "select/change" where
-  type HaskellCallback "select/change" = Utf8 -> RJS ()
+  type HaskellCallback "select/change" = Text -> RJS ()
   addEventListenerArgs = selectChangeEventArgs
 
 applyListenerOptions :: EventListenerOptions -> [Expr]

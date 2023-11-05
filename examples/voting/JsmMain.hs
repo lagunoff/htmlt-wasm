@@ -6,19 +6,20 @@ import Data.List qualified as List
 import Data.Ord
 import GHC.Generics
 import HtmlT
-import HtmlT.Protocol.Utf8 qualified as Utf8
+import Data.Text (Text)
+import Data.Text qualified as Text
 
 data WidgetState = WidgetState
   { candidates :: [Candidate]
   } deriving (Generic)
 
 data Candidate = Candidate
-  { language :: Utf8
+  { language :: Text
   , votes :: Int
   , percentage :: Double
   } deriving (Generic)
 
-data Action = UpVote Utf8 | DownVote Utf8 | Reset
+data Action = UpVote Text | DownVote Text | Reset
 
 initialState :: WidgetState
 initialState = WidgetState $ normalize
@@ -44,7 +45,7 @@ update action old = case action of
     }
   Reset -> initialState
   where
-    overvote :: (Int -> Int) -> Utf8 -> [Candidate] -> [Candidate]
+    overvote :: (Int -> Int) -> Text -> [Candidate] -> [Candidate]
     overvote _ _ [] = []
     overvote f l (x:xs)
       | x.language == l = x {votes = f x.votes} : xs
@@ -89,9 +90,9 @@ jsmMain _ = attachToBody do
         on @"click" $ modifyRef stateRef . update . DownVote =<< readDyn languageDyn
         text "▼"
     chartBarStyles c =
-      "width:" <> Utf8.utf8Show c.percentage <> "%;"
+      "width:" <> Text.pack (show c.percentage) <> "%;"
     nVotesText 1 = "1 vote"
-    nVotesText v = Utf8.utf8Show v <> " votes"
+    nVotesText v = Text.pack (show v) <> " votes"
 
 normalize :: [Candidate] -> [Candidate]
 normalize candidates =
@@ -102,7 +103,7 @@ normalize candidates =
   in
     fmap updatePercentage $ List.sortOn (Down . (.votes)) candidates
 
-styles :: Utf8
+styles :: Text
 styles = "\
   \body, body * {\n\
   \  font-family: Arial, sans-serif;\n\

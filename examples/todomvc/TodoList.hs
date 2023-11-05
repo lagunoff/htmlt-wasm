@@ -1,11 +1,11 @@
 module TodoList where
 
 import Control.Monad
-import Data.ByteString.Char8 qualified as Char8
 import Data.List qualified as List
+import Data.Text (Text)
+import Data.Text qualified as Text
 import GHC.Int
 import HtmlT
-import HtmlT.Protocol.Utf8 qualified as Utf8
 
 import "this" TodoItem qualified as TodoItem
 
@@ -15,7 +15,7 @@ data TodoListConfig = TodoListConfig
   }
 
 data TodoListState = TodoListState
-  { title :: Utf8
+  { title :: Text
   , items :: [TodoItem.TodoItemState]
   , filter :: Filter
   } deriving (Show, Eq)
@@ -26,7 +26,7 @@ data Filter = All | Active | Completed
 data TodoListAction a where
   InitAction :: [TodoItem.TodoItemState] -> TodoListAction (DynRef TodoListState)
   ToggleAllAction :: TodoListConfig -> Bool -> TodoListAction ()
-  InputAction :: TodoListConfig -> Utf8 -> TodoListAction ()
+  InputAction :: TodoListConfig -> Text -> TodoListAction ()
   CommitAction :: TodoListConfig -> TodoListAction ()
   KeydownAction :: TodoListConfig -> Int64 -> TodoListAction ()
   DeleteItemAction :: TodoListConfig -> Int -> TodoListAction ()
@@ -48,7 +48,7 @@ eval = \case
   InputAction cfg newVal -> do
     modifyRef cfg.state_ref \s -> s {title = newVal}
   CommitAction cfg -> do
-    title <- Utf8.strip . (.title) <$> readRef cfg.state_ref
+    title <- Text.strip . (.title) <$> readRef cfg.state_ref
     case title of
       "" -> return ()
       t -> modifyRef cfg.state_ref \s -> s
@@ -107,7 +107,7 @@ html cfg = do
     footerWidget = footer_ [class_ "footer"] do
       toggleClass "hidden" hiddenDyn
       span_ [class_ "todo-count"] do
-        strong_ $ dynText $ Utf8 . Char8.pack . show <$> itemsLeftDyn
+        strong_ $ dynText $ Text.pack . show <$> itemsLeftDyn
         dynText $ pluralize " item left" " items left" <$> itemsLeftDyn
       ul_ [class_ "filters"] do
         forM_ [All, Active, Completed] filterWidget
@@ -126,7 +126,7 @@ html cfg = do
     filterWidget flt = li_ do
       a_ [href_ (printFilter flt)] do
         toggleClass "selected" $ filterSelectedDyn flt
-        text $ Utf8 . Char8.pack $ show flt
+        text $ Text.pack $ show flt
     hiddenDyn =
       Prelude.null . (.items) <$> fromRef cfg.state_ref
     itemsLeftDyn =
@@ -145,18 +145,18 @@ html cfg = do
         (Completed, False) -> True
         _                  -> False
 
-pluralize :: Utf8 -> Utf8 -> Int -> Utf8
+pluralize :: Text -> Text -> Int -> Text
 pluralize singular _plural 0 = singular
 pluralize _singular plural _ = plural
 
-parseFilter :: Utf8 -> Maybe Filter
+parseFilter :: Text -> Maybe Filter
 parseFilter =  \case
   "#/"          -> Just All
   "#/active"    -> Just Active
   "#/completed" -> Just Completed
   _             -> Nothing
 
-printFilter :: Filter -> Utf8
+printFilter :: Filter -> Text
 printFilter =  \case
   All       -> "#/"
   Active    -> "#/active"
@@ -187,7 +187,7 @@ todoItemModifier cfg idx elemModifier = Modifier \upd f -> do
     overIx n f (x:xs) = x : overIx (pred n) f xs
     overIx _ _ [] = []
 
-styles :: Utf8
+styles :: Text
 styles = "\
   \body {\
   \  margin: 0;\
