@@ -9,7 +9,7 @@ readLocalStorage :: FromJSON v => Text -> RJS (Maybe v)
 readLocalStorage key = do
   let jsonParse = Call (Id "JSON") "parse" . (:[])
   jsval <- evalExpr $ jsonParse $ Call (Id "localStorage") "getItem" [Str key]
-  return $ fromJSON jsval
+  return $ parseMaybe parseJSON jsval
 
 saveLocalStorage :: ToJSON v => Text -> v -> RJS ()
 saveLocalStorage key val = do

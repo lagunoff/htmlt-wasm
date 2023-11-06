@@ -5,55 +5,33 @@ version: 0.1.0.0
 build-type: Simple
 
 common common-config
+  default-language: GHC2021
   ghc-options:
     -Wall -Wno-missing-signatures -Wno-name-shadowing -Wno-unused-do-bind
     -Wno-partial-type-signatures -Wno-missing-home-modules -static
   default-extensions:
     AllowAmbiguousTypes
-    BangPatterns
     BlockArguments
-    ConstraintKinds
     DataKinds
     DefaultSignatures
     DeriveAnyClass
-    DeriveFunctor
-    DeriveGeneric
     DerivingStrategies
-    DerivingVia
-    DoAndIfThenElse
-    DuplicateRecordFields
-    EmptyDataDecls
-    FlexibleContexts
-    FlexibleInstances
-    ForeignFunctionInterface
+    DisambiguateRecordFields
     FunctionalDependencies
     GADTs
-    GeneralizedNewtypeDeriving
-    ImplicitParams
     ImportQualifiedPost
     LambdaCase
-    NamedFieldPuns
     OverloadedLabels
     OverloadedRecordDot
     OverloadedStrings
     PackageImports
     PartialTypeSignatures
-    PatternGuards
-    PolyKinds
-    QuasiQuotes
-    RankNTypes
     RecordWildCards
     RecursiveDo
-    ScopedTypeVariables
-    StandaloneDeriving
     StrictData
-    TupleSections
-    TypeApplications
-    TypeFamilies
-    TypeOperators
     UndecidableInstances
     ViewPatterns
-
+    
 library
   import: common-config
   hs-source-dirs: src
@@ -65,7 +43,6 @@ library
     HtmlT.Event
     HtmlT.Html
     HtmlT.JSON
-    HtmlT.JSON.Types
     HtmlT.MVar
     HtmlT.Property
     HtmlT.Protocol
@@ -80,6 +57,7 @@ library
     exceptions,
     mtl,
     text,
+    deepseq,    
   if !arch(wasm32)
     exposed-modules:
       HtmlT.DevServer
@@ -155,7 +133,6 @@ benchmark benchmark_01
     HtmlT.Event
     HtmlT.Html
     HtmlT.JSON
-    HtmlT.JSON.Types
     HtmlT.MVar
     HtmlT.Property
     HtmlT.Protocol
@@ -173,3 +150,4 @@ benchmark benchmark_01
     gauge,
     mtl,
     text,
+    deepseq,
