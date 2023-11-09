@@ -9,5 +9,6 @@ import HtmlT.MVar as Export
 import HtmlT.Property as Export
 import HtmlT.Protocol as Export
 import HtmlT.Protocol.JNumber as Export (JNumber(..))
+import HtmlT.Protocol.JSVal as Export
 import HtmlT.RJS as Export
 import HtmlT.Reactor as Export

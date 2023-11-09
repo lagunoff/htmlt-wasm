@@ -64,12 +64,11 @@ library
     HtmlT.Element
     HtmlT.Event
     HtmlT.Html
-    HtmlT.JSON
-    HtmlT.JSON.Types
     HtmlT.MVar
     HtmlT.Property
     HtmlT.Protocol
     HtmlT.Protocol.JNumber
+    HtmlT.Protocol.JSVal
     HtmlT.RJS
     HtmlT.Reactor
   build-depends:
@@ -154,12 +153,11 @@ benchmark benchmark_01
     HtmlT.Element
     HtmlT.Event
     HtmlT.Html
-    HtmlT.JSON
-    HtmlT.JSON.Types
     HtmlT.MVar
     HtmlT.Property
     HtmlT.Protocol
     HtmlT.Protocol.JNumber
+    HtmlT.Protocol.JSVal
     HtmlT.RJS
     HtmlT.Reactor
     TodoItem

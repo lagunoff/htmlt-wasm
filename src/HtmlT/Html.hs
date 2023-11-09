@@ -13,9 +13,9 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 
 import "this" HtmlT.Event
-import "this" HtmlT.JSON
 import "this" HtmlT.Protocol
 import "this" HtmlT.RJS
+import "this" HtmlT.Protocol.JSVal
 
 newtype HtmlT m a = HtmlT {unHtmlT :: StateT HtmlState m a}
 
@@ -32,10 +32,10 @@ data HtmlState = HtmlState
 el :: Text -> Html a -> Html a
 el tagName = withBuilder (CreateElement tagName)
 
-prop :: ToJSON v => Text -> v -> Html ()
+prop :: ToJSVal v => Text -> v -> Html ()
 prop propName propVal = modify \s ->
   let
-    expr = ElementProp (Arg 0 0) propName (fromJValue (toJSON propVal))
+    expr = ElementProp (Arg 0 0) propName (jsvalToExpr (toJSVal propVal))
   in
     s {rev_queue = expr : s.rev_queue }
 
@@ -46,18 +46,18 @@ attr attrName attrVal = modify \s ->
   in
     s {rev_queue = expr : s.rev_queue}
 
-dynProp :: (ToJSON v, Eq v) => Text -> Dynamic v -> Html ()
+dynProp :: (ToJSVal v, Eq v) => Text -> Dynamic v -> Html ()
 dynProp propName (holdUniqDyn -> valueDyn) = do
   rscope <- lift ask
   initialVal <- readDyn valueDyn
   currentNodeVar <- lift newVar
   let
-    initProp = ElementProp (Arg 0 0) propName (fromJValue (toJSON initialVal))
+    initProp = ElementProp (Arg 0 0) propName (jsvalToExpr (toJSVal initialVal))
     saveNode = AssignVar currentNodeVar (Arg 0 0)
   modify \s -> s {rev_queue = saveNode : initProp : s.rev_queue }
   lift $ subscribe (updates valueDyn)
     $ enqueueIfAlive rscope
-    . ElementProp (Var currentNodeVar) propName . fromJValue . toJSON
+    . ElementProp (Var currentNodeVar) propName . jsvalToExpr . toJSVal
 
 toggleClass :: Text -> Dynamic Bool -> Html ()
 toggleClass className (holdUniqDyn -> enableDyn) = do

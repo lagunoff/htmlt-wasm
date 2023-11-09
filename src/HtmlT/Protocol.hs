@@ -7,12 +7,12 @@ import Data.Word
 import GHC.Generics
 
 import "this" HtmlT.Protocol.JNumber (JNumber)
-import "this" HtmlT.JSON qualified as JSON
+import "this" HtmlT.Protocol.JSVal qualified as JSVal
 
 
 data HaskellMessage
   = EvalExpr Expr
-  -- ^ Evaluate expression, expect JSON.Value result
+  -- ^ Evaluate expression, expect Value result
   | Yield Expr
   -- ^ Evaluate expression for side-effects only and wait for some
   -- asynchronous event to continue the execution, won't return
@@ -26,9 +26,9 @@ data HaskellMessage
 
 data JavaScriptMessage
   = Start StartFlags
-  | Return JSON.Value
-  | TriggerEventMsg JSON.Value CallbackId
-  | AsyncCallbackMsg JSON.Value CallbackId
+  | Return JSVal.JSVal
+  | TriggerEventMsg JSVal.JSVal CallbackId
+  | AsyncCallbackMsg JSVal.JSVal CallbackId
   | BeforeUnload
   -- ^ Fired from addEventListener("beforeunload") listener. Won't
   -- work under the DevServer!
@@ -64,17 +64,17 @@ data Location = Location
 -- used as commands executed in the JavaScript side, optimized for
 -- non-blocking execution and minimizing round-trips.
 data Expr
-  = Null
+  = NullE
   -- ^ Represents null or undefined values
-  | Boolean Bool
+  | BooleanE Bool
   -- ^ JavaScript boolean value
-  | Num JNumber
+  | NumberE JNumber
   -- ^ JavaScript integer number
-  | Str Text
+  | StringE Text
   -- ^ JavaScript string
-  | Arr [Expr]
+  | ArrayE [Expr]
   -- ^ JavaScript array
-  | Obj [(Text, Expr)]
+  | ObjectE [(Text, Expr)]
   -- ^ JavaScript object
 
   | Dot Expr Text
@@ -109,7 +109,7 @@ data Expr
   -- of the closest outer lambda function
   | Apply Expr [Expr]
   -- ^ Apply a function to arbitrary length arguments. @Apply (Id
-  -- "encodeURIComponent") [Str "#"]@ going to evaluate to @JSON.String "%23"@
+  -- "encodeURIComponent") [Str "#"]@ going to evaluate to @String "%23"@
   | Call Expr Text [Expr]
   -- ^ Call a method of an object @Call (Id "console") "log" [Str
   -- "Hi!"]@ is equivalent to @console.log('Hi!')@ JavaScript code
@@ -151,14 +151,14 @@ data Expr
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 
-fromJValue :: JSON.Value -> Expr
-fromJValue = \case
-  JSON.Null -> Null
-  JSON.Bool a -> Boolean a
-  JSON.Number a -> Num a
-  JSON.String a -> Str a
-  JSON.Array xs -> Arr $ fmap fromJValue xs
-  JSON.Object kv -> Obj $ fmap (\(k, v) -> (k, fromJValue v)) kv
+jsvalToExpr :: JSVal.JSVal -> Expr
+jsvalToExpr = \case
+  JSVal.Null -> NullE
+  JSVal.Bool a -> BooleanE a
+  JSVal.Number a -> NumberE a
+  JSVal.String a -> StringE a
+  JSVal.Array xs -> ArrayE $ fmap jsvalToExpr xs
+  JSVal.Object kv -> ObjectE $ fmap (\(k, v) -> (k, jsvalToExpr v)) kv
 
 data VarId = VarId
   { scope :: Int64

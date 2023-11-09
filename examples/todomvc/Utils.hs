@@ -3,15 +3,14 @@ module Utils where
 import Data.Text (Text)
 
 import HtmlT
-import HtmlT.JSON
 
-readLocalStorage :: FromJSON v => Text -> RJS (Maybe v)
+readLocalStorage :: FromJSVal v => Text -> RJS (Maybe v)
 readLocalStorage key = do
   let jsonParse = Call (Id "JSON") "parse" . (:[])
-  jsval <- evalExpr $ jsonParse $ Call (Id "localStorage") "getItem" [Str key]
-  return $ fromJSON jsval
+  jsval <- evalExpr $ jsonParse $ Call (Id "localStorage") "getItem" [StringE key]
+  return $ fromJSVal jsval
 
-saveLocalStorage :: ToJSON v => Text -> v -> RJS ()
+saveLocalStorage :: ToJSVal v => Text -> v -> RJS ()
 saveLocalStorage key val = do
-  let stringify = Call (Id "JSON") "stringify" . (:[]) . fromJValue . toJSON
-  enqueueExpr $ Call (Id "localStorage") "setItem" [Str key, stringify val]
+  let stringify = Call (Id "JSON") "stringify" . (:[]) . jsvalToExpr . toJSVal
+  enqueueExpr $ Call (Id "localStorage") "setItem" [StringE key, stringify val]

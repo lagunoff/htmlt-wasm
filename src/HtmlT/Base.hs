@@ -10,13 +10,13 @@ import Unsafe.Coerce
 import Data.Text qualified as Text
 
 import "this" HtmlT.Event
-import "this" HtmlT.JSON qualified as JSON
 import "this" HtmlT.Protocol
 import "this" HtmlT.RJS
+import "this" HtmlT.Protocol.JSVal
 
 data RjsInstance = RjsInstance
-  { continuations_ref :: IORef [JSON.Value -> RJS Any]
-  , async_continuations_ref :: IORef (Map CallbackId (JSON.Value -> RJS Any))
+  { continuations_ref :: IORef [JSVal -> RJS Any]
+  , async_continuations_ref :: IORef (Map CallbackId (JSVal -> RJS Any))
   , rjs_state_ref :: IORef RjsState
   } deriving (Generic)
 
@@ -59,7 +59,7 @@ runUntillInterruption inst e rjs = do
     Right a
       | [] <- s1.evaluation_queue -> return $ Right a
       | otherwise -> do
-        let cont (_::JSON.Value) = return (unsafeCoerce a)
+        let cont (_::JSVal) = return (unsafeCoerce a)
         modifyIORef' inst.continuations_ref (cont:)
         return $ Left $ EvalExpr $ RevSeq s1.evaluation_queue
   where

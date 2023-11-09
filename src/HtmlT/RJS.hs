@@ -16,18 +16,20 @@ import GHC.Int
 import Unsafe.Coerce
 
 import "this" HtmlT.Protocol
-import "this" HtmlT.JSON qualified as JSON
+import "this" HtmlT.Protocol.JSVal
 
--- | A computation capable of interacting with JavaScript.
+-- | A computation capable of interacting with JavaScript and supports
+-- reactive operations like creating Events and subscribing to events
+-- and dynamics
 newtype RJS a = RJS
   { unRJS :: ReactiveScope -> RjsState -> IO (RjsState, RjsResult a)
   }
 
 data RjsResult a where
   PureResult :: a -> RjsResult a
-  EvalResult :: Expr -> RjsResult JSON.Value
-  YieldResult :: CallbackId -> RjsResult JSON.Value
-  InterruptResult :: InterruptReason -> (JSON.Value -> RJS b) -> RjsResult b
+  EvalResult :: Expr -> RjsResult JSVal
+  YieldResult :: CallbackId -> RjsResult JSVal
+  InterruptResult :: InterruptReason -> (JSVal -> RJS b) -> RjsResult b
   FMapResult :: (a -> b) -> RjsResult a -> RjsResult b
 
 data InterruptReason = EvalReason Expr | YieldReason CallbackId
@@ -138,7 +140,7 @@ freeScope rscope = do
       | Set.member s ss = xs
       | otherwise = (s, c) : deleteSubs ss xs
 
-newCallbackEvent :: (JSON.Value -> RJS ()) -> RJS CallbackId
+newCallbackEvent :: (JSVal -> RJS ()) -> RJS CallbackId
 newCallbackEvent k = reactive \e s0 ->
   let
     (queueId, s1) = nextQueueId s0
@@ -146,7 +148,7 @@ newCallbackEvent k = reactive \e s0 ->
   in
     (CallbackId (unQueueId queueId), s2)
 
-evalExpr :: Expr -> RJS JSON.Value
+evalExpr :: Expr -> RJS JSVal
 evalExpr e = RJS \_ s -> return (s, EvalResult e)
 
 enqueueExpr :: Expr -> RJS ()
@@ -167,7 +169,7 @@ flushQueue = do
   queue <- state \s -> (s.evaluation_queue, s {evaluation_queue = []})
   void $ evalExpr $ RevSeq queue
 
-yield :: CallbackId -> RJS JSON.Value
+yield :: CallbackId -> RJS JSVal
 yield callbackId = RJS \_ s -> return (s, YieldResult callbackId)
 
 nextQueueId :: RjsState -> (QueueId, RjsState)

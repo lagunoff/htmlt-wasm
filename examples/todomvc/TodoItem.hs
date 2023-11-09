@@ -5,7 +5,6 @@ import Data.Maybe
 import Data.Text (Text)
 import GHC.Int
 import HtmlT
-import HtmlT.JSON
 
 data TodoItemConfig = TodoItemConfig
   { state_ref :: DynRef TodoItemState
@@ -78,15 +77,15 @@ html cfg = li_ do
 emptyTodoItemState :: TodoItemState
 emptyTodoItemState = TodoItemState "" False Nothing
 
-instance ToJSON TodoItemState where
-  toJSON s = Object
-    [ ("title", toJSON s.title)
-    , ("completed", toJSON s.completed)
+instance ToJSVal TodoItemState where
+  toJSVal s = Object
+    [ ("title", toJSVal s.title)
+    , ("completed", toJSVal s.completed)
     ]
 
-instance FromJSON TodoItemState where
-  fromJSON (Object kv) = do
-    title <- fromJSON =<< List.lookup "title" kv
-    completed <- fromJSON =<< List.lookup "completed" kv
+instance FromJSVal TodoItemState where
+  fromJSVal (Object kv) = do
+    title <- fromJSVal =<< List.lookup "title" kv
+    completed <- fromJSVal =<< List.lookup "completed" kv
     return TodoItemState {editing=Nothing, ..}
-  fromJSON _ = Nothing
+  fromJSVal _ = Nothing

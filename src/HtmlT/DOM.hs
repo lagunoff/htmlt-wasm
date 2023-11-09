@@ -12,7 +12,7 @@ import GHC.Int
 import "this" HtmlT.Html
 import "this" HtmlT.Protocol
 import "this" HtmlT.RJS
-import "this" HtmlT.JSON qualified as JSON
+import "this" HtmlT.Protocol.JSVal
 
 
 data EventListenerOptions = EventListenerOptions
@@ -32,7 +32,7 @@ on k = addEventListener (addEventListenerArgs @eventName) k
 data AddEventListenerArgs hsCallback = AddEventListenerArgs
   { event_name :: Text
   , listener_options :: EventListenerOptions
-  , mk_hs_callback :: hsCallback -> JSON.Value -> RJS ()
+  , mk_hs_callback :: hsCallback -> JSVal -> RJS ()
   , mk_js_callback :: EventListenerOptions -> CallbackId -> Expr
   } deriving (Generic)
 
@@ -55,7 +55,7 @@ pointerEventArgs event_name = AddEventListenerArgs
   , listener_options = defaultEventListenerOptions
   , mk_hs_callback = \k _ -> k
   , mk_js_callback = \opts callbackId ->
-    Lam $ RevSeq $ TriggerEvent callbackId Null : applyListenerOptions opts
+    Lam $ RevSeq $ TriggerEvent callbackId NullE : applyListenerOptions opts
   }
 
 -- https://developer.mozilla.org/en-US/docs/Web/API/HTMLFormElement/submit_event
@@ -65,7 +65,7 @@ submitEventArgs = AddEventListenerArgs
   , listener_options = defaultSubmitOptions
   , mk_hs_callback = \k _ -> k
   , mk_js_callback = \opts callbackId ->
-    Lam $ RevSeq $ TriggerEvent callbackId Null : applyListenerOptions opts
+    Lam $ RevSeq $ TriggerEvent callbackId NullE : applyListenerOptions opts
   }
   where
     defaultSubmitOptions = EventListenerOptions True True
@@ -75,7 +75,7 @@ inputEventArgs :: AddEventListenerArgs (Text -> RJS ())
 inputEventArgs = AddEventListenerArgs
   { event_name = "input"
   , listener_options = defaultEventListenerOptions
-  , mk_hs_callback = \k j -> forM_ (JSON.fromJSON j) k
+  , mk_hs_callback = \k j -> forM_ (fromJSVal j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
     $ TriggerEvent callbackId (Arg 0 0 `Dot` "target" `Dot` "value")
     : applyListenerOptions opts
@@ -87,7 +87,7 @@ keyboardEventArgs :: Text -> AddEventListenerArgs (Int64 -> RJS ())
 keyboardEventArgs event_name = AddEventListenerArgs
   { event_name
   , listener_options = defaultEventListenerOptions
-  , mk_hs_callback = \k j -> forM_ (JSON.fromJSON j) k
+  , mk_hs_callback = \k j -> forM_ (fromJSVal j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
     $ TriggerEvent callbackId (Arg 0 0 `Dot` "keyCode")
     : applyListenerOptions opts
@@ -103,7 +103,7 @@ focusEventArgs event_name = AddEventListenerArgs
   , listener_options = defaultEventListenerOptions
   , mk_hs_callback = \k _ -> k
   , mk_js_callback = \opts callbackId ->
-    Lam $ RevSeq $ TriggerEvent callbackId Null : applyListenerOptions opts
+    Lam $ RevSeq $ TriggerEvent callbackId NullE : applyListenerOptions opts
   }
 
 -- https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/change_event
@@ -111,7 +111,7 @@ checkboxChangeEventArgs :: AddEventListenerArgs (Bool -> RJS ())
 checkboxChangeEventArgs = AddEventListenerArgs
   { event_name = "change"
   , listener_options = defaultEventListenerOptions
-  , mk_hs_callback = \k j -> forM_ (JSON.fromJSON j) k
+  , mk_hs_callback = \k j -> forM_ (fromJSVal j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
     $ TriggerEvent callbackId (Arg 0 0 `Dot` "target" `Dot` "checked")
     : applyListenerOptions opts
@@ -122,7 +122,7 @@ selectChangeEventArgs :: AddEventListenerArgs (Text -> RJS ())
 selectChangeEventArgs = AddEventListenerArgs
   { event_name = "change"
   , listener_options = defaultEventListenerOptions
-  , mk_hs_callback = \k j -> forM_ (JSON.fromJSON j) k
+  , mk_hs_callback = \k j -> forM_ (fromJSVal j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
     $ TriggerEvent callbackId (Arg 0 0 `Dot` "target" `Dot` "value")
     : applyListenerOptions opts
