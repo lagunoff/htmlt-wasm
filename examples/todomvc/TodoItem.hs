@@ -1,5 +1,6 @@
 module TodoItem where
 
+import Data.List qualified as List
 import Data.Maybe
 import Data.Text (Text)
 import GHC.Int
@@ -78,13 +79,14 @@ emptyTodoItemState :: TodoItemState
 emptyTodoItemState = TodoItemState "" False Nothing
 
 instance ToJSON TodoItemState where
-  toJSON s = object
+  toJSON s = Object
     [ ("title", toJSON s.title)
     , ("completed", toJSON s.completed)
     ]
 
 instance FromJSON TodoItemState where
-  parseJSON = withObject "TodoItemState" \o -> do
-    title <- o .: "title"
-    completed <- o .: "completed"
+  fromJSON (Object kv) = do
+    title <- fromJSON =<< List.lookup "title" kv
+    completed <- fromJSON =<< List.lookup "completed" kv
     return TodoItemState {editing=Nothing, ..}
+  fromJSON _ = Nothing

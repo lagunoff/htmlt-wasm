@@ -1,4 +1,3 @@
-{-# LANGUAGE TypeFamilies #-}
 module HtmlT.DOM where
 
 import Control.Monad
@@ -76,7 +75,7 @@ inputEventArgs :: AddEventListenerArgs (Text -> RJS ())
 inputEventArgs = AddEventListenerArgs
   { event_name = "input"
   , listener_options = defaultEventListenerOptions
-  , mk_hs_callback = \k j -> forM_ (JSON.parseMaybe JSON.parseJSON j) k
+  , mk_hs_callback = \k j -> forM_ (JSON.fromJSON j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
     $ TriggerEvent callbackId (Arg 0 0 `Dot` "target" `Dot` "value")
     : applyListenerOptions opts
@@ -88,7 +87,7 @@ keyboardEventArgs :: Text -> AddEventListenerArgs (Int64 -> RJS ())
 keyboardEventArgs event_name = AddEventListenerArgs
   { event_name
   , listener_options = defaultEventListenerOptions
-  , mk_hs_callback = \k j -> forM_ (JSON.parseMaybe JSON.parseJSON j) k
+  , mk_hs_callback = \k j -> forM_ (JSON.fromJSON j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
     $ TriggerEvent callbackId (Arg 0 0 `Dot` "keyCode")
     : applyListenerOptions opts
@@ -112,7 +111,7 @@ checkboxChangeEventArgs :: AddEventListenerArgs (Bool -> RJS ())
 checkboxChangeEventArgs = AddEventListenerArgs
   { event_name = "change"
   , listener_options = defaultEventListenerOptions
-  , mk_hs_callback = \k j -> forM_ (JSON.parseMaybe JSON.parseJSON j) k
+  , mk_hs_callback = \k j -> forM_ (JSON.fromJSON j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
     $ TriggerEvent callbackId (Arg 0 0 `Dot` "target" `Dot` "checked")
     : applyListenerOptions opts
@@ -123,7 +122,7 @@ selectChangeEventArgs :: AddEventListenerArgs (Text -> RJS ())
 selectChangeEventArgs = AddEventListenerArgs
   { event_name = "change"
   , listener_options = defaultEventListenerOptions
-  , mk_hs_callback = \k j -> forM_ (JSON.parseMaybe JSON.parseJSON j) k
+  , mk_hs_callback = \k j -> forM_ (JSON.fromJSON j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
     $ TriggerEvent callbackId (Arg 0 0 `Dot` "target" `Dot` "value")
     : applyListenerOptions opts

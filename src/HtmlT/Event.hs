@@ -161,11 +161,11 @@ holdUniqDyn = holdUniqDynBy (==)
 -- | Same as 'holdUniqDyn' but accepts arbitrary equality test
 -- function
 holdUniqDynBy :: (a -> a -> Bool) -> Dynamic a -> Dynamic a
-holdUniqDynBy equalFn d = Dynamic d.dynamic_read
+holdUniqDynBy equalFn Dynamic{..} = Dynamic dynamic_read
   (Event \k -> do
-    old <- liftIO d.dynamic_read
+    old <- liftIO dynamic_read
     oldRef <- liftIO (newIORef old)
-    unEvent d.dynamic_updates \new -> do
+    unEvent dynamic_updates \new -> do
       old <- liftIO $ atomicModifyIORef' oldRef (new,)
       unless (old `equalFn` new) $ k new
   )
