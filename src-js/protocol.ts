@@ -34,7 +34,7 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
        return exp[0] != 0;
     }
     case ExprTag.Num: {
-      return exp.coefficient * Math.pow(10, exp.base10Exponent);
+      return Number(exp.decimal);
     }
     case ExprTag.Str: {
       return exp[0];
@@ -227,8 +227,8 @@ export function unknownToJValue(inp: unknown): JValue {
     return { tag: JValueTag.JBool, 0: inp ? 1 : 0 };
   }
   if (typeof(inp) === 'number') {
-    const {coefficient, base10Exponent} = toScientific(inp);
-    return { tag: JValueTag.JNum, coefficient, base10Exponent };
+    const decimal = inp.toString();
+    return { tag: JValueTag.JNum, decimal };
   }
   if (typeof(inp) === 'string') {
     return { tag: JValueTag.JStr, 0: inp };
@@ -247,24 +247,6 @@ export function unknownToJValue(inp: unknown): JValue {
   type KV = [string, JValue];
 }
 
-function toScientific(n: number): { coefficient: number, base10Exponent: number } {
-  // Check if the number is zero
-  if (n === 0) {
-    return { coefficient: 0, base10Exponent: 0 };
-  }
-
-  // Calculate the base 10 exponent
-  let base10Exponent = 0;
-  let coefficient = n;
-
-  while (coefficient % 10 !== 0) {
-    coefficient *= 10;
-    base10Exponent--;
-  }
-
-  return { coefficient, base10Exponent };
-}
-
 export enum JValueTag {
   JObj,
   JArr,
@@ -278,7 +260,7 @@ export type JValue =
   | { tag: JValueTag.JObj, 0: [string, JValue][] }
   | { tag: JValueTag.JArr, 0: JValue[] }
   | { tag: JValueTag.JStr, 0: string }
-  | { tag: JValueTag.JNum, coefficient: number, base10Exponent: number }
+  | { tag: JValueTag.JNum, decimal: string }
   | { tag: JValueTag.JBool, 0: number }
   | { tag: JValueTag.JNull }
 ;
@@ -287,7 +269,7 @@ export const jvalue = b.recursive<JValue>(self => b.discriminate({
   [JValueTag.JObj]: b.record({ 0: b.array(b.tuple(b.string, self)) }),
   [JValueTag.JArr]: b.record({ 0: b.array(self) }),
   [JValueTag.JStr]: b.record({ 0: b.string }),
-  [JValueTag.JNum]: b.record({ coefficient: b.int64, base10Exponent: b.int8 }),
+  [JValueTag.JNum]: b.record({ decimal: b.string }),
   [JValueTag.JBool]: b.record({ 0: b.int8 }),
   [JValueTag.JNull]: b.record({ }),
 }));
@@ -368,7 +350,7 @@ export enum ExprTag {
 export type Expr =
   | { tag: ExprTag.Null }
   | { tag: ExprTag.Boolean, 0: number }
-  | { tag: ExprTag.Num, coefficient: number, base10Exponent: number }
+  | { tag: ExprTag.Num, decimal: string }
   | { tag: ExprTag.Str, 0: string }
   | { tag: ExprTag.Arr, 0: Expr[] }
   | { tag: ExprTag.Obj, 0: [string, Expr][] }
@@ -415,7 +397,7 @@ export type Expr =
 export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.Null]: b.record({}),
   [ExprTag.Boolean]: b.record({ 0: b.int8 }),
-  [ExprTag.Num]: b.record({ coefficient: b.int64, base10Exponent: b.int8 }),
+  [ExprTag.Num]: b.record({ decimal: b.string }),
   [ExprTag.Str]: b.record({ 0: b.string }),
   [ExprTag.Arr]: b.record({ 0: b.array(self) }),
   [ExprTag.Obj]: b.record({ 0: b.array(b.tuple(b.string, self)) }),

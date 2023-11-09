@@ -1,13 +1,13 @@
 module HtmlT.Protocol.JSVal where
 
+import Data.Binary
 import Data.Kind
 import Data.List qualified as List
 import Data.Maybe
-import GHC.Generics as G
-import GHC.Int
-import Data.Binary
 import Data.Text (Text)
 import Data.Text qualified as Text
+import GHC.Generics as G
+import GHC.Int
 
 import "this" HtmlT.Protocol.JNumber (JNumber(..))
 import "this" HtmlT.Protocol.JNumber qualified as JNumber
@@ -31,13 +31,11 @@ instance ToJSVal JSVal where toJSVal = Prelude.id
 
 instance ToJSVal Bool where toJSVal = Bool
 
-instance ToJSVal Int64 where toJSVal i = Number (JNumber i 0)
+instance ToJSVal Int64 where
+  toJSVal i = Number (JNumber.jsNumberFromInt64 i)
 
-instance ToJSVal Rational where
-  toJSVal r = Number (JNumber.jsNumberFromRational r)
-
-instance {-# OVERLAPPABLE #-} Real a => ToJSVal a where
-  toJSVal = toJSVal . toRational
+instance ToJSVal Double where
+  toJSVal d = Number (JNumber.jsNumberFromDouble d)
 
 instance ToJSVal Text where toJSVal = String
 
@@ -64,19 +62,13 @@ instance FromJSVal Bool where
 
 instance FromJSVal Int64 where
   fromJSVal = \case
-    Number (JNumber c e)
-      | e >= 0 -> Just (c * (10 ^ e))
-      -- Ignoring the remainder after decimal point
-      | otherwise -> Just (fst (quotRem c (10 ^ (-e))))
+    Number j -> Just (JNumber.jsNumberToInt64 j)
     _ -> Nothing
 
-instance FromJSVal Rational where
+instance FromJSVal Double where
   fromJSVal = \case
-    Number j -> Just (JNumber.jsNumberToRational j)
+    Number j -> Just (JNumber.jsNumberToDouble j)
     _ -> Nothing
-
-instance {-# OVERLAPPABLE #-} Fractional a => FromJSVal a where
-  fromJSVal = fmap fromRational . fromJSVal
 
 instance FromJSVal Text where
   fromJSVal = \case String a -> Just a; _ -> Nothing

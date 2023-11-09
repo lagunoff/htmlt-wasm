@@ -105,5 +105,6 @@ yarn run webpack --mode production
  - [ ] Try various protocol optimizations (use bounded buffer instead of using malloc/free for each message)
  - [ ] Explore possible optimizations in the JavaScript implementation of the protocol (use hand written encoders/decoders instead of reflection on datatype description)
  - [x] Use `Data.Text` instead of `HtmlT.Protocol.Utf8`?
+ - [ ] More compact and performant representation for JS numbers
 
 
