@@ -62,6 +62,19 @@ dynProp propName (holdUniqDyn -> valueDyn) = do
     $ enqueueIfAlive rscope
     . ElementProp (Var currentNodeVar) propName . jsvalToExpr . toJSVal
 
+dynAttr :: Text -> Dynamic Text -> Html ()
+dynAttr attrName (holdUniqDyn -> valueDyn) = do
+  rscope <- lift ask
+  initialVal <- readDyn valueDyn
+  currentNodeVar <- lift newVar
+  let
+    initProp = ElementAttr (Arg 0 0) attrName initialVal
+    saveNode = AssignVar currentNodeVar (Arg 0 0)
+  modify \s -> s {rev_queue = saveNode : initProp : s.rev_queue }
+  lift $ subscribe (updates valueDyn)
+    $ enqueueIfAlive rscope
+    . ElementAttr (Var currentNodeVar) attrName
+
 toggleClass :: Text -> Dynamic Bool -> Html ()
 toggleClass className (holdUniqDyn -> enableDyn) = do
   rscope <- lift ask
