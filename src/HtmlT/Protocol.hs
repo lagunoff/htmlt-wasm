@@ -127,6 +127,7 @@ data Expr
   | InsertNode Expr Expr
   | WithBuilder Expr Expr
   | CreateElement Text
+  | CreateElementNS Text Text
   | CreateText Text
   | ElementProp Expr Text Expr
   | ElementAttr Expr Text Text

@@ -153,6 +153,9 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
     case ExprTag.CreateElement: {
       return document.createElement(exp.tagName);
     }
+    case ExprTag.CreateElementNS: {
+      return document.createElementNS(exp.ns, exp.tagName);
+    }
     case ExprTag.CreateText: {
       return document.createTextNode(exp.content);
     }
@@ -331,6 +334,7 @@ export enum ExprTag {
   InsertNode,
   WithBuilder,
   CreateElement,
+  CreateElementNS,
   CreateText,
   ElementProp,
   ElementAttr,
@@ -378,6 +382,7 @@ export type Expr =
   | { tag: ExprTag.InsertNode, parent: Expr, child: Expr }
   | { tag: ExprTag.WithBuilder, builder: Expr, builderContent: Expr }
   | { tag: ExprTag.CreateElement, tagName: string }
+  | { tag: ExprTag.CreateElementNS, ns: string, tagName: string }
   | { tag: ExprTag.CreateText, content: string }
   | { tag: ExprTag.ElementProp, node: Expr, propName: string, propValue: Expr }
   | { tag: ExprTag.ElementAttr, node: Expr, attrName: string, attrValue: string }
@@ -425,6 +430,7 @@ export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.InsertNode]: b.record({ parent: self, child: self }),
   [ExprTag.WithBuilder]: b.record({ builder: self, builderContent: self }),
   [ExprTag.CreateElement]: b.record({ tagName: b.string }),
+  [ExprTag.CreateElementNS]: b.record({ ns: b.string, tagName: b.string }),
   [ExprTag.CreateText]: b.record({ content: b.string }),
   [ExprTag.ElementProp]: b.record({ node: self, propName: b.string, propValue: self }),
   [ExprTag.ElementAttr]: b.record({ node: self, attrName: b.string, attrValue: b.string }),

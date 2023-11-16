@@ -32,6 +32,9 @@ data HtmlState = HtmlState
 el :: Text -> Html a -> Html a
 el tagName = withBuilder (CreateElement tagName)
 
+elns :: Text -> Text -> Html a -> Html a
+elns ns tagName = withBuilder (CreateElementNS ns tagName)
+
 prop :: ToJSVal v => Text -> v -> Html ()
 prop propName propVal = modify \s ->
   let
