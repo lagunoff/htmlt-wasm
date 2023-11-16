@@ -3,13 +3,31 @@
 module HtmlT.Property where
 
 import Data.Text (Text)
+import GHC.Int
 
 import "this" HtmlT.Event
 import "this" HtmlT.Html
 
-dynStyles :: Dynamic Text -> Html ()
-dynStyles = dynProp "style"
-{-# INLINE dynStyles #-}
+
+textProp :: Text -> Text -> Html ()
+textProp = prop
+{-# INLINE textProp #-}
+
+boolProp :: Text -> Bool -> Html ()
+boolProp = prop
+{-# INLINE boolProp #-}
+
+integerProp :: Text -> Int64 -> Html ()
+integerProp = prop
+{-# INLINE integerProp #-}
+
+doubleProp :: Text -> Double -> Html ()
+doubleProp = prop
+{-# INLINE doubleProp #-}
+
+dynStyle :: Dynamic Text -> Html ()
+dynStyle = dynProp "style"
+{-# INLINE dynStyle #-}
 
 dynValue :: Dynamic Text -> Html ()
 dynValue = dynProp "value"

@@ -65,7 +65,7 @@ jsmMain _ = attachToBody do
             b_ $ dynText $ fmap (.language) (fromRef itemRef)
           td_ do
             div_ [class_ "chart-bar"] do
-              dynStyles $ chartBarStyles <$> fromRef itemRef
+              dynStyle $ chartBarStyles <$> fromRef itemRef
             span_ $ dynText $ nVotesText . (.votes) <$> fromRef itemRef
     p_ "Choose and vote for your favorite programming language (you can also \
       \downvote languages you dislike)"
