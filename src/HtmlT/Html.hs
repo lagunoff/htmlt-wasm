@@ -17,6 +17,7 @@ import "this" HtmlT.Protocol
 import "this" HtmlT.RJS
 import "this" HtmlT.Protocol.JSVal
 
+
 newtype HtmlT m a = HtmlT {unHtmlT :: StateT HtmlState m a}
 
 execHtmlT :: Monad m => HtmlState -> HtmlT m a -> m (a, HtmlState)
@@ -107,16 +108,19 @@ dynText (holdUniqDyn -> dynContent) = do
 dyn :: Dynamic (Html ()) -> Html ()
 dyn d = do
   boundary <- insertBoundary
-  reactiveScope <- lift newScope
+  initialScope <- lift newScope
+  reactiveScopeRef <- liftIO $ newIORef initialScope
+  initialVal <- readDyn d
   let
     update html = do
       lift $ clearBoundary boundary
-      lift $ freeScope reactiveScope
       html
-  initialVal <- readDyn d
-  monohoist (local (const reactiveScope)) $ withBuilder (Var boundary) initialVal
-  lift $ subscribe (updates d) $
-    local (const reactiveScope) . attachHtml (Var boundary) . update
+  monohoist (local (const initialScope)) $ withBuilder (Var boundary) initialVal
+  lift $ subscribe (updates d) \newVal -> do
+    newReactiveScope <- newScope
+    oldReactiveScope <- liftIO $ atomicModifyIORef reactiveScopeRef (newReactiveScope,)
+    freeScope oldReactiveScope
+    local (const newReactiveScope) . attachHtml (Var boundary) $ update newVal
 
 -- | Auxilliary datatype that helps to implement 'simpleList'
 data ElemEnv a = ElemEnv
