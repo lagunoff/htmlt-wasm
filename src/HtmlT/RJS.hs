@@ -140,13 +140,23 @@ freeScope rscope = do
       | Set.member s ss = xs
       | otherwise = (s, c) : deleteSubs ss xs
 
-newCallbackEvent :: (JSVal -> RJS ()) -> RJS CallbackId
-newCallbackEvent k = reactive \e s0 ->
+newCallback :: (JSVal -> RJS ()) -> RJS CallbackId
+newCallback k = reactive \e s0 ->
   let
     (queueId, s1) = nextQueueId s0
     s2 = unsafeSubscribe (EventId queueId) k e s1
   in
     (CallbackId (unQueueId queueId), s2)
+
+releaseCallback :: CallbackId -> RJS ()
+releaseCallback callbackId = modify \s ->
+  let
+    eventId = EventId (QueueId (unCallbackId callbackId))
+    -- TODO: Does it makes sence to also remove all the finalizers
+    -- associated with the eventId?
+    subscriptions = Map.delete eventId s.subscriptions
+  in
+    s {subscriptions}
 
 evalExpr :: Expr -> RJS JSVal
 evalExpr e = RJS \_ s -> return (s, EvalResult e)

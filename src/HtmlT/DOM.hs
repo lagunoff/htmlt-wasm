@@ -45,7 +45,7 @@ addEventListener args k = do
   let
     mkExpr callbackId = AddEventListener (Arg 0 0) args.event_name
       (args.mk_js_callback args.listener_options callbackId)
-  callbackId <- lift $ newCallbackEvent (local (const reactiveScope) . args.mk_hs_callback k)
+  callbackId <- lift $ newCallback (local (const reactiveScope) . args.mk_hs_callback k)
   modify \s -> s {rev_queue = mkExpr callbackId : s.rev_queue}
 
 -- https://developer.mozilla.org/en-US/docs/Web/API/Element/click_event
