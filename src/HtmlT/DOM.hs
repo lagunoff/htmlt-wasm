@@ -188,6 +188,44 @@ instance IsEventName "select/change" where
   type HaskellCallback "select/change" = Text -> RJS ()
   addEventListenerArgs = selectChangeEventArgs
 
+-- | Collection of deltaX, deltaY and deltaZ properties from WheelEvent
+-- https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent
+data MouseWheel = MouseWheel
+  { mw_delta_x :: Int64
+  , mw_delta_y :: Int64
+  , mw_delta_z :: Int64
+  , mw_alt_key :: Bool
+  , mw_ctrl_key :: Bool
+  , mw_meta_key :: Bool
+  , mw_shift_key :: Bool
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (FromJSVal, ToJSVal)
+
+-- https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent
+mouseWheelEventArgs :: AddEventListenerArgs (MouseWheel -> RJS ())
+mouseWheelEventArgs = AddEventListenerArgs
+  { event_name = "mousewheel"
+  , listener_options = defaultMouseWheelOptions
+  , mk_hs_callback = \k j -> forM_ (fromJSVal j) k
+  , mk_js_callback = \opts callbackId -> Lam $ RevSeq
+    $ TriggerEvent callbackId (ObjectE
+      [ ("mw_delta_x", Arg 0 0 `Dot` "deltaX")
+      , ("mw_delta_y", Arg 0 0 `Dot` "deltaY")
+      , ("mw_delta_z", Arg 0 0 `Dot` "deltaZ")
+      , ("mw_alt_key", Arg 0 0 `Dot` "altKey")
+      , ("mw_ctrl_key", Arg 0 0 `Dot` "ctrlKey")
+      , ("mw_meta_key", Arg 0 0 `Dot` "metaKey")
+      , ("mw_shift_key", Arg 0 0 `Dot` "shiftKey")
+      ])
+    : applyListenerOptions opts
+  }
+  where
+    defaultMouseWheelOptions = EventListenerOptions True True
+
+instance IsEventName "mousewheel" where
+  type HaskellCallback "mousewheel" = MouseWheel -> RJS ()
+  addEventListenerArgs = mouseWheelEventArgs
+
 applyListenerOptions :: EventListenerOptions -> [Expr]
 applyListenerOptions elo = List.concat
   [ if elo.prevent_default then [Call (Arg 0 0) "preventDefault" []] else []
