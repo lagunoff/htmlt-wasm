@@ -29,12 +29,11 @@ newRjsInstance = do
 
 runUntillInterruption
   :: RjsInstance
-  -> ReactiveScope
   -> RJS a
   -> IO (Either HaskellMessage a)
-runUntillInterruption inst e rjs = do
+runUntillInterruption inst rjs = do
   s0 <- readIORef inst.rjs_state_ref
-  (s1, result) <- unRJS rjs e s0 `catch` \(e :: SomeException) ->
+  (s1, result) <- unRJS rjs s0 `catch` \(e :: SomeException) ->
     -- UncaughtException command never returns a value from JS side,
     -- therefore we can coerce the result to any type
     pure (s0, coerceResult (EvalResult (UncaughtException (Text.pack (show e)))))
@@ -86,7 +85,7 @@ handleMessage' inst jsMain = \case
   Right (Start startFlags) -> do
     writeIORef inst.continuations_ref []
     writeIORef inst.rjs_state_ref emptyRjsState
-    result <- runUntillInterruption inst rootScope (jsMain startFlags)
+    result <- runUntillInterruption inst (jsMain startFlags)
     case result of
       Left haskMsg -> return haskMsg
       Right () -> return Exit
@@ -98,7 +97,7 @@ handleMessage' inst jsMain = \case
       Nothing ->
         return $ EvalExpr $ UncaughtException "Synchronous continuation is missing"
       Just c -> do
-        result <- runUntillInterruption inst rootScope (c jval)
+        result <- runUntillInterruption inst (c jval)
         case result of
           Left haskMsg -> return haskMsg
           Right _ -> return Exit
@@ -106,7 +105,7 @@ handleMessage' inst jsMain = \case
     let
       eventId = EventId (QueueId callbackId.unCallbackId)
       rjs = unsafeTrigger eventId arg
-    result <- runUntillInterruption inst rootScope (dynStep rjs)
+    result <- runUntillInterruption inst (dynStep rjs)
     case result of
       Left haskMsg -> return haskMsg
       Right _ -> return Exit
@@ -117,19 +116,17 @@ handleMessage' inst jsMain = \case
       Nothing ->
         return $ EvalExpr $ UncaughtException "Asynchronous continuation is missing"
       Just c -> do
-        result <- runUntillInterruption inst rootScope (c arg)
+        result <- runUntillInterruption inst (c arg)
         case result of
           Left haskMsg -> return haskMsg
           Right _ -> return Exit
   Right BeforeUnload -> do
-    result <- runUntillInterruption inst rootScope (freeScope rootScope)
+    result <- runUntillInterruption inst (freeScope emptyRjsState.reactive_scope)
     case result of
       Left haskMsg -> return haskMsg
       Right _ -> return Exit
   Left jsAction -> do
-    result <- runUntillInterruption inst rootScope jsAction
+    result <- runUntillInterruption inst jsAction
     case result of
       Left haskMsg -> return haskMsg
       Right () -> return Exit
-  where
-    rootScope = ReactiveScope (-1)
