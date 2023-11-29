@@ -22,7 +22,7 @@ import "this" HtmlT.Protocol.JSVal
 -- reactive operations like creating Events and subscribing to events
 -- and dynamics
 newtype RJS a = RJS
-  { unRJS :: RjsState -> IO (RjsState, RjsResult a)
+  { unRJS :: ReactiveScope -> RjsState -> IO (RjsState, RjsResult a)
   }
 
 data RjsResult a where
@@ -35,14 +35,7 @@ data RjsResult a where
 data InterruptReason = EvalReason Expr | YieldReason CallbackId
 
 data RjsState = RjsState
-  { reactive_scope :: ReactiveScope
-  -- ^ ReactiveScope is an integer identifier to which finalizers are
-  -- attached to. When freeScope is called it'll free other resources
-  -- as well such as event subscriptions, variables, custom finalizers
-  -- etc. It's in RjsState rather than in Reader like environment
-  -- because it's easier to preserve its value across execution
-  -- rounds.
-  , evaluation_queue :: [Expr]
+  { evaluation_queue :: [Expr]
   , subscriptions :: Map EventId [(SubscriptionId, Any -> RJS ())]
   , finalizers :: Map ReactiveScope (Map FinalizerKey FinalizerValue)
   , id_supply :: QueueId
@@ -54,8 +47,7 @@ data RjsState = RjsState
 
 emptyRjsState :: RjsState
 emptyRjsState = RjsState
-  { reactive_scope = -1
-  , evaluation_queue = []
+  { evaluation_queue = []
   , subscriptions = Map.empty
   , finalizers = Map.empty
   , id_supply = 0
@@ -86,16 +78,15 @@ newtype ReactiveScope = ReactiveScope {unReactiveScope :: QueueId}
   deriving newtype (Eq, Ord, Num)
 
 newVar :: RJS VarId
-newVar = reactive \s0 ->
+newVar = reactive \e s0 ->
   let
     (newQueueId, s1) = nextQueueId s0
-    newVarId = VarId s0.reactive_scope.unReactiveScope.unQueueId
-      newQueueId.unQueueId
+    newVarId = VarId (unQueueId (unReactiveScope e)) (unQueueId newQueueId)
   in
     (newVarId, s1)
 
 newScope :: RJS ReactiveScope
-newScope = reactive \s0 ->
+newScope = reactive \e s0 ->
   let
     (scopeId, s1) = nextQueueId s0
     finalizerKey = CustomKey scopeId
@@ -103,7 +94,7 @@ newScope = reactive \s0 ->
     finalizers = Map.alter
       (Just . Map.insert finalizerKey
         (ScopeFinalizer scope) . fromMaybe Map.empty
-      ) s0.reactive_scope s1.finalizers
+      ) e s1.finalizers
   in
     (scope, s1 {finalizers})
 
@@ -149,16 +140,11 @@ freeScope rscope = do
       | Set.member s ss = xs
       | otherwise = (s, c) : deleteSubs ss xs
 
-localScope :: ReactiveScope -> RJS a -> RJS a
-localScope reactive_scope (RJS rjs) = RJS \s0 -> do
-  (s1, r) <- rjs s0 {reactive_scope}
-  return (s1 {reactive_scope = s0.reactive_scope}, r)
-
 newCallback :: (JSVal -> RJS ()) -> RJS CallbackId
-newCallback k = reactive \s0 ->
+newCallback k = reactive \e s0 ->
   let
     (queueId, s1) = nextQueueId s0
-    s2 = unsafeSubscribe (EventId queueId) k s1
+    s2 = unsafeSubscribe (EventId queueId) k e s1
   in
     (CallbackId (unQueueId queueId), s2)
 
@@ -173,7 +159,7 @@ releaseCallback callbackId = modify \s ->
     s {subscriptions}
 
 evalExpr :: Expr -> RJS JSVal
-evalExpr e = RJS \s -> return (s, EvalResult e)
+evalExpr e = RJS \_ s -> return (s, EvalResult e)
 
 enqueueExpr :: Expr -> RJS ()
 enqueueExpr e = modify \s ->
@@ -194,14 +180,14 @@ flushQueue = do
   void $ evalExpr $ RevSeq queue
 
 yield :: CallbackId -> RJS JSVal
-yield callbackId = RJS \s -> return (s, YieldResult callbackId)
+yield callbackId = RJS \_ s -> return (s, YieldResult callbackId)
 
 nextQueueId :: RjsState -> (QueueId, RjsState)
 nextQueueId s =
   (s.id_supply, s {id_supply = succ s.id_supply})
 
-unsafeSubscribe :: EventId -> (a -> RJS ()) -> RjsState -> RjsState
-unsafeSubscribe eventId k s0 =
+unsafeSubscribe :: EventId -> (a -> RJS ()) -> ReactiveScope -> RjsState -> RjsState
+unsafeSubscribe eventId k e s0 =
   let
     (subId, s1) = nextQueueId s0
     newSubscription = (SubscriptionId subId, k . unsafeCoerce)
@@ -214,78 +200,85 @@ unsafeSubscribe eventId k s0 =
     finalizers = Map.alter (Just .
       (Map.insertWith f (EventKey eventId)
         (SubscriptionSet (Set.singleton (SubscriptionId subId)))
-      ) . fromMaybe Map.empty) s0.reactive_scope s1.finalizers
+      ) . fromMaybe Map.empty) e s1.finalizers
   in
     s1 {subscriptions, finalizers}
 
-installFinalizer :: FinalizerValue -> RjsState -> (FinalizerKey, RjsState)
-installFinalizer fin s0 =
+installFinalizer :: FinalizerValue -> ReactiveScope -> RjsState -> (FinalizerKey, RjsState)
+installFinalizer fin e s0 =
   let
     (finalizerId, s1) = nextQueueId s0
     finalizerKey = CustomKey finalizerId
     insertFin = Just . Map.insert finalizerKey fin . fromMaybe Map.empty
-    finalizers = Map.alter insertFin s0.reactive_scope s1.finalizers
+    finalizers = Map.alter insertFin e s1.finalizers
   in
     (finalizerKey, s1 {finalizers})
 
 bindRjsResult
   :: forall a b. RjsResult a
   -> (a -> RJS b)
+  -> ReactiveScope
   -> RjsState
   -> IO (RjsState, RjsResult b)
-bindRjsResult r cont s = case r of
-  PureResult a -> unRJS (cont a) s
+bindRjsResult r cont e s = case r of
+  PureResult a -> unRJS (cont a) e s
   EvalResult expr ->
     return (s, InterruptResult (EvalReason expr) cont)
   YieldResult callbackId ->
     return (s, InterruptResult (YieldReason callbackId) cont)
   FMapResult f i ->
-    bindRjsResult i (cont . f) s
+    bindRjsResult i (cont . f) e s
   InterruptResult reason c2 -> do
     let
-      cont' exp = RJS \s -> do
-        (s', r') <- unRJS (c2 exp) s
-        bindRjsResult r' cont s'
+      cont' exp = RJS \e s -> do
+        (s', r') <- unRJS (c2 exp) e s
+        bindRjsResult r' cont e s'
     return (s, InterruptResult reason cont')
 
 class MonadReactive m where
-  reactive :: (RjsState -> (a, RjsState)) -> m a
+  reactive :: (ReactiveScope -> RjsState -> (a, RjsState)) -> m a
 
-reactive_ :: MonadReactive m => (RjsState -> RjsState) -> m ()
-reactive_ f = reactive \s -> ((), f s)
+reactive_ :: MonadReactive m => (ReactiveScope -> RjsState -> RjsState) -> m ()
+reactive_ f = reactive \e s -> ((), f e s)
 {-# INLINE reactive_ #-}
 
 instance Functor RJS where
-  fmap f (RJS g) = RJS \s -> fmap h (g s)
+  fmap f (RJS g) = RJS \e s -> fmap h (g e s)
     where
       h (s, (PureResult a)) = (s, PureResult (f a))
       h (s, r) = (s, FMapResult f r)
   {-# INLINE fmap #-}
 
 instance Applicative RJS where
-  pure a = RJS \s -> return (s, PureResult a)
+  pure a = RJS \_ s -> return (s, PureResult a)
   {-# INLINE pure #-}
-  (<*>) mf ma = RJS \s -> do
-    (s, r) <- unRJS mf s
-    bindRjsResult r (flip fmap ma) s
+  (<*>) mf ma = RJS \e s -> do
+    (s, r) <- unRJS mf e s
+    bindRjsResult r (flip fmap ma) e s
   {-# INLINE (<*>) #-}
 
 instance Monad RJS where
-  (>>=) ma mf = RJS \s -> do
-    (s, r) <- unRJS ma s
-    bindRjsResult r mf s
+  (>>=) ma mf = RJS \e s -> do
+    (s, r) <- unRJS ma e s
+    bindRjsResult r mf e s
   {-# INLINE (>>=) #-}
 
+instance MonadReader ReactiveScope RJS where
+  local f (RJS g) = RJS \e -> g (f e)
+  {-# INLINE local #-}
+  ask = RJS \e s -> return (s, PureResult e)
+  {-# INLINE ask #-}
+
 instance MonadState RjsState RJS where
-  state f = RJS \s -> let (a, s') = f s in return (s', PureResult a)
+  state f = RJS \_ s -> let (a, s') = f s in return (s', PureResult a)
   {-# INLINE state #-}
 
 instance MonadIO RJS where
-  liftIO io = RJS \s -> fmap ((s,) . PureResult) io
+  liftIO io = RJS \_ s -> fmap ((s,) . PureResult) io
   {-# INLINE liftIO #-}
 
 instance MonadFix RJS where
-  mfix f = RJS \s -> mfix \ ~(_, a) -> unRJS (f (extractPure a)) s
+  mfix f = RJS \e s -> mfix \ ~(_, a) -> unRJS (f (extractPure a)) e s
     where
       extractPure (PureResult a) = a
       extractPure _ = error
@@ -293,5 +286,5 @@ instance MonadFix RJS where
   {-# INLINE mfix #-}
 
 instance MonadReactive RJS where
-  reactive f = RJS \s -> let (a, s') = f s in return (s', PureResult a)
+  reactive f = RJS \e s -> let (a, s') = f e s in return (s', PureResult a)
   {-# INLINE reactive #-}

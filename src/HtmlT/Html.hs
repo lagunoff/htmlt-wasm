@@ -52,7 +52,7 @@ attr attrName attrVal = modify \s ->
 
 dynProp :: (ToJSVal v, Eq v) => Text -> Dynamic v -> Html ()
 dynProp propName (holdUniqDyn -> valueDyn) = do
-  rscope <- lift $ gets (.reactive_scope)
+  rscope <- lift ask
   initialVal <- readDyn valueDyn
   currentNodeVar <- lift newVar
   let
@@ -65,7 +65,7 @@ dynProp propName (holdUniqDyn -> valueDyn) = do
 
 dynAttr :: Text -> Dynamic Text -> Html ()
 dynAttr attrName (holdUniqDyn -> valueDyn) = do
-  rscope <- lift $ gets (.reactive_scope)
+  rscope <- lift ask
   initialVal <- readDyn valueDyn
   currentNodeVar <- lift newVar
   let
@@ -78,7 +78,7 @@ dynAttr attrName (holdUniqDyn -> valueDyn) = do
 
 toggleClass :: Text -> Dynamic Bool -> Html ()
 toggleClass className (holdUniqDyn -> enableDyn) = do
-  rscope <- lift $ gets (.reactive_scope)
+  rscope <- lift ask
   initialVal <- readDyn enableDyn
   currentNodeVar <- lift newVar
   let
@@ -95,7 +95,7 @@ text contents = do
 
 dynText :: Dynamic Text -> Html ()
 dynText (holdUniqDyn -> dynContent) = do
-  rscope <- lift $ gets (.reactive_scope)
+  rscope <- lift ask
   initialContent <- readDyn dynContent
   textNodeVar <- lift newVar
   let
@@ -115,12 +115,12 @@ dyn d = do
     update html = do
       lift $ clearBoundary boundary
       html
-  monohoist (localScope initialScope) $ withBuilder (Var boundary) initialVal
+  monohoist (local (const initialScope)) $ withBuilder (Var boundary) initialVal
   lift $ subscribe (updates d) \newVal -> do
     newReactiveScope <- newScope
     oldReactiveScope <- liftIO $ atomicModifyIORef reactiveScopeRef (newReactiveScope,)
     freeScope oldReactiveScope
-    localScope newReactiveScope . attachHtml (Var boundary) $ update newVal
+    local (const newReactiveScope) . attachHtml (Var boundary) $ update newVal
 
 -- | Auxilliary datatype that helps to implement 'simpleList'
 data ElemEnv a = ElemEnv
@@ -147,7 +147,7 @@ simpleList listDyn h = do
       ([], x:xs) -> do
         newElem <- newElemEnv x
         withBuilder (Var newElem.elem_boundary)
-          $ monohoist (localScope newElem.reactive_scope)
+          $ monohoist (local (const newElem.reactive_scope))
           $ h idx newElem.elem_state_ref
         fmap (newElem:) $ setup (idx + 1) xs []
       -- New list is shorter, delete the elements that no longer
@@ -162,7 +162,7 @@ simpleList listDyn h = do
     newElemEnv :: a -> Html (ElemEnv a)
     newElemEnv a = do
       reactive_scope <- lift newScope
-      monohoist (localScope reactive_scope) do
+      monohoist (local (const reactive_scope)) do
         elem_state_ref <- lift $ newRef a
         elem_boundary <- insertBoundary
         return ElemEnv {reactive_scope, elem_state_ref, elem_boundary}
