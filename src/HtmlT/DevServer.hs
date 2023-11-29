@@ -36,7 +36,7 @@ data DevServerConfig a = DevServerConfig
   -- e.g. establish connection to database etc
   , release_resource :: a -> IO ()
   -- ^ Runs before the ghci session is unloaded
-  , reload_app :: a -> IO (StartFlags -> RJS (), Application)
+  , reload_app :: a -> Chan (RJS ()) -> IO (StartFlags -> RJS (), Application)
   -- ^ Given resource of type 'a', initialize instances of client and
   -- server applications. Runs each time ghci session reloads
   , html_template :: BSL.ByteString -> BSL.ByteString
@@ -51,7 +51,7 @@ defaultDevServerConfig :: (StartFlags -> RJS ()) -> DevServerConfig ()
 defaultDevServerConfig clientApp = DevServerConfig
   { aquire_resource = pure ()
   , release_resource = const (pure ())
-  , reload_app = const $ pure (clientApp, defaultFallbackApp)
+  , reload_app = \_ _ -> pure (clientApp, defaultFallbackApp)
   , html_template = defaultHtmlTemplate
   , docroots = []
   }
@@ -162,8 +162,7 @@ devserverWebsocket opt p =
     acceptConn = do
       connection <- acceptRequest p
       rjs_instance <- newRjsInstance
-      command_chan <- newChan
-      let connInfo = ConnectionInfo {rjs_instance, connection, command_chan}
+      let connInfo = ConnectionInfo {rjs_instance, connection}
       connId <- atomicModifyIORef' opt.conn_state_ref \s ->
         ( s
           { id_supply = succ s.id_supply
@@ -178,18 +177,17 @@ devserverWebsocket opt p =
     receive c =
       try @ConnectionException (receiveData c)
     loop connInfo = do
-      raceResult <- race (receive connInfo.connection) (readChan connInfo.command_chan)
+      runningApp <- readIORef opt.app_state_ref
+      raceResult <- race (receive connInfo.connection) (readChan runningApp.command_chan)
       case raceResult of
         Left (Right (incomingBytes::ByteString)) -> do
           let jsMessage = Binary.decode . BSL.fromStrict $ incomingBytes
-          runningApp <- readIORef opt.app_state_ref
           haskMessage <- handleMessage connInfo.rjs_instance runningApp.client_app jsMessage
           sendDataMessage connInfo.connection . Binary $ Binary.encode haskMessage
           loop connInfo
         Left (Left (_::ConnectionException)) ->
           return ()
         Right jsAction -> do
-          runningApp <- readIORef opt.app_state_ref
           haskMessage <- handleMessage' connInfo.rjs_instance runningApp.client_app (Left jsAction)
           sendDataMessage connInfo.connection . Binary $ Binary.encode haskMessage
           loop connInfo
@@ -200,12 +198,14 @@ devserverWebsocket opt p =
 newInstance :: Typeable a => DevServerConfig a -> IO DevServerInstance
 newInstance devCfg = do
   resource <- devCfg.aquire_resource
-  (client_app, server_app) <- devCfg.reload_app resource
+  command_chan <- newChan
+  (client_app, server_app) <- devCfg.reload_app resource command_chan
   app_state_ref <- newIORef RunningApp
     { resource
     , devserver_config = devCfg
     , client_app
     , server_app
+    , command_chan
     }
   conn_state_ref <- newIORef $ ConnectionState Map.empty 0
   return DevServerInstance {conn_state_ref, app_state_ref}
@@ -216,22 +216,26 @@ updateInstance devCfg devInst = do
   let tryOld = tryOldResource devCfg oldApp
   case tryOld of
     Right oldResource -> do
-      (client_app, server_app) <- devCfg.reload_app oldResource
+      command_chan <- newChan
+      (client_app, server_app) <- devCfg.reload_app oldResource command_chan
       writeIORef devInst.app_state_ref RunningApp
         { resource = oldResource
         , devserver_config = devCfg
         , client_app
         , server_app
+        , command_chan
         }
     Left closeOld -> do
       closeOld
+      command_chan <- newChan
       newResource <- devCfg.aquire_resource
-      (client_app, server_app) <- devCfg.reload_app newResource
+      (client_app, server_app) <- devCfg.reload_app newResource command_chan
       writeIORef devInst.app_state_ref RunningApp
         { resource = newResource
         , devserver_config = devCfg
         , client_app
         , server_app
+        , command_chan
         }
   where
     tryOldResource :: forall a. Typeable a => DevServerConfig a -> RunningApp -> Either (IO ()) a
@@ -255,7 +259,6 @@ data ConnectionState = ConnectionState
 data ConnectionInfo = ConnectionInfo
   { connection :: Connection
   , rjs_instance :: RjsInstance
-  , command_chan :: Chan (RJS ())
   } deriving Generic
 
 data RunningApp = forall a. Typeable a => RunningApp
@@ -263,6 +266,7 @@ data RunningApp = forall a. Typeable a => RunningApp
   , devserver_config :: DevServerConfig a
   , client_app :: StartFlags -> RJS ()
   , server_app :: Application
+  , command_chan :: Chan (RJS ())
   }
 
 newtype ConnectionId = ConnectionId {unConnectionId :: Int}
