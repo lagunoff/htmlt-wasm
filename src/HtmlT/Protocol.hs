@@ -12,7 +12,8 @@ import "this" HtmlT.Protocol.JSVal qualified as JSVal
 
 data HaskellMessage
   = EvalExpr Expr
-  -- ^ Evaluate expression, expect Value result
+  -- ^ Evaluate expression, expect the result to be returned by
+  -- 'Return' message
   | Yield Expr
   -- ^ Evaluate expression for side-effects only and wait for some
   -- asynchronous event to continue the execution, won't return

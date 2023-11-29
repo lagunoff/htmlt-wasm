@@ -1,29 +1,29 @@
 module HtmlT.DevServer where
 
 import Control.Concurrent
+import Control.Concurrent.Async
 import Control.Exception
 import Control.Monad
 import Data.Binary qualified as Binary
 import Data.ByteString as BS
 import Data.ByteString.Lazy qualified as BSL
 import Data.Function
-import Data.Typeable
 import Data.IORef
 import Data.List qualified as List
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Data.Maybe
+import Data.Typeable
 import Foreign.Store
-import GHC.IO.Exception
 import GHC.Generics
+import GHC.IO.Exception
 import Network.HTTP.Types as H
 import Network.Wai as WAI
+import Network.Wai.Application.Static
 import Network.Wai.Handler.Warp as Warp
 import Network.Wai.Handler.WebSockets
 import Network.WebSockets
-import Network.Wai.Application.Static
-import System.IO
 import System.Environment
+import System.IO
 
 import "this" HtmlT.Base
 import "this" HtmlT.RJS
@@ -31,24 +31,34 @@ import "this" HtmlT.Protocol
 
 
 data DevServerConfig a = DevServerConfig
-  { open_resource :: IO a
-  , close_resource :: a -> IO ()
-  , init_app :: a -> IO (StartFlags -> RJS (), Application)
+  { aquire_resource :: IO a
+  -- ^ Usualy runs once just after ghci session is loaded,
+  -- e.g. establish connection to database etc
+  , release_resource :: a -> IO ()
+  -- ^ Runs before the ghci session is unloaded
+  , reload_app :: a -> IO (StartFlags -> RJS (), Application)
+  -- ^ Given resource of type 'a', initialize instances of client and
+  -- server applications. Runs each time ghci session reloads
   , html_template :: BSL.ByteString -> BSL.ByteString
+  -- ^ Template for index.html, receives the current URL origin
+  -- (protocol + host)
   , docroots :: [FilePath]
+  -- ^ List of directories to use with wai-static middleware, could be
+  -- empty, usually be used like docroots = ["./public"]
   } deriving Generic
 
 defaultDevServerConfig :: (StartFlags -> RJS ()) -> DevServerConfig ()
 defaultDevServerConfig clientApp = DevServerConfig
-  { open_resource = pure ()
-  , close_resource = const (pure ())
-  , init_app = const $ pure (clientApp, defaultFallbackApp)
+  { aquire_resource = pure ()
+  , release_resource = const (pure ())
+  , reload_app = const $ pure (clientApp, defaultFallbackApp)
   , html_template = defaultHtmlTemplate
   , docroots = []
   }
 
 runDebug :: Typeable a => Warp.Settings -> DevServerConfig a -> IO ()
 runDebug settings devCfg = do
+  -- Just a random number that doesn't change after reload
   let storeId = 183
   hSetBuffering stderr LineBuffering
   lookupStore storeId >>= \case
@@ -110,26 +120,26 @@ devserverMiddleware opts next req resp =
       websocketsOr defaultConnectionOptions (devserverWebsocket opts)
       defaultFallbackApp
     indexHtmlApp req resp = do
-      let origin = inferOrigin req
+      let devSocket = devServerSocketUrl req
       RunningApp{devserver_config} <- readIORef opts.app_state_ref
       resp $ responseLBS status200
         [(hContentType, "text/html; charset=utf-8")] $
-        devserver_config.html_template origin
+        devserver_config.html_template devSocket
 
-inferOrigin :: WAI.Request -> BSL.ByteString
-inferOrigin req = WAI.requestHeaders req
+devServerSocketUrl :: WAI.Request -> BSL.ByteString
+devServerSocketUrl req = WAI.requestHeaders req
   & List.lookup "Host"
-  & fromMaybe "localhost"
+  & maybe "localhost" BSL.fromStrict
   & ((if WAI.isSecure req then "wss://" else "ws://") <>)
-  & BSL.fromStrict
+  & (<> "/dev-server.sock")
 
 defaultHtmlTemplate :: BSL.ByteString -> BSL.ByteString
-defaultHtmlTemplate origin =
+defaultHtmlTemplate devSocket =
   "<html>\n\
   \ <body>\n\
   \  <script>\n\
   \    " <> BSL.fromStrict indexBundleJs <> "\n\
-  \    startDevClient(\"" <> origin <> "/dev-server.sock\");\n\
+  \    startDevClient(\"" <> devSocket <> "\");\n\
   \  </script>\n\
   \ </body>\n\
   \</html>\n\
@@ -148,14 +158,12 @@ defaultFallbackApp _ resp =
 
 devserverWebsocket :: DevServerInstance -> ServerApp
 devserverWebsocket opt p =
-  bracket acceptConn dropConn \(conn, _, options) ->
-    withPingThread conn 30 (pure ()) $
-      loop conn options
-  where
+  let
     acceptConn = do
       connection <- acceptRequest p
-      options <- newRjsInstance
-      let connInfo = ConnectionInfo {options, connection}
+      rjs_instance <- newRjsInstance
+      command_chan <- newChan
+      let connInfo = ConnectionInfo {rjs_instance, connection, command_chan}
       connId <- atomicModifyIORef' opt.conn_state_ref \s ->
         ( s
           { id_supply = succ s.id_supply
@@ -163,25 +171,36 @@ devserverWebsocket opt p =
           }
         , s.id_supply
         )
-      return (connection, connId, options)
-    dropConn (_, connId, _) =
+      return (connInfo, connId)
+    dropConn (_, connId) =
       modifyIORef' opt.conn_state_ref \s -> s
         {connections = Map.delete connId s.connections}
-    loop conn options =
-      try (receiveData conn) >>= \case
-        Right (incomingBytes::ByteString) -> do
+    receive c =
+      try @ConnectionException (receiveData c)
+    loop connInfo = do
+      raceResult <- race (receive connInfo.connection) (readChan connInfo.command_chan)
+      case raceResult of
+        Left (Right (incomingBytes::ByteString)) -> do
           let jsMessage = Binary.decode . BSL.fromStrict $ incomingBytes
           runningApp <- readIORef opt.app_state_ref
-          haskMessage <- handleMessage options runningApp.client_app jsMessage
-          sendDataMessage conn . Binary $ Binary.encode haskMessage
-          loop conn options
-        Left (_::ConnectionException) ->
+          haskMessage <- handleMessage connInfo.rjs_instance runningApp.client_app jsMessage
+          sendDataMessage connInfo.connection . Binary $ Binary.encode haskMessage
+          loop connInfo
+        Left (Left (_::ConnectionException)) ->
           return ()
+        Right jsAction -> do
+          runningApp <- readIORef opt.app_state_ref
+          haskMessage <- handleMessage' connInfo.rjs_instance runningApp.client_app (Left jsAction)
+          sendDataMessage connInfo.connection . Binary $ Binary.encode haskMessage
+          loop connInfo
+  in
+    bracket acceptConn dropConn \(connInfo, _) ->
+      withPingThread connInfo.connection 30 (pure ()) $ loop connInfo
 
 newInstance :: Typeable a => DevServerConfig a -> IO DevServerInstance
 newInstance devCfg = do
-  resource <- devCfg.open_resource
-  (client_app, server_app) <- devCfg.init_app resource
+  resource <- devCfg.aquire_resource
+  (client_app, server_app) <- devCfg.reload_app resource
   app_state_ref <- newIORef RunningApp
     { resource
     , devserver_config = devCfg
@@ -197,7 +216,7 @@ updateInstance devCfg devInst = do
   let tryOld = tryOldResource devCfg oldApp
   case tryOld of
     Right oldResource -> do
-      (client_app, server_app) <- devCfg.init_app oldResource
+      (client_app, server_app) <- devCfg.reload_app oldResource
       writeIORef devInst.app_state_ref RunningApp
         { resource = oldResource
         , devserver_config = devCfg
@@ -206,8 +225,8 @@ updateInstance devCfg devInst = do
         }
     Left closeOld -> do
       closeOld
-      newResource <- devCfg.open_resource
-      (client_app, server_app) <- devCfg.init_app newResource
+      newResource <- devCfg.aquire_resource
+      (client_app, server_app) <- devCfg.reload_app newResource
       writeIORef devInst.app_state_ref RunningApp
         { resource = newResource
         , devserver_config = devCfg
@@ -218,7 +237,7 @@ updateInstance devCfg devInst = do
     tryOldResource :: forall a. Typeable a => DevServerConfig a -> RunningApp -> Either (IO ()) a
     tryOldResource _ RunningApp {resource, devserver_config}
       | Just Refl <- eqT0 @a resource = Right resource
-      | otherwise = Left (devserver_config.close_resource resource)
+      | otherwise = Left (devserver_config.release_resource resource)
 
     eqT0 :: forall a b. (Typeable a, Typeable b) => b -> Maybe (a :~: b)
     eqT0 _ = eqT @a @b
@@ -235,7 +254,8 @@ data ConnectionState = ConnectionState
 
 data ConnectionInfo = ConnectionInfo
   { connection :: Connection
-  , options :: RjsInstance
+  , rjs_instance :: RjsInstance
+  , command_chan :: Chan (RJS ())
   } deriving Generic
 
 data RunningApp = forall a. Typeable a => RunningApp

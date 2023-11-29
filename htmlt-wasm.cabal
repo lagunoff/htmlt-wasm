@@ -83,6 +83,7 @@ library
     exposed-modules:
       HtmlT.DevServer
     build-depends:
+      async,
       foreign-store,
       http-types,
       wai,

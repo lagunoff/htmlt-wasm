@@ -4,10 +4,10 @@ import Control.Exception
 import Data.IORef
 import Data.Map (Map)
 import Data.Map qualified as Map
+import Data.Text qualified as Text
 import GHC.Exts
 import GHC.Generics
 import Unsafe.Coerce
-import Data.Text qualified as Text
 
 import "this" HtmlT.Event
 import "this" HtmlT.Protocol
@@ -27,7 +27,11 @@ newRjsInstance = do
   continuations_ref <- newIORef []
   return RjsInstance {rjs_state_ref, async_continuations_ref, continuations_ref}
 
-runUntillInterruption :: RjsInstance -> ReactiveScope -> RJS a -> IO (Either HaskellMessage a)
+runUntillInterruption
+  :: RjsInstance
+  -> ReactiveScope
+  -> RJS a
+  -> IO (Either HaskellMessage a)
 runUntillInterruption inst e rjs = do
   s0 <- readIORef inst.rjs_state_ref
   (s1, result) <- unRJS rjs e s0 `catch` \(e :: SomeException) ->
@@ -71,15 +75,22 @@ handleMessage
   -> (StartFlags -> RJS ())
   -> JavaScriptMessage
   -> IO HaskellMessage
-handleMessage inst jsMain = \case
-  Start startFlags -> do
+handleMessage inst jsMain = handleMessage' inst jsMain . Right
+
+handleMessage'
+  :: RjsInstance
+  -> (StartFlags -> RJS ())
+  -> Either (RJS ()) JavaScriptMessage
+  -> IO HaskellMessage
+handleMessage' inst jsMain = \case
+  Right (Start startFlags) -> do
     writeIORef inst.continuations_ref []
     writeIORef inst.rjs_state_ref emptyRjsState
     result <- runUntillInterruption inst rootScope (jsMain startFlags)
     case result of
       Left haskMsg -> return haskMsg
       Right () -> return Exit
-  Return jval -> do
+  Right (Return jval) -> do
     mContinuation <- atomicModifyIORef' inst.continuations_ref \case
       [] -> ([], Nothing)
       x:xs -> (xs, Just x)
@@ -91,15 +102,15 @@ handleMessage inst jsMain = \case
         case result of
           Left haskMsg -> return haskMsg
           Right _ -> return Exit
-  TriggerEventMsg arg callbackId -> do
+  Right (TriggerEventMsg arg callbackId) -> do
     let
-      eventId = EventId (QueueId (unCallbackId callbackId))
+      eventId = EventId (QueueId callbackId.unCallbackId)
       rjs = unsafeTrigger eventId arg
     result <- runUntillInterruption inst rootScope (dynStep rjs)
     case result of
       Left haskMsg -> return haskMsg
       Right _ -> return Exit
-  AsyncCallbackMsg arg callbackId -> do
+  Right (AsyncCallbackMsg arg callbackId) -> do
     mContinuation <- atomicModifyIORef' inst.async_continuations_ref \c ->
       (Map.delete callbackId c, Map.lookup callbackId c)
     case mContinuation of
@@ -110,10 +121,15 @@ handleMessage inst jsMain = \case
         case result of
           Left haskMsg -> return haskMsg
           Right _ -> return Exit
-  BeforeUnload -> do
+  Right BeforeUnload -> do
     result <- runUntillInterruption inst rootScope (freeScope rootScope)
     case result of
       Left haskMsg -> return haskMsg
       Right _ -> return Exit
+  Left jsAction -> do
+    result <- runUntillInterruption inst rootScope jsAction
+    case result of
+      Left haskMsg -> return haskMsg
+      Right () -> return Exit
   where
     rootScope = ReactiveScope (-1)

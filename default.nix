@@ -18,7 +18,6 @@ let
       } // args);
 
       htmlt-wasm = doBenchmark (self.callCabal2nix "htmlt-wasm" ./. {});
-
       semigroupoids = doJailbreak super.semigroupoids;
     };
   };
