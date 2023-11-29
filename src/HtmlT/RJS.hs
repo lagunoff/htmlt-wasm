@@ -230,7 +230,7 @@ bindRjsResult r cont e s = case r of
     bindRjsResult i (cont . f) e s
   InterruptResult reason c2 -> do
     let
-      cont' exp = RJS \e s -> do
+      cont' exp = RJS \_ s -> do
         (s', r') <- unRJS (c2 exp) e s
         bindRjsResult r' cont e s'
     return (s, InterruptResult reason cont')
