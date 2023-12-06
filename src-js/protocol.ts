@@ -144,7 +144,7 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
       domBuilder.insertIntoBuilder(parent, child);
       return null;
     }
-    case ExprTag.WithBuilder: {
+    case ExprTag.WithDomBuilder: {
       const builder = evalExpr(idenScope, argScope, hscb, exp.builder) as Element|Comment;
       const builderContent = evalExpr(idenScope, argScope, hscb, exp.builderContent) as Function;
       builderContent(builder);
@@ -332,7 +332,7 @@ export enum ExprTag {
   FreeScope,
 
   InsertNode,
-  WithBuilder,
+  WithDomBuilder,
   CreateElement,
   CreateElementNS,
   CreateText,
@@ -380,7 +380,7 @@ export type Expr =
   | { tag: ExprTag.FreeScope, scopeId: number }
 
   | { tag: ExprTag.InsertNode, parent: Expr, child: Expr }
-  | { tag: ExprTag.WithBuilder, builder: Expr, builderContent: Expr }
+  | { tag: ExprTag.WithDomBuilder, builder: Expr, builderContent: Expr }
   | { tag: ExprTag.CreateElement, tagName: string }
   | { tag: ExprTag.CreateElementNS, ns: string, tagName: string }
   | { tag: ExprTag.CreateText, content: string }
@@ -428,7 +428,7 @@ export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.FreeScope]: b.record({ scopeId: b.int64 }),
 
   [ExprTag.InsertNode]: b.record({ parent: self, child: self }),
-  [ExprTag.WithBuilder]: b.record({ builder: self, builderContent: self }),
+  [ExprTag.WithDomBuilder]: b.record({ builder: self, builderContent: self }),
   [ExprTag.CreateElement]: b.record({ tagName: b.string }),
   [ExprTag.CreateElementNS]: b.record({ ns: b.string, tagName: b.string }),
   [ExprTag.CreateText]: b.record({ content: b.string }),

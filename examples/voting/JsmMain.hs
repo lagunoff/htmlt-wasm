@@ -1,7 +1,6 @@
 module JsmMain where
 
 import Control.Monad
-import Control.Monad.Reader
 import Data.List qualified as List
 import Data.Ord
 import GHC.Generics
@@ -54,7 +53,7 @@ update action old = case action of
 jsmMain :: StartFlags -> RJS ()
 jsmMain _ = attachToBody do
   el "style" $ text styles
-  votingListRef <- lift $ newRef initialState
+  votingListRef <- liftRJS $ newRef initialState
   main_ [class_ "wrapper"] do
     h1_ "Programming Languages Rating"
     table_ [class_ "voting-results"] do
@@ -70,7 +69,7 @@ jsmMain _ = attachToBody do
     p_ "Choose and vote for your favorite programming language (you can also \
       \downvote languages you dislike)"
     div_ [class_ "bottom-toolbar"] do
-      choiceRef <- lift $ newRef "Haskell"
+      choiceRef <- liftRJS $ newRef "Haskell"
       div_ do
         select_ [style_ "margin-right: 4px"] do
           forM_ initialState.candidates \c -> do

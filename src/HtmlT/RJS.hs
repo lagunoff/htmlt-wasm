@@ -242,6 +242,9 @@ reactive_ :: MonadReactive m => (ReactiveScope -> RjsState -> RjsState) -> m ()
 reactive_ f = reactive \e s -> ((), f e s)
 {-# INLINE reactive_ #-}
 
+class MonadRJS m where
+  liftRJS :: RJS a -> m a
+
 instance Functor RJS where
   fmap f (RJS g) = RJS \e s -> fmap h (g e s)
     where

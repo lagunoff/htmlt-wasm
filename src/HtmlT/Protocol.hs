@@ -59,7 +59,7 @@ data Location = Location
   -- ^ A string containing a '#' followed by the fragment identifier
   -- of the URL.
   } deriving stock (Show, Eq, Generic)
-    deriving anyclass (Binary)
+    deriving anyclass (Binary, JSVal.FromJSVal, JSVal.ToJSVal)
 
 -- | Strict Lambda calculus with arbitrary side-effects, meant to be
 -- used as commands executed in the JavaScript side, optimized for
@@ -126,7 +126,7 @@ data Expr
   -- ^ Free a variable allocated with @AssignVar@
 
   | InsertNode Expr Expr
-  | WithBuilder Expr Expr
+  | WithDomBuilder Expr Expr
   | CreateElement Text
   | CreateElementNS Text Text
   | CreateText Text

@@ -40,13 +40,21 @@ addEventListener :: forall hsCallback
   . AddEventListenerArgs hsCallback
   -> hsCallback
   -> Html ()
-addEventListener args k = do
-  reactiveScope <- lift ask
+addEventListener = globalAddEventListener (Arg 0 0)
+{-# INLINE addEventListener #-}
+
+globalAddEventListener :: forall hsCallback
+  . Expr
+  -> AddEventListenerArgs hsCallback
+  -> hsCallback
+  -> Html ()
+globalAddEventListener target args k = Html do
+  reactiveScope <- ask
   let
-    mkExpr callbackId = AddEventListener (Arg 0 0) args.event_name
+    mkExpr callbackId = AddEventListener target args.event_name
       (args.mk_js_callback args.listener_options callbackId)
-  callbackId <- lift $ newCallback (local (const reactiveScope) . args.mk_hs_callback k)
-  modify \s -> s {rev_queue = mkExpr callbackId : s.rev_queue}
+  callbackId <- newCallback (local (const reactiveScope) . args.mk_hs_callback k)
+  modify \s -> s {evaluation_queue = mkExpr callbackId : s.evaluation_queue}
 
 -- https://developer.mozilla.org/en-US/docs/Web/API/Element/click_event
 pointerEventArgs :: Text -> AddEventListenerArgs (RJS ())
@@ -125,6 +133,24 @@ selectChangeEventArgs = AddEventListenerArgs
   , mk_hs_callback = \k j -> forM_ (fromJSVal j) k
   , mk_js_callback = \opts callbackId -> Lam $ RevSeq
     $ TriggerEvent callbackId (Arg 0 0 `Dot` "target" `Dot` "value")
+    : applyListenerOptions opts
+  }
+
+-- https://developer.mozilla.org/en-US/docs/Web/API/Window/popstate_event
+popstateEventArgs :: AddEventListenerArgs (Location -> RJS ())
+popstateEventArgs = AddEventListenerArgs
+  { event_name = "popstate"
+  , listener_options = defaultEventListenerOptions
+  , mk_hs_callback = \k j -> forM_ (fromJSVal j) k
+  , mk_js_callback = \opts callbackId -> Lam $ RevSeq
+    $ TriggerEvent callbackId (ObjectE
+      [ ("protocol", Id "location" `Dot` "protocol")
+      , ("hostname", Id "location" `Dot` "hostname")
+      , ("port", Id "location" `Dot` "port")
+      , ("pathname", Id "location" `Dot` "pathname")
+      , ("search", Id "location" `Dot` "search")
+      , ("hash", Id "location" `Dot` "hash")
+      ])
     : applyListenerOptions opts
   }
 

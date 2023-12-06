@@ -18,3 +18,6 @@ jsmMain _ = do
     TodoList.html TodoList.TodoListConfig
       { state_ref = todoListStateRef
       }
+    globalAddEventListener (Id "window") popstateEventArgs \loc -> do
+      let filter = fromMaybe TodoList.All $ TodoList.parseFilter loc.hash
+      modifyRef todoListStateRef \s -> s {TodoList.filter}
