@@ -297,10 +297,12 @@ export const startLocation: b.Decoder<StartLocation> = b.record({
 
 export type StartFlags = {
   initial_url: StartLocation;
+  window_inner_size: [number, number];
 };
 
 export const startFlags: b.Decoder<StartFlags> = b.record({
   initial_url: startLocation,
+  window_inner_size: b.tuple(b.int64, b.int64),
 });
 
 export enum ExprTag {
@@ -491,7 +493,13 @@ export function mkStartMessage(): JavaScriptMessage {
     search: location.search,
     hash: location.hash,
   };
-  return { tag: JavaScriptMessageTag.Start, startFlags: { initial_url } };
+  return {
+    tag: JavaScriptMessageTag.Start,
+    startFlags: {
+      initial_url,
+      window_inner_size: [window.innerWidth, window.innerHeight]
+    }
+  };
 }
 
 namespace domBuilder {

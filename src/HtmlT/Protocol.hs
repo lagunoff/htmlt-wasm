@@ -38,6 +38,7 @@ data JavaScriptMessage
 
 data StartFlags = StartFlags
   { initial_url :: Location
+  , window_inner_size :: (Int64, Int64)
   } deriving stock (Generic, Show)
     deriving anyclass (Binary)
 
