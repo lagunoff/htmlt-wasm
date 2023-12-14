@@ -81,7 +81,7 @@ newVar :: RJS VarId
 newVar = reactive \e s0 ->
   let
     (newQueueId, s1) = nextQueueId s0
-    newVarId = VarId (unQueueId (unReactiveScope e)) (unQueueId newQueueId)
+    newVarId = VarId e.unReactiveScope.unQueueId newQueueId.unQueueId
   in
     (newVarId, s1)
 
@@ -113,7 +113,7 @@ freeScope rscope = do
     in
       (removedList, s { subscriptions, finalizers })
   runCustomFinalizers removedList
-  enqueueExpr $ FreeScope $ unQueueId $ unReactiveScope rscope
+  enqueueExpr $ FreeScope rscope.unReactiveScope.unQueueId
   where
     unsubscribe :: [(FinalizerKey, FinalizerValue)] -> Subscriptions -> Subscriptions
     unsubscribe [] !s = s
@@ -146,7 +146,7 @@ newCallback k = reactive \e s0 ->
     (queueId, s1) = nextQueueId s0
     s2 = unsafeSubscribe (EventId queueId) k e s1
   in
-    (CallbackId (unQueueId queueId), s2)
+    (CallbackId queueId.unQueueId, s2)
 
 releaseCallback :: CallbackId -> RJS ()
 releaseCallback callbackId = modify \s ->

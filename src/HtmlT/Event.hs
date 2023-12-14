@@ -14,16 +14,16 @@ import Unsafe.Coerce
 
 import "this" HtmlT.RJS
 
-newtype Event a = Event { unEvent :: (a -> RJS ()) -> RJS () }
+newtype Event a = Event { subscribe :: (a -> RJS ()) -> RJS () }
 
 -- | Contains a value that is subject to change over time. Provides
 -- operations for reading the current value ('readDyn') and
 -- subscribing to its future changes ('updates').
 data Dynamic a = Dynamic
-  { dynamic_read :: IO a
-  -- ^ Read current value. Use public alias 'readDyn' instead
-  , dynamic_updates :: Event a
-  -- ^ Event that fires when the value changes. Use public alias
+  { sample :: IO a
+  -- ^ Read current dynamic. Use public alias 'readDyn' instead
+  , updates :: Event a
+  -- ^ Event that fires when the dynamic changes. Use public alias
   -- 'updates' instead
   }
 
@@ -31,11 +31,11 @@ data Dynamic a = Dynamic
 -- shares a similar API to 'IORef' (see 'readRef', 'writeRef',
 -- 'modifyRef')
 data DynRef a = DynRef
-  { dynref_value :: Dynamic a
-  -- ^ Holds the current value and an event that notifies about value
+  { dynamic :: Dynamic a
+  -- ^ Holds the current dynamic and an event that notifies about dynamic
   -- modifications
-  , dynref_modifier :: Modifier a
-  -- ^ Funtion to update the value
+  , modifier :: Modifier a
+  -- ^ Funtion to update the dynamic
   }
 
 -- | Function that updates the value inside the 'DynRef'
@@ -81,24 +81,23 @@ newRef initial = do
           (new, (new, result))
       when u $ push new
       return result
-  return DynRef
-    { dynref_value = Dynamic (readIORef ioRef) event
-    , dynref_modifier = modifier
-    }
+    dynamic = Dynamic (readIORef ioRef) event
+  return DynRef {dynamic, modifier}
 
--- | Create a Dynamic that never changes its value
+-- | Create a Dynamic that never changes its dynamic
 constDyn :: a -> Dynamic a
 constDyn a = Dynamic (pure a) never
 
 -- | Event that will never fire
 never :: Event a
 never = Event \_ -> return ()
+
 -- | Write new value into a 'DynRef'
 --
--- > ref <- newRef "Initial value"
--- > transactionWrite ref "New value"
+-- > ref <- newRef "Initial dynamic"
+-- > transactionWrite ref "New dynamic"
 -- > readRef ref
--- "New value"
+-- "New dynamic"
 writeRef :: DynRef a -> a -> RJS ()
 writeRef ref a = modifyRef ref (const a)
 
@@ -108,7 +107,7 @@ writeRef ref a = modifyRef ref (const a)
 -- > readRef ref
 -- "Hello there!"
 readRef :: MonadIO m => DynRef a -> m a
-readRef = readDyn . dynref_value
+readRef = readDyn . (.dynamic)
 
 -- | Update a 'DynRef' by applying given function to the current value
 --
@@ -127,27 +126,18 @@ atomicModifyRef (DynRef _ (Modifier mod)) f = mod True f
 
 -- | Extract a 'Dynamic' out of 'DynRef'
 fromRef :: DynRef a -> Dynamic a
-fromRef = dynref_value
+fromRef = (.dynamic)
 
--- | Read the value held by a 'Dynamic'
+-- | Read the dynamic held by a 'Dynamic'
 readDyn :: MonadIO m => Dynamic a -> m a
-readDyn = liftIO . dynamic_read
-
--- | Extract the updates Event from a 'Dynamic'
-updates :: Dynamic a -> Event a
-updates = dynamic_updates
-
--- | Attach a listener to the event and return an action to detach the
--- listener
-subscribe :: Event a -> (a -> RJS ()) -> RJS ()
-subscribe (Event s) k = s k
+readDyn = liftIO . (.sample)
 
 -- | Executes an action currently held inside the 'Dynamic' and every
--- time the value changes.
+-- time the dynamic changes.
 performDyn :: Dynamic (RJS ()) -> RJS ()
 performDyn d = do
-  join $ liftIO $ dynamic_read d
-  subscribe d.dynamic_updates id
+  join $ liftIO d.sample
+  d.updates.subscribe id
 
 -- | Return a 'Dynamic' for which updates only fire when the value
 -- actually changes according to Eq instance
@@ -156,19 +146,21 @@ holdUniqDyn = holdUniqDynBy (==)
 {-# INLINE holdUniqDyn #-}
 
 -- TODO: holdUniqDynBy could be a misleading name, because it won't
--- hold the value for the whole Dynamic, instead it will perform the
+-- hold the dynamic for the whole Dynamic, instead it will perform the
 -- comparison for each subscription
 -- | Same as 'holdUniqDyn' but accepts arbitrary equality test
 -- function
 holdUniqDynBy :: (a -> a -> Bool) -> Dynamic a -> Dynamic a
-holdUniqDynBy equalFn Dynamic{..} = Dynamic dynamic_read
-  (Event \k -> do
-    old <- liftIO dynamic_read
-    oldRef <- liftIO (newIORef old)
-    unEvent dynamic_updates \new -> do
-      old <- liftIO $ atomicModifyIORef' oldRef (new,)
-      unless (old `equalFn` new) $ k new
-  )
+holdUniqDynBy equalFn dA =
+  let
+    updates = Event \k -> do
+      old <- liftIO dA.sample
+      oldRef <- liftIO (newIORef old)
+      dA.updates.subscribe \new -> do
+        old <- liftIO $ atomicModifyIORef' oldRef (new,)
+        unless (old `equalFn` new) $ k new
+  in
+    Dynamic {sample = dA.sample, updates}
 
 -- | Alternative version if 'fmap' where given function will only be
 -- called once every time 'Dynamic a' value changes, whereas in 'fmap'
@@ -179,8 +171,8 @@ mapDyn
   :: (a -> b)
   -> Dynamic a
   -> RJS (Dynamic b)
-mapDyn fun adyn = do
-  initialA <- liftIO $ dynamic_read adyn
+mapDyn fun dA = do
+  initialA <- liftIO $ dA.sample
   latestA <- liftIO $ newIORef initialA
   latestB <- liftIO $ newIORef (fun initialA)
   eventId <- state nextQueueId
@@ -190,7 +182,7 @@ mapDyn fun adyn = do
       newB <- liftIO $ fun <$> readIORef latestA
       liftIO $ writeIORef latestB newB
       unsafeTrigger (EventId eventId) newB
-  dynamic_updates adyn `subscribe` \newA -> do
+  dA.updates.subscribe \newA -> do
     liftIO $ writeIORef latestA newA
     defer eventId fire
   return $ Dynamic (readIORef latestB) updates
@@ -210,7 +202,7 @@ unsafeMapDynN
   -> RJS (Dynamic a)
 unsafeMapDynN fun dyns = do
   -- TODO: Try if list of IORefs is better than IORef of list
-  initialInputs <- liftIO $ mapM (.dynamic_read) dyns
+  initialInputs <- liftIO $ mapM (.sample) dyns
   initialOutput <- liftIO $ fun initialInputs
   latestInputsRef <- liftIO $ newIORef initialInputs
   latestOutputRef <- liftIO $ newIORef initialOutput
@@ -225,7 +217,7 @@ unsafeMapDynN fun dyns = do
     updateList 0 a (_:xs) = a:xs
     updateList n a (x:xs) = x : updateList (pred n) a xs
   forM_ (zip [0..] dyns) \(i::Int, adyn) -> do
-    adyn.dynamic_updates `subscribe` \newVal -> do
+    adyn.updates.subscribe \newVal -> do
       liftIO $ modifyIORef latestInputsRef $ updateList i newVal
       defer eventId fire
   return $ Dynamic (readIORef latestOutputRef) updates
@@ -234,14 +226,15 @@ type Lens' s a = forall f. Functor f => (a -> f a) -> s -> f s
 
 -- | Apply a lens to the value inside 'DynRef'
 lensMap :: forall s a. Lens' s a -> DynRef s -> DynRef a
-lensMap l (DynRef sdyn (Modifier smod)) =
-  DynRef adyn (Modifier amod)
-    where
-      adyn = Dynamic
-        (fmap (getConst . l Const) $ dynamic_read sdyn)
-        (fmap (getConst . l Const) $ dynamic_updates sdyn)
-      amod :: forall r. Bool -> (a -> (a, r)) -> RJS r
-      amod u f = smod u $ swap . l (swap . f)
+lensMap l s =
+  let
+    dynamic = Dynamic
+      (fmap (getConst . l Const) s.dynamic.sample)
+      (fmap (getConst . l Const) s.dynamic.updates)
+    modifier = Modifier \u f ->
+      unModifier s.modifier u $ swap . l (swap . f)
+  in
+    DynRef {dynamic, modifier}
 
 -- | Run a reactive transaction.
 dynStep :: RJS a -> RJS a
@@ -270,18 +263,16 @@ instance Applicative Dynamic where
   pure = constDyn
   (<*>) df da =
     let
-      updatesEvent = Event \k -> mdo
+      updates = Event \k -> mdo
         let
           fire newF newA = defer eventId do
             f <- liftIO $ maybe (readDyn df) pure newF
             a <- liftIO $ maybe (readDyn da) pure newA
             k (f a)
-        unEvent (updates df) \f -> fire (Just f) Nothing
-        unEvent (updates da) \a -> fire Nothing (Just a)
+        df.updates.subscribe \f -> fire (Just f) Nothing
+        da.updates.subscribe \a -> fire Nothing (Just a)
         eventId <- state nextQueueId
         return ()
+      sample = liftA2 ($) df.sample da.sample
     in
-      Dynamic
-        { dynamic_read = liftA2 ($) (dynamic_read df) (dynamic_read da)
-        , dynamic_updates = updatesEvent
-        }
+      Dynamic {sample, updates}

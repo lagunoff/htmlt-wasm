@@ -98,7 +98,7 @@ html cfg = do
         simpleList itemsDyn \idx todoRef ->
           TodoItem.html $ TodoItem.TodoItemConfig
             { TodoItem.state_ref = todoRef
-              { dynref_modifier = todoItemModifier cfg idx todoRef.dynref_modifier
+              { modifier = todoItemModifier cfg idx todoRef.modifier
               }
             , TodoItem.is_hidden_dyn =
               isTodoItemHidden <$> fromRef cfg.state_ref <*> fromRef todoRef
@@ -178,7 +178,7 @@ todoItemModifier cfg idx elemModifier = Modifier \upd f -> do
     -- widget for the sake of optimization
     needsUpdate = upd && (old.completed /= new.completed)
   -- Update the outer widget
-  unModifier (dynref_modifier cfg.state_ref) needsUpdate \old ->
+  unModifier cfg.state_ref.modifier needsUpdate \old ->
     (old {items = overIx idx (const new) old.items}, ())
   return result
   where

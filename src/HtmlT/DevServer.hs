@@ -25,10 +25,10 @@ import Network.WebSockets
 import System.Environment
 import System.IO
 
-import "this" HtmlT.Event
 import "this" HtmlT.Base
 import "this" HtmlT.RJS
 import "this" HtmlT.Protocol
+
 
 data DevServerConfig a = DevServerConfig
   { aquire_resource :: IO a
@@ -64,13 +64,13 @@ defaultDevServerConfig clientApp = DevServerConfig
   }
 
 runDebug :: Typeable resource => Warp.Settings -> DevServerConfig resource -> IO ()
-runDebug settings devCfg = do
+runDebug settings cfg = do
   -- Using a random constant as the key for Foreign.Store
   let storeId = 183
   hSetBuffering stderr LineBuffering
   lookupStore storeId >>= \case
     Nothing -> do
-      devInst <- newInstance devCfg
+      devInst <- newInstance cfg
       writeStore (Store storeId) devInst
       let
         useCurrentApp req resp = do
@@ -80,7 +80,7 @@ runDebug settings devCfg = do
         devserverMiddleware devInst useCurrentApp
     Just store -> do
       oldInst <- readStore store
-      updateInstance devCfg oldInst
+      updateInstance cfg oldInst
       connState <- readIORef oldInst.conn_state_ref
       forM_ connState.connections \connInfo ->
         sendDataMessage connInfo.connection . Binary $ Binary.encode HotReload
@@ -107,8 +107,8 @@ runDebug settings devCfg = do
       if isRepl then void (forkIO action) else action
 
 runDebugPort :: Typeable resource => Warp.Port -> DevServerConfig resource -> IO ()
-runDebugPort port devCfg =
-  runDebug (Warp.setPort port Warp.defaultSettings) devCfg
+runDebugPort port cfg =
+  runDebug (Warp.setPort port Warp.defaultSettings) cfg
 
 runDebugDefault :: Warp.Port -> (ConnectionInfo -> StartFlags -> RJS ()) -> IO ()
 runDebugDefault port clientApp = runDebug
@@ -186,8 +186,7 @@ devserverWebsocket opt p =
       modifyIORef' opt.conn_state_ref \s -> s
         {connections = Map.delete connInfo.connection_id s.connections}
       runningApp <- readIORef opt.app_state_ref
-      runningApp & \RunningApp{connection_lost} ->
-        connection_lost connInfo
+      runningApp.connection_lost connInfo
     receive c =
       try @ConnectionException (receiveData c)
     loop connInfo = do
@@ -204,7 +203,7 @@ devserverWebsocket opt p =
           return ()
         Right jsAction -> do
           haskMessage <- handleMessage' connInfo.rjs_instance
-            (runningApp.client_app connInfo) (Left (dynStep jsAction))
+            (runningApp.client_app connInfo) (Left jsAction)
           sendDataMessage connInfo.connection . Binary $ Binary.encode haskMessage
           loop connInfo
   in
@@ -212,12 +211,12 @@ devserverWebsocket opt p =
       withPingThread connInfo.connection 30 (pure ()) $ loop connInfo
 
 newInstance :: Typeable resource => DevServerConfig resource -> IO DevServerInstance
-newInstance devCfg = do
-  resource <- devCfg.aquire_resource
-  appSpec <- devCfg.reload_app resource
+newInstance cfg = do
+  resource <- cfg.aquire_resource
+  appSpec <- cfg.reload_app resource
   app_state_ref <- newIORef RunningApp
     { resource
-    , devserver_config = devCfg
+    , devserver_config = cfg
     , client_app = appSpec.client_app
     , server_app = appSpec.server_app
     , connection_lost = appSpec.connection_lost
@@ -230,7 +229,7 @@ updateInstance
   => DevServerConfig resource
   -> DevServerInstance
   -> IO ()
-updateInstance devCfg devInst = do
+updateInstance cfg devInst = do
   let
     tryOldResource :: forall a. Typeable a => DevServerConfig a ->
       RunningApp -> Either (IO ()) a
@@ -240,23 +239,23 @@ updateInstance devCfg devInst = do
     eqResource :: forall a b. (Typeable a, Typeable b) => b -> Maybe (a :~: b)
     eqResource _ = eqT @a @b
   oldApp <- readIORef devInst.app_state_ref
-  case tryOldResource devCfg oldApp of
+  case tryOldResource cfg oldApp of
     Right oldResource -> do
-      appSpec <- devCfg.reload_app oldResource
+      appSpec <- cfg.reload_app oldResource
       writeIORef devInst.app_state_ref RunningApp
         { resource = oldResource
-        , devserver_config = devCfg
+        , devserver_config = cfg
         , client_app = appSpec.client_app
         , server_app = appSpec.server_app
         , connection_lost = appSpec.connection_lost
         }
     Left releaseOld -> do
       releaseOld
-      newResource <- devCfg.aquire_resource
-      appSpec <- devCfg.reload_app newResource
+      newResource <- cfg.aquire_resource
+      appSpec <- cfg.reload_app newResource
       writeIORef devInst.app_state_ref RunningApp
         { resource = newResource
-        , devserver_config = devCfg
+        , devserver_config = cfg
         , client_app = appSpec.client_app
         , server_app = appSpec.server_app
         , connection_lost = appSpec.connection_lost

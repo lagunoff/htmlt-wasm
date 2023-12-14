@@ -63,9 +63,8 @@ dynProp propName (holdUniqDyn -> valueDyn) = Html do
     initProp = ElementProp (Arg 0 0) propName (jsvalToExpr (toJSVal initialVal))
     saveNode = AssignVar currentNodeVar (Arg 0 0)
   modify \s -> s {evaluation_queue = saveNode : initProp : s.evaluation_queue }
-  subscribe (updates valueDyn)
-    $ enqueueIfAlive rscope
-    . ElementProp (Var currentNodeVar) propName . jsvalToExpr . toJSVal
+  valueDyn.updates.subscribe $ enqueueIfAlive rscope .
+    ElementProp (Var currentNodeVar) propName . jsvalToExpr . toJSVal
 
 dynAttr :: Text -> Dynamic Text -> Html ()
 dynAttr attrName (holdUniqDyn -> valueDyn) = Html do
@@ -76,7 +75,7 @@ dynAttr attrName (holdUniqDyn -> valueDyn) = Html do
     initProp = ElementAttr (Arg 0 0) attrName initialVal
     saveNode = AssignVar currentNodeVar (Arg 0 0)
   modify \s -> s {evaluation_queue = saveNode : initProp : s.evaluation_queue }
-  subscribe (updates valueDyn)
+  valueDyn.updates.subscribe
     $ enqueueIfAlive rscope
     . ElementAttr (Var currentNodeVar) attrName
 
@@ -89,7 +88,7 @@ toggleClass className (holdUniqDyn -> enableDyn) = Html do
     initClass = ToggleClass (Arg 0 0) className initialVal
     saveNode = AssignVar currentNodeVar (Arg 0 0)
   modify \s -> s {evaluation_queue = saveNode : initClass : s.evaluation_queue }
-  subscribe (updates enableDyn) $
+  enableDyn.updates.subscribe $
     enqueueIfAlive rscope . ToggleClass (Var currentNodeVar) className
 
 text :: Text -> Html ()
@@ -106,7 +105,7 @@ dynText (holdUniqDyn -> dynContent) = Html do
     insertText = InsertNode (Arg 0 0)
       (AssignVar textNodeVar (CreateText initialContent))
   modify \s -> s {evaluation_queue = insertText : s.evaluation_queue }
-  subscribe (updates dynContent) $
+  dynContent.updates.subscribe $
     enqueueIfAlive rscope . AssignText (Var textNodeVar)
 
 dyn :: Dynamic (Html ()) -> Html ()
@@ -119,8 +118,8 @@ dyn d = Html do
     update html = Html do
       clearBoundary boundary
       html.unHtml
-  (local (const initialScope)) $ withDomBuilder (Var boundary) initialVal.unHtml
-  subscribe (updates d) \newVal -> do
+  local (const initialScope) $ withDomBuilder (Var boundary) initialVal.unHtml
+  d.updates.subscribe \newVal -> do
     newReactiveScope <- newScope
     oldReactiveScope <- liftIO $ atomicModifyIORef reactiveScopeRef (newReactiveScope,)
     freeScope oldReactiveScope
@@ -181,7 +180,7 @@ simpleList listDyn h = Html do
       liftIO $ writeIORef internalStateRef newEenvs
   initialVal <- readDyn listDyn
   withDomBuilder (Var boundary) . (.unHtml) $ updateList initialVal
-  subscribe (updates listDyn) $ attachHtml (Var boundary) . updateList
+  listDyn.updates.subscribe $ attachHtml (Var boundary) . updateList
 
 insertBoundary :: RJS VarId
 insertBoundary = do

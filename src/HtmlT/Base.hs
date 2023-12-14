@@ -86,7 +86,7 @@ handleMessage' inst jsMain = \case
   Right (Start startFlags) -> do
     writeIORef inst.continuations_ref []
     writeIORef inst.rjs_state_ref emptyRjsState
-    result <- runUntillInterruption inst rootScope (jsMain startFlags)
+    result <- runUntillInterruption inst rootScope (dynStep (jsMain startFlags))
     case result of
       Left haskMsg -> return haskMsg
       Right () -> return Exit
@@ -127,7 +127,7 @@ handleMessage' inst jsMain = \case
       Left haskMsg -> return haskMsg
       Right _ -> return Exit
   Left jsAction -> do
-    result <- runUntillInterruption inst rootScope jsAction
+    result <- runUntillInterruption inst rootScope (dynStep jsAction)
     case result of
       Left haskMsg -> return haskMsg
       Right () -> return Exit
