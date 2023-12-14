@@ -25,15 +25,10 @@ import Network.WebSockets
 import System.Environment
 import System.IO
 
+import "this" HtmlT.Event
 import "this" HtmlT.Base
 import "this" HtmlT.RJS
 import "this" HtmlT.Protocol
-
-data DevFlags = DevFlags
-  { command_chan :: Chan (RJS ())
-  -- ^ Send a command to the browser to execute
-  , connection_id :: ~ConnectionId
-  } deriving Generic
 
 data DevServerConfig a = DevServerConfig
   { aquire_resource :: IO a
@@ -41,9 +36,11 @@ data DevServerConfig a = DevServerConfig
   -- e.g. establish connection to database etc
   , release_resource :: a -> IO ()
   -- ^ Runs before the ghci session is unloaded
-  , reload_app :: a -> IO (DevFlags -> StartFlags -> RJS (), Application)
+  , reload_app :: a -> IO (ConnectionInfo -> StartFlags -> RJS (), Application)
   -- ^ Given resource of type 'a', initialize instances of client and
   -- server applications. Runs each time ghci session reloads
+  , connection_lost :: a -> ConnectionInfo -> IO ()
+  -- ^ Will be executed after a connection closes
   , html_template :: BSL.ByteString -> BSL.ByteString
   -- ^ Template for index.html, receives the current URL origin
   -- (protocol + host)
@@ -52,10 +49,11 @@ data DevServerConfig a = DevServerConfig
   -- empty, usually be used like docroots = ["./public"]
   } deriving Generic
 
-defaultDevServerConfig :: (DevFlags -> StartFlags -> RJS ()) -> DevServerConfig ()
+defaultDevServerConfig :: (ConnectionInfo -> StartFlags -> RJS ()) -> DevServerConfig ()
 defaultDevServerConfig clientApp = DevServerConfig
   { aquire_resource = pure ()
   , release_resource = const (pure ())
+  , connection_lost = \_ _ -> pure ()
   , reload_app = \_ -> pure (clientApp, defaultFallbackApp)
   , html_template = defaultHtmlTemplate
   , docroots = []
@@ -108,7 +106,7 @@ runDebugPort :: Typeable resource => Warp.Port -> DevServerConfig resource -> IO
 runDebugPort port devCfg =
   runDebug (Warp.setPort port Warp.defaultSettings) devCfg
 
-runDebugDefault :: Warp.Port -> (DevFlags -> StartFlags -> RJS ()) -> IO ()
+runDebugDefault :: Warp.Port -> (ConnectionInfo -> StartFlags -> RJS ()) -> IO ()
 runDebugDefault port clientApp = runDebug
   (Warp.setPort port Warp.defaultSettings)
   (defaultDevServerConfig clientApp)
@@ -170,8 +168,8 @@ devserverWebsocket opt p =
       rjs_instance <- newRjsInstance
       command_chan <- newChan
       let
-        dev_flags = DevFlags {command_chan, connection_id}
-        connInfo = ConnectionInfo {rjs_instance, connection, dev_flags}
+        connInfo = ConnectionInfo
+          {rjs_instance, connection, command_chan, connection_id}
       connection_id <- atomicModifyIORef' opt.conn_state_ref \s ->
         ( s
           { id_supply = succ s.id_supply
@@ -179,29 +177,37 @@ devserverWebsocket opt p =
           }
         , s.id_supply
         )
-      return (connInfo, connection_id)
-    dropConn (_, connId) =
+      return connInfo
+    dropConn connInfo = do
       modifyIORef' opt.conn_state_ref \s -> s
-        {connections = Map.delete connId s.connections}
+        {connections = Map.delete connInfo.connection_id s.connections}
+      let
+        lostConn :: forall a. Typeable a => a -> DevServerConfig a -> IO ()
+        lostConn resource cfg = cfg.connection_lost resource connInfo
+      runningApp <- readIORef opt.app_state_ref
+      runningApp & \RunningApp{resource, devserver_config} ->
+        lostConn resource devserver_config
     receive c =
       try @ConnectionException (receiveData c)
     loop connInfo = do
       runningApp <- readIORef opt.app_state_ref
-      raceResult <- race (receive connInfo.connection) (readChan connInfo.dev_flags.command_chan)
+      raceResult <- race (receive connInfo.connection) (readChan connInfo.command_chan)
       case raceResult of
         Left (Right (incomingBytes::ByteString)) -> do
           let jsMessage = Binary.decode . BSL.fromStrict $ incomingBytes
-          haskMessage <- handleMessage connInfo.rjs_instance (runningApp.client_app connInfo.dev_flags) jsMessage
+          haskMessage <- handleMessage connInfo.rjs_instance
+            (runningApp.client_app connInfo) jsMessage
           sendDataMessage connInfo.connection . Binary $ Binary.encode haskMessage
           loop connInfo
         Left (Left (_::ConnectionException)) ->
           return ()
         Right jsAction -> do
-          haskMessage <- handleMessage' connInfo.rjs_instance (runningApp.client_app connInfo.dev_flags) (Left jsAction)
+          haskMessage <- handleMessage' connInfo.rjs_instance
+            (runningApp.client_app connInfo) (Left (dynStep jsAction))
           sendDataMessage connInfo.connection . Binary $ Binary.encode haskMessage
           loop connInfo
   in
-    bracket acceptConn dropConn \(connInfo, _) ->
+    bracket acceptConn dropConn \connInfo ->
       withPingThread connInfo.connection 30 (pure ()) $ loop connInfo
 
 newInstance :: Typeable resource => DevServerConfig resource -> IO DevServerInstance
@@ -223,9 +229,16 @@ updateInstance
   -> DevServerInstance
   -> IO ()
 updateInstance devCfg devInst = do
+  let
+    tryOldResource :: forall a. Typeable a => DevServerConfig a ->
+      RunningApp -> Either (IO ()) a
+    tryOldResource _ RunningApp {resource, devserver_config}
+      | Just Refl <- eqResource @a resource = Right resource
+      | otherwise = Left (devserver_config.release_resource resource)
+    eqResource :: forall a b. (Typeable a, Typeable b) => b -> Maybe (a :~: b)
+    eqResource _ = eqT @a @b
   oldApp <- readIORef devInst.app_state_ref
-  let tryOld = tryOldResource devCfg oldApp
-  case tryOld of
+  case tryOldResource devCfg oldApp of
     Right oldResource -> do
       (client_app, server_app) <- devCfg.reload_app oldResource
       writeIORef devInst.app_state_ref RunningApp
@@ -234,8 +247,8 @@ updateInstance devCfg devInst = do
         , client_app
         , server_app
         }
-    Left closeOld -> do
-      closeOld
+    Left releaseOld -> do
+      releaseOld
       newResource <- devCfg.aquire_resource
       (client_app, server_app) <- devCfg.reload_app newResource
       writeIORef devInst.app_state_ref RunningApp
@@ -244,14 +257,6 @@ updateInstance devCfg devInst = do
         , client_app
         , server_app
         }
-  where
-    tryOldResource :: forall a. Typeable a => DevServerConfig a -> RunningApp -> Either (IO ()) a
-    tryOldResource _ RunningApp {resource, devserver_config}
-      | Just Refl <- eqT0 @a resource = Right resource
-      | otherwise = Left (devserver_config.release_resource resource)
-
-    eqT0 :: forall a b. (Typeable a, Typeable b) => b -> Maybe (a :~: b)
-    eqT0 _ = eqT @a @b
 
 data DevServerInstance = DevServerInstance
   { conn_state_ref :: IORef ConnectionState
@@ -266,18 +271,20 @@ data ConnectionState = ConnectionState
 data ConnectionInfo = ConnectionInfo
   { connection :: Connection
   , rjs_instance :: RjsInstance
-  , dev_flags :: DevFlags
+  , command_chan :: Chan (RJS ())
+  -- ^ Writing to the Chan sends a command to the browser to execute
+  , connection_id :: ~ConnectionId
   } deriving Generic
 
 data RunningApp = forall a. Typeable a => RunningApp
   { resource :: a
   , devserver_config :: DevServerConfig a
-  , client_app :: DevFlags -> StartFlags -> RJS ()
+  , client_app :: ConnectionInfo -> StartFlags -> RJS ()
   , server_app :: Application
   }
 
 newtype ConnectionId = ConnectionId {unConnectionId :: Int}
-  deriving newtype (Ord, Eq, Num, Enum)
+  deriving newtype (Ord, Show, Eq, Num, Enum)
 
 -- | Run @yarn run webpack --mode production@ and copy contents here
 -- from @./dist-newstyle/index.bundle.js@
