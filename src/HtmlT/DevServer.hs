@@ -36,11 +36,9 @@ data DevServerConfig a = DevServerConfig
   -- e.g. establish connection to database etc
   , release_resource :: a -> IO ()
   -- ^ Runs before the ghci session is unloaded
-  , reload_app :: a -> IO (ConnectionInfo -> StartFlags -> RJS (), Application)
+  , reload_app :: a -> IO ApplicationSpec
   -- ^ Given resource of type 'a', initialize instances of client and
   -- server applications. Runs each time ghci session reloads
-  , connection_lost :: a -> ConnectionInfo -> IO ()
-  -- ^ Will be executed after a connection closes
   , html_template :: BSL.ByteString -> BSL.ByteString
   -- ^ Template for index.html, receives the current URL origin
   -- (protocol + host)
@@ -49,12 +47,18 @@ data DevServerConfig a = DevServerConfig
   -- empty, usually be used like docroots = ["./public"]
   } deriving Generic
 
+data ApplicationSpec = ApplicationSpec
+  { client_app :: ConnectionInfo -> StartFlags -> RJS ()
+  , server_app :: Application
+  , connection_lost :: ConnectionInfo -> IO ()
+  -- ^ Will be executed after a connection closes
+  } deriving Generic
+
 defaultDevServerConfig :: (ConnectionInfo -> StartFlags -> RJS ()) -> DevServerConfig ()
 defaultDevServerConfig clientApp = DevServerConfig
   { aquire_resource = pure ()
   , release_resource = const (pure ())
-  , connection_lost = \_ _ -> pure ()
-  , reload_app = \_ -> pure (clientApp, defaultFallbackApp)
+  , reload_app = \_ -> pure $ ApplicationSpec clientApp defaultFallbackApp (const (pure ()))
   , html_template = defaultHtmlTemplate
   , docroots = []
   }
@@ -181,12 +185,9 @@ devserverWebsocket opt p =
     dropConn connInfo = do
       modifyIORef' opt.conn_state_ref \s -> s
         {connections = Map.delete connInfo.connection_id s.connections}
-      let
-        lostConn :: forall a. Typeable a => a -> DevServerConfig a -> IO ()
-        lostConn resource cfg = cfg.connection_lost resource connInfo
       runningApp <- readIORef opt.app_state_ref
-      runningApp & \RunningApp{resource, devserver_config} ->
-        lostConn resource devserver_config
+      runningApp & \RunningApp{connection_lost} ->
+        connection_lost connInfo
     receive c =
       try @ConnectionException (receiveData c)
     loop connInfo = do
@@ -213,12 +214,13 @@ devserverWebsocket opt p =
 newInstance :: Typeable resource => DevServerConfig resource -> IO DevServerInstance
 newInstance devCfg = do
   resource <- devCfg.aquire_resource
-  (client_app, server_app) <- devCfg.reload_app resource
+  appSpec <- devCfg.reload_app resource
   app_state_ref <- newIORef RunningApp
     { resource
     , devserver_config = devCfg
-    , client_app
-    , server_app
+    , client_app = appSpec.client_app
+    , server_app = appSpec.server_app
+    , connection_lost = appSpec.connection_lost
     }
   conn_state_ref <- newIORef $ ConnectionState Map.empty 0
   return DevServerInstance {conn_state_ref, app_state_ref}
@@ -240,22 +242,24 @@ updateInstance devCfg devInst = do
   oldApp <- readIORef devInst.app_state_ref
   case tryOldResource devCfg oldApp of
     Right oldResource -> do
-      (client_app, server_app) <- devCfg.reload_app oldResource
+      appSpec <- devCfg.reload_app oldResource
       writeIORef devInst.app_state_ref RunningApp
         { resource = oldResource
         , devserver_config = devCfg
-        , client_app
-        , server_app
+        , client_app = appSpec.client_app
+        , server_app = appSpec.server_app
+        , connection_lost = appSpec.connection_lost
         }
     Left releaseOld -> do
       releaseOld
       newResource <- devCfg.aquire_resource
-      (client_app, server_app) <- devCfg.reload_app newResource
+      appSpec <- devCfg.reload_app newResource
       writeIORef devInst.app_state_ref RunningApp
         { resource = newResource
         , devserver_config = devCfg
-        , client_app
-        , server_app
+        , client_app = appSpec.client_app
+        , server_app = appSpec.server_app
+        , connection_lost = appSpec.connection_lost
         }
 
 data DevServerInstance = DevServerInstance
@@ -281,6 +285,7 @@ data RunningApp = forall a. Typeable a => RunningApp
   , devserver_config :: DevServerConfig a
   , client_app :: ConnectionInfo -> StartFlags -> RJS ()
   , server_app :: Application
+  , connection_lost :: ConnectionInfo -> IO ()
   }
 
 newtype ConnectionId = ConnectionId {unConnectionId :: Int}
