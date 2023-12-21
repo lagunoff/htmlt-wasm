@@ -9,14 +9,14 @@ import Data.Text qualified as Text
 import GHC.Generics as G
 import GHC.Int
 
-import "this" HtmlT.Protocol.JNumber (JNumber(..))
-import "this" HtmlT.Protocol.JNumber qualified as JNumber
+import "this" HtmlT.Protocol.JSNumber (JSNumber(..))
+import "this" HtmlT.Protocol.JSNumber qualified as JSNumber
 
 data JSVal
   = Object [(Text, JSVal)]
   | Array [JSVal]
   | String Text
-  | Number JNumber
+  | Number JSNumber
   | Bool Bool
   | Null
   deriving stock (Generic, Show)
@@ -32,10 +32,10 @@ instance ToJSVal JSVal where toJSVal = Prelude.id
 instance ToJSVal Bool where toJSVal = Bool
 
 instance ToJSVal Int64 where
-  toJSVal i = Number (JNumber.jsNumberFromInt64 i)
+  toJSVal i = Number (JSNumber.jsNumberFromInt64 i)
 
 instance ToJSVal Double where
-  toJSVal d = Number (JNumber.jsNumberFromDouble d)
+  toJSVal d = Number (JSNumber.jsNumberFromDouble d)
 
 instance ToJSVal Text where toJSVal = String
 
@@ -62,12 +62,12 @@ instance FromJSVal Bool where
 
 instance FromJSVal Int64 where
   fromJSVal = \case
-    Number j -> Just (JNumber.jsNumberToInt64 j)
+    Number j -> Just (JSNumber.jsNumberToInt64 j)
     _ -> Nothing
 
 instance FromJSVal Double where
   fromJSVal = \case
-    Number j -> Just (JNumber.jsNumberToDouble j)
+    Number j -> Just (JSNumber.jsNumberToDouble j)
     _ -> Nothing
 
 instance FromJSVal Text where

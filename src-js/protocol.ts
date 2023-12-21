@@ -465,14 +465,14 @@ export enum HaskellMessageTag {
   EvalExpr,
   Yield,
   HotReload,
-  Exit,
+  Done,
 }
 
 export const haskellMessage = b.discriminate({
   [HaskellMessageTag.EvalExpr]: b.record({ expr: expr }),
   [HaskellMessageTag.Yield]: b.record({ expr: expr }),
   [HaskellMessageTag.HotReload]: b.record({ }),
-  [HaskellMessageTag.Exit]: b.record({ }),
+  [HaskellMessageTag.Done]: b.record({ }),
 });
 
 export enum JavaScriptMessageTag {

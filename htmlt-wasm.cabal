@@ -67,7 +67,7 @@ library
     HtmlT.MVar
     HtmlT.Property
     HtmlT.Protocol
-    HtmlT.Protocol.JNumber
+    HtmlT.Protocol.JSNumber
     HtmlT.Protocol.JSVal
     HtmlT.RJS
     HtmlT.Reactor

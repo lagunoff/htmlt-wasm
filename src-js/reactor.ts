@@ -67,7 +67,7 @@ export function haskellApp(inst: HaskellIstance, maybeJsMsg?: JavaScriptMessage,
       window.location.reload();
       return;
     }
-    case HaskellMessageTag.Exit: {
+    case HaskellMessageTag.Done: {
       return;
     }
   }

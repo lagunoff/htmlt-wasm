@@ -96,7 +96,7 @@ handleClientMessage inst jsMain = \case
     result <- runUntillInterruption inst rootScope (dynStep (jsMain startFlags))
     case result of
       Left haskMsg -> return haskMsg
-      Right () -> return Exit
+      Right () -> return Done
   BrowserMessage (Return jval) -> do
     mContinuation <- atomicModifyIORef' inst.continuations_ref \case
       [] -> ([], Nothing)
@@ -108,7 +108,7 @@ handleClientMessage inst jsMain = \case
         result <- runUntillInterruption inst rootScope (c jval)
         case result of
           Left haskMsg -> return haskMsg
-          Right _ -> return Exit
+          Right _ -> return Done
   BrowserMessage (TriggerEventMsg arg callbackId) -> do
     let
       eventId = EventId (QueueId callbackId.unCallbackId)
@@ -116,7 +116,7 @@ handleClientMessage inst jsMain = \case
     result <- runUntillInterruption inst rootScope (dynStep rjs)
     case result of
       Left haskMsg -> return haskMsg
-      Right _ -> return Exit
+      Right _ -> return Done
   BrowserMessage (TriggerAnimationMsg arg callbackId) -> do
     let
       eventId = EventId (QueueId callbackId.unCallbackId)
@@ -124,7 +124,7 @@ handleClientMessage inst jsMain = \case
     result <- runUntillInterruption inst rootScope (dynStep rjs)
     case result of
       Left haskMsg -> return haskMsg
-      Right _ -> return Exit
+      Right _ -> return Done
   BrowserMessage (TriggerCallbackMsg arg callbackId) -> do
     mContinuation <- atomicModifyIORef' inst.async_continuations_ref \c ->
       (Map.delete callbackId c, Map.lookup callbackId c)
@@ -135,16 +135,16 @@ handleClientMessage inst jsMain = \case
         result <- runUntillInterruption inst rootScope (c arg)
         case result of
           Left haskMsg -> return haskMsg
-          Right _ -> return Exit
+          Right _ -> return Done
   BrowserMessage BeforeUnload -> do
     result <- runUntillInterruption inst rootScope (freeScope rootScope)
     case result of
       Left haskMsg -> return haskMsg
-      Right _ -> return Exit
+      Right _ -> return Done
   DevServerMessage jsAction -> do
     result <- runUntillInterruption inst rootScope (dynStep jsAction)
     case result of
       Left haskMsg -> return haskMsg
-      Right () -> return Exit
+      Right () -> return Done
   where
     rootScope = ReactiveScope (-1)

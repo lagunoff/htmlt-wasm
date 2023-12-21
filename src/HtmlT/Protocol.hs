@@ -6,9 +6,8 @@ import Data.Text (Text)
 import Data.Word
 import GHC.Generics
 
-import "this" HtmlT.Protocol.JNumber (JNumber)
+import "this" HtmlT.Protocol.JSNumber (JSNumber)
 import "this" HtmlT.Protocol.JSVal qualified as JSVal
-
 
 data HaskellMessage
   = EvalExpr Expr
@@ -20,7 +19,7 @@ data HaskellMessage
   -- anything
   | HotReload
   -- ^ Used under dev server, won't return anything
-  | Exit
+  | Done
   -- ^ Signal that current process completed, won't return anything
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
@@ -71,7 +70,7 @@ data Expr
   -- ^ Represents null or undefined values
   | BooleanE Bool
   -- ^ JavaScript boolean value
-  | NumberE JNumber
+  | NumberE JSNumber
   -- ^ JavaScript integer number
   | StringE Text
   -- ^ JavaScript string
@@ -106,10 +105,17 @@ data Expr
   -- ^ Introduce a lambda function. Arguments can be accessed via 'Arg
   -- 0 0'
   | Arg Word8 Word8
-  -- ^ Lookup an argument in current argument scope. Which is
-  -- different from lexical scope. Arguments can be retrieved by their
-  -- scope index and argument index @Arg 0 0 @ gets the first argument
-  -- of the closest outer lambda function
+  -- ^ Lookup an argument in the current argument scope. Separate
+  -- scope for argument from regular lexical scope required for
+  -- performance reasons. First field is "De Bruijn index" pointing to
+  -- nth-lambda counting outward from current expression. Second
+  -- number is positional argument for that lambda (each lambda
+  -- receives multiple arguments in a vector, see
+  -- https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/arguments)
+  -- De Bruijn indicies are notoriously hard to write manually, it's
+  -- one of the reasons this protocol is much less convenient than FFI
+  -- with JavaScript. One solution I found is that for complex code I
+  -- write regular JavaScript and run it with 'Eval'.
   | Apply Expr [Expr]
   -- ^ Apply a function to arbitrary length arguments. @Apply (Id
   -- "encodeURIComponent") [Str "#"]@ going to evaluate to @String "%23"@

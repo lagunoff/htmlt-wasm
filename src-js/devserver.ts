@@ -69,7 +69,7 @@ export async function haskellApp (
       window.location.reload();
       return;
     }
-    case HaskellMessageTag.Exit: {
+    case HaskellMessageTag.Done: {
       return;
     }
   }
