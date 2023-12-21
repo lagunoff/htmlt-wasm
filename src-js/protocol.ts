@@ -209,10 +209,19 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
       }
       return hscb(jsMsg, argScope);
     }
-    case ExprTag.AsyncCallback: {
+    case ExprTag.TriggerAnimation: {
       const arg = evalExpr(idenScope, argScope, hscb, exp.arg);
       const jsMsg: JavaScriptMessage = {
-        tag: JavaScriptMessageTag.AsyncCallback,
+        tag: JavaScriptMessageTag.TriggerAnimation,
+        arg: unknownToJValue(arg),
+        callbackId: exp.callbackId,
+      }
+      return hscb(jsMsg, argScope);
+    }
+    case ExprTag.TriggerCallback: {
+      const arg = evalExpr(idenScope, argScope, hscb, exp.arg);
+      const jsMsg: JavaScriptMessage = {
+        tag: JavaScriptMessageTag.TriggerCallback,
         arg: unknownToJValue(arg),
         callbackId: exp.callbackId,
       }
@@ -349,7 +358,8 @@ export enum ExprTag {
   RevSeq,
   Eval,
   TriggerEvent,
-  AsyncCallback,
+  TriggerAnimation,
+  TriggerCallback,
   UncaughtException,
 }
 
@@ -397,7 +407,8 @@ export type Expr =
   | { tag: ExprTag.RevSeq, exprs: Expr[] }
   | { tag: ExprTag.Eval, rawJavaScript: string }
   | { tag: ExprTag.TriggerEvent, callbackId: number, arg: Expr }
-  | { tag: ExprTag.AsyncCallback, callbackId: number, arg: Expr }
+  | { tag: ExprTag.TriggerAnimation, callbackId: number, arg: Expr }
+  | { tag: ExprTag.TriggerCallback, callbackId: number, arg: Expr }
   | { tag: ExprTag.UncaughtException, message: string }
 ;
 
@@ -445,7 +456,8 @@ export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.RevSeq]: b.record({ exprs: b.array(self) }),
   [ExprTag.Eval]: b.record({ rawJavaScript: b.string }),
   [ExprTag.TriggerEvent]: b.record({ callbackId: b.int64, arg: self }),
-  [ExprTag.AsyncCallback]: b.record({ callbackId: b.int64, arg: self }),
+  [ExprTag.TriggerAnimation]: b.record({ callbackId: b.int64, arg: self }),
+  [ExprTag.TriggerCallback]: b.record({ callbackId: b.int64, arg: self }),
   [ExprTag.UncaughtException]: b.record({ message: b.string }),
 }));
 
@@ -467,7 +479,8 @@ export enum JavaScriptMessageTag {
   Start,
   Return,
   TriggerEvent,
-  AsyncCallback,
+  TriggerAnimation,
+  TriggerCallback,
   BeforeUnload,
 }
 
@@ -475,7 +488,8 @@ export const javascriptMessage = b.discriminate({
   [JavaScriptMessageTag.Start]: b.record({ startFlags }),
   [JavaScriptMessageTag.Return]: b.record({ 0: jvalue }),
   [JavaScriptMessageTag.TriggerEvent]: b.record({ arg: jvalue, callbackId: b.int64 }),
-  [JavaScriptMessageTag.AsyncCallback]: b.record({ arg: jvalue, callbackId: b.int64 }),
+  [JavaScriptMessageTag.TriggerAnimation]: b.record({ arg: jvalue, callbackId: b.int64 }),
+  [JavaScriptMessageTag.TriggerCallback]: b.record({ arg: jvalue, callbackId: b.int64 }),
   [JavaScriptMessageTag.BeforeUnload]: b.record({}),
 });
 

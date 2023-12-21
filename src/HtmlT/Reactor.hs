@@ -19,7 +19,7 @@ import "this" HtmlT.RJS
 reactorApp :: (StartFlags -> RJS ()) -> Ptr Word8 -> IO (Ptr Word8)
 reactorApp jsMain p = do
   jsMessage <- Binary.decode . BSL.fromStrict <$> loadByteString p
-  haskMessage <- handleMessage rjsInstance jsMain jsMessage
+  haskMessage <- handleClientMessage rjsInstance jsMain (BrowserMessage jsMessage)
   storeByteString $ BSL.toStrict $ Binary.encode haskMessage
   where
     storeByteString :: ByteString -> IO (Ptr a)

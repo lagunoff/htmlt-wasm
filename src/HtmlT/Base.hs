@@ -27,6 +27,9 @@ newRjsInstance = do
   continuations_ref <- newIORef []
   return RjsInstance {rjs_state_ref, async_continuations_ref, continuations_ref}
 
+data DropAnimationFrame = DropAnimationFrame
+  deriving (Show, Exception)
+
 runUntillInterruption
   :: RjsInstance
   -> ReactiveScope
@@ -34,10 +37,13 @@ runUntillInterruption
   -> IO (Either HaskellMessage a)
 runUntillInterruption inst e rjs = do
   s0 <- readIORef inst.rjs_state_ref
-  (s1, result) <- unRJS rjs e s0 `catch` \(e :: SomeException) ->
-    -- UncaughtException command never returns a value from JS side,
-    -- therefore we can coerce the result to any type
-    pure (s0, coerceResult (EvalResult (UncaughtException (Text.pack (show e)))))
+  (s1, result) <- unRJS rjs e s0 `catch` \case
+    (e::SomeException)
+      | Just DropAnimationFrame <- fromException e -> throwIO e
+      | otherwise ->
+        -- UncaughtException command never returns a value from JS side,
+        -- therefore we can coerce the result to any type
+        pure (s0, coerceResult (EvalResult (UncaughtException (Text.pack (show e)))))
   let
     g :: forall a. RjsResult a -> IO (Either InterruptReason a)
     g r = case r of
@@ -70,27 +76,28 @@ runUntillInterruption inst e rjs = do
     coerceResult :: forall a b. RjsResult a -> RjsResult b
     coerceResult = unsafeCoerce
 
-handleMessage
-  :: RjsInstance
-  -> (StartFlags -> RJS ())
-  -> JavaScriptMessage
-  -> IO HaskellMessage
-handleMessage inst jsMain = handleMessage' inst jsMain . Right
+data ClientMessage
+  = BrowserMessage JavaScriptMessage
+  -- ^ Regular command received from JavaScript environment
+  | DevServerMessage (RJS ())
+  -- ^ Bypass protocol and inject a command directly into the
+  -- DevServer instance (useful for delivering notifications under
+  -- devserver)
 
-handleMessage'
+handleClientMessage
   :: RjsInstance
   -> (StartFlags -> RJS ())
-  -> Either (RJS ()) JavaScriptMessage
+  -> ClientMessage
   -> IO HaskellMessage
-handleMessage' inst jsMain = \case
-  Right (Start startFlags) -> do
+handleClientMessage inst jsMain = \case
+  BrowserMessage (Start startFlags) -> do
     writeIORef inst.continuations_ref []
     writeIORef inst.rjs_state_ref emptyRjsState
     result <- runUntillInterruption inst rootScope (dynStep (jsMain startFlags))
     case result of
       Left haskMsg -> return haskMsg
       Right () -> return Exit
-  Right (Return jval) -> do
+  BrowserMessage (Return jval) -> do
     mContinuation <- atomicModifyIORef' inst.continuations_ref \case
       [] -> ([], Nothing)
       x:xs -> (xs, Just x)
@@ -102,7 +109,7 @@ handleMessage' inst jsMain = \case
         case result of
           Left haskMsg -> return haskMsg
           Right _ -> return Exit
-  Right (TriggerEventMsg arg callbackId) -> do
+  BrowserMessage (TriggerEventMsg arg callbackId) -> do
     let
       eventId = EventId (QueueId callbackId.unCallbackId)
       rjs = unsafeTrigger eventId arg
@@ -110,7 +117,15 @@ handleMessage' inst jsMain = \case
     case result of
       Left haskMsg -> return haskMsg
       Right _ -> return Exit
-  Right (AsyncCallbackMsg arg callbackId) -> do
+  BrowserMessage (TriggerAnimationMsg arg callbackId) -> do
+    let
+      eventId = EventId (QueueId callbackId.unCallbackId)
+      rjs = unsafeTrigger eventId arg
+    result <- runUntillInterruption inst rootScope (dynStep rjs)
+    case result of
+      Left haskMsg -> return haskMsg
+      Right _ -> return Exit
+  BrowserMessage (TriggerCallbackMsg arg callbackId) -> do
     mContinuation <- atomicModifyIORef' inst.async_continuations_ref \c ->
       (Map.delete callbackId c, Map.lookup callbackId c)
     case mContinuation of
@@ -121,12 +136,12 @@ handleMessage' inst jsMain = \case
         case result of
           Left haskMsg -> return haskMsg
           Right _ -> return Exit
-  Right BeforeUnload -> do
+  BrowserMessage BeforeUnload -> do
     result <- runUntillInterruption inst rootScope (freeScope rootScope)
     case result of
       Left haskMsg -> return haskMsg
       Right _ -> return Exit
-  Left jsAction -> do
+  DevServerMessage jsAction -> do
     result <- runUntillInterruption inst rootScope (dynStep jsAction)
     case result of
       Left haskMsg -> return haskMsg

@@ -29,7 +29,8 @@ data JavaScriptMessage
   = Start StartFlags
   | Return JSVal.JSVal
   | TriggerEventMsg JSVal.JSVal CallbackId
-  | AsyncCallbackMsg JSVal.JSVal CallbackId
+  | TriggerAnimationMsg JSVal.JSVal CallbackId
+  | TriggerCallbackMsg JSVal.JSVal CallbackId
   | BeforeUnload
   -- ^ Fired from addEventListener("beforeunload") listener. Won't
   -- work under the DevServer!
@@ -140,16 +141,37 @@ data Expr
   | ClearBoundary Expr Bool
 
   | RevSeq [Expr]
-  -- ^ Sequence of the expressions is in reverse order! It starts
-  -- evaluating from the end of the list to the beggining. Returns
-  -- whatever the last expression evaluetes into (last being the
-  -- expression from the tip of the list)
+  -- ^ Sequence of the expressions in reverse order. It will be
+  -- evaluated from the end to the beggining of the list. Returns
+  -- whatever the last expression (from the head of the list)
+  -- evaluates into. Order is reversed to support fast insertion of
+  -- new instructions
   | Eval Text
   -- ^ Evaluate arbitrary JavaScript code @(Eval "setTimeout(() =>
   -- console.log('Hi!'), 1000)")@ will print a message with one second
   -- delay
   | TriggerEvent CallbackId Expr
-  | AsyncCallback CallbackId Expr
+  -- ^ Will send message back to Haskell that in turn run the code
+  -- associated with given CallbackId. Difference between
+  -- 'TriggerEvent' and 'TriggerCallback' is that TriggerEvent event
+  -- is expected to be called multiple times (a button can be clicked
+  -- repeatedly) while TriggerCallback — only once (when
+  -- XMLHTTPRequest received a response)
+  | TriggerAnimation CallbackId Expr
+  -- ^ Same as 'TriggerEvent', but allows for "frame dropping",
+  -- meaning when a TriggerAnimation message takes alot of time to
+  -- process, next arrived TriggerAnimation will abort the previous
+  -- handler. This helps to cope with network congestion when dealing
+  -- with rapidly firing events like "mousemove". Assuming @process@
+  -- is preudo-function that represent your Haskell app responding to
+  -- browser messages, then effect of TriggerAnimation should be the
+  -- same regardles how many TriggerAnimation messages came before the
+  -- last one:
+  --
+  -- >>> process msg2 (process msg1 state) == process msg2 state
+  | TriggerCallback CallbackId Expr
+  -- ^ Similar to 'TriggerEvent' but only supposed to be called once
+  -- for any CallbackId
   | UncaughtException Text
   deriving stock (Generic, Show)
   deriving anyclass (Binary)

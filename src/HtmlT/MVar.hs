@@ -42,5 +42,5 @@ takeJsMVar mvar = go where
 writeJsMVar :: JsMVar a -> a -> RJS ()
 writeJsMVar mvar val = do
   liftIO $ writeIORef mvar.mvar_value (Just val)
-  evalExpr $ AsyncCallback mvar.callback_id NullE
+  evalExpr $ TriggerCallback mvar.callback_id NullE
   return ()
