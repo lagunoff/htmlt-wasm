@@ -150,8 +150,7 @@ defaultHtmlTemplate devSocket =
   \    startDevClient(\"" <> devSocket <> "\");\n\
   \  </script>\n\
   \ </body>\n\
-  \</html>\n\
-  \"
+  \</html>\n"
 
 defaultFallbackApp :: Application
 defaultFallbackApp _ resp =
@@ -161,8 +160,11 @@ defaultFallbackApp _ resp =
     \ <body>\n\
     \   <h1>Not Found</h1>\n\
     \ </body>\n\
-    \</html>\n\
-    \"
+    \</html>\n"
+
+type WorkerQueue = [WorkerJob]
+
+type WorkerJob = (RunningApp, ClientMessage)
 
 devserverWebsocket :: DevServerInstance -> ServerApp
 devserverWebsocket opt p =
@@ -171,11 +173,18 @@ devserverWebsocket opt p =
       connection <- acceptRequest p
       rjs_instance <- newRjsInstance
       command_chan <- newChan
-      worker_chan <- newChan
+      worker_queue <- newIORef []
+      worker_feed <- newEmptyMVar
       worker_thread <- forkIO $ workerLoop connInfo
       let
         connInfo = ConnectionInfo
-          {rjs_instance, connection, command_chan, connection_id, worker_thread, worker_chan}
+          { rjs_instance
+          , connection
+          , command_chan
+          , connection_id
+          , worker_thread
+          , worker_queue
+          , worker_feed }
       connection_id <- atomicModifyIORef' opt.conn_state_ref \s ->
         ( s
           { id_supply = succ s.id_supply
@@ -190,31 +199,32 @@ devserverWebsocket opt p =
       runningApp.connection_lost connInfo
     receive c =
       try @ConnectionException (receiveData c)
-    readingLoop mLastMsg connInfo = do
+    readingLoop connInfo = do
       runningApp <- readIORef opt.app_state_ref
       raceResult <- race (receive connInfo.connection) (readChan connInfo.command_chan)
       let
-        clientMsg = case raceResult of
+        mClientMsg = case raceResult of
           Left (Right (incomingBytes::ByteString)) ->
             Just $ BrowserMessage . Binary.decode . BSL.fromStrict $ incomingBytes
           Left (Left (_::ConnectionException)) ->
             Nothing
           Right jsAction ->
             Just $ DevServerMessage jsAction
-      case (mLastMsg, clientMsg) of
-        (Just m1, Just m2)
-          | BrowserMessage (TriggerAnimationMsg _ c1) <- m1
-          , BrowserMessage (TriggerAnimationMsg _ c2) <- m2
-          , c1 == c2 ->
+      forM_ mClientMsg \clientMsg -> do
+        let newJob = (runningApp, clientMsg)
+        (nextJob, curJob) <- atomicModifyIORef' connInfo.worker_queue $ processQueue newJob
+        feedEmpty <- isEmptyMVar connInfo.worker_feed
+        case curJob of
+          Just j | feedEmpty, canSkipJob nextJob j -> do
             -- Abort whatever the worker is doing, TriggerAnimation
             -- means previous frame no longer relevant, the new frame
             -- will override its results
             throwTo connInfo.worker_thread DropAnimationFrame
-        _ -> return ()
-      forM_ clientMsg $ writeChan connInfo.worker_chan . (runningApp,)
-      readingLoop clientMsg connInfo
+          _ -> return ()
+        putMVar connInfo.worker_feed nextJob
+      readingLoop connInfo
     workerLoopInner connInfo = do
-      (runningApp, clientMsg) <- readChan connInfo.worker_chan
+      (runningApp, clientMsg) <- takeMVar connInfo.worker_feed
       haskMessage <- handleClientMessage connInfo.rjs_instance
         (runningApp.client_app connInfo) clientMsg
       -- TODO: check if it's fine writing to connection in this
@@ -223,9 +233,33 @@ devserverWebsocket opt p =
     workerLoop connInfo = do
       workerLoopInner connInfo `catch` \(_::DropAnimationFrame) -> return ()
       workerLoop connInfo
+    processQueue :: WorkerJob -> WorkerQueue -> (WorkerQueue, (WorkerJob, Maybe WorkerJob))
+    processQueue newJob [] = ([newJob], (newJob, Nothing))
+    processQueue newJob [curJob] = ([newJob], (newJob, Just curJob))
+    processQueue newJob (j:js)
+      | canSkipJob newJob j = processQueue newJob js
+      | otherwise =
+        let
+          (js', curJobs) = processQueueNe j (j:js)
+        in
+          (newJob:js', curJobs)
+    processQueueNe :: WorkerJob -> WorkerQueue -> (WorkerQueue, (WorkerJob, Maybe WorkerJob))
+    processQueueNe nextJob [] = ([], (nextJob, Nothing)) -- unreachable
+    processQueueNe nextJob [curJob] = ([], (nextJob, Just curJob))
+    processQueueNe _nextJob (j:js) =
+      let
+        (js', curJobs) = processQueueNe j js
+      in
+        (j:js', curJobs)
+    canSkipJob :: WorkerJob -> WorkerJob -> Bool
+    canSkipJob (_, j1) (_, j2)
+      | BrowserMessage (TriggerAnimationMsg _ c1) <- j1
+      , BrowserMessage (TriggerAnimationMsg _ c2) <- j2 =
+        c1 == c2
+      | otherwise = False
   in
     bracket acceptConn dropConn \connInfo ->
-      withPingThread connInfo.connection 30 (pure ()) $ readingLoop Nothing connInfo
+      withPingThread connInfo.connection 30 (pure ()) $ readingLoop connInfo
 
 newInstance :: Typeable resource => DevServerConfig resource -> IO DevServerInstance
 newInstance cfg = do
@@ -236,8 +270,7 @@ newInstance cfg = do
     , devserver_config = cfg
     , client_app = appSpec.client_app
     , server_app = appSpec.server_app
-    , connection_lost = appSpec.connection_lost
-    }
+    , connection_lost = appSpec.connection_lost }
   conn_state_ref <- newIORef $ ConnectionState Map.empty 0
   return DevServerInstance {conn_state_ref, app_state_ref}
 
@@ -295,7 +328,8 @@ data ConnectionInfo = ConnectionInfo
   -- ^ Writing to the Chan sends a command to the browser to execute
   , connection_id :: ~ConnectionId
   , worker_thread :: ThreadId
-  , worker_chan :: Chan (RunningApp, ClientMessage)
+  , worker_queue :: IORef [(RunningApp, ClientMessage)]
+  , worker_feed :: MVar (RunningApp, ClientMessage)
   } deriving Generic
 
 data RunningApp = forall a. Typeable a => RunningApp
