@@ -21,18 +21,16 @@ let
       semigroupoids = doJailbreak super.semigroupoids;
     };
   };
-
-  cabalCargsScript = ./bin/cabal-cargs.hs;
-  cabalFile = ./htmlt-wasm.cabal;
-
-  result = {
-    ghc = haskellPackages;
-    shell = {
-      native = pkgs.mkShell {
-        inputsFrom = [haskellPackages.htmlt-wasm.env];
-        buildInputs = [haskellPackages.ghcid haskellPackages.cabal-install];
-      };
+in {
+  shell = {
+    javascript = pkgs.mkShell {
+      buildInputs = [
+        pkgs.pkgsCross.ghcjs.buildPackages.haskell.compiler.ghcHEAD
+      ];
+    };
+    native = pkgs.mkShell {
+      inputsFrom = [haskellPackages.htmlt-wasm.env];
+      buildInputs = [haskellPackages.ghcid haskellPackages.cabal-install];
     };
   };
-in
-  result
+}
