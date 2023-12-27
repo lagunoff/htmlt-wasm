@@ -1,4 +1,4 @@
-module HtmlT.Reactor where
+module HtmlT.Main.WebAssembly where
 
 import Data.Binary qualified as Binary
 import Data.ByteString as BS

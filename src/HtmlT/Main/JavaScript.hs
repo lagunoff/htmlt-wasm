@@ -1,10 +1,20 @@
+{-|
+Description : Implement interpreter for 'Expr' for JavaScript Backend
+
+TODO: Many conversions between JSVal.JSVal and native JSVal could be
+implemented more efficiently. I'm thinking if I can use JavaScript
+strings as internal implementation for Data.Text.Text as it was done
+in reflex-platform to reduce the overhead. For now current code is
+good enough for me, because I consider WebAssembly the main target for
+the browser
+-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE JavaScriptFFI #-}
 {-# LANGUAGE GHCForeignImportPrim #-}
 {-# LANGUAGE UnliftedFFITypes #-}
 {-# LANGUAGE UnboxedTuples #-}
-module HtmlT.JavaScriptBackend where
+module HtmlT.Main.JavaScript where
 
 import Data.Binary qualified as Binary
 import Data.ByteString as BS
@@ -25,7 +35,6 @@ import GHC.ForeignPtr
 import Data.Text.Array
 import GHC.JS.Foreign.Callback
 import Unsafe.Coerce
-
 
 import "this" HtmlT.Base
 import "this" HtmlT.Protocol
@@ -64,7 +73,7 @@ mkStartFlags = do
 rjsInstance :: RjsInstance
 rjsInstance = unsafePerformIO newRjsInstance
 
-evaluateHaskMessage ::  (JavaScriptMessage -> IO ()) -> HaskellMessage -> IO ()
+evaluateHaskMessage :: (JavaScriptMessage -> IO ()) -> HaskellMessage -> IO ()
 evaluateHaskMessage jsMessage = \case
   EvalExpr expr -> do
     result <- evaluateExpr [] jsMessage expr
@@ -87,8 +96,8 @@ evaluateExpr argScope jsCallback = \case
   BooleanE a ->
     return $ if a then js_true else js_false
 
-  NumberE (JSNumber (BS (ForeignPtr addr _) len)) ->
-    return $ js_byteStringToJSNumber addr len
+  NumberE (JSNumber decimalBytes) ->
+    return $ js_Number $ bytestringToJsString decimalBytes
 
   StringE (Text (ByteArray byteArr) offset length) ->
    return $ js_textToJsString byteArr offset length
@@ -97,9 +106,11 @@ evaluateExpr argScope jsCallback = \case
     forM xs (evaluateExpr argScope jsCallback) >>= toJSArray
 
   ObjectE xs ->
-    forM xs evaluatePair & fmap undefined
-      where
-        evaluatePair (k, v) = evaluateExpr argScope jsCallback v & fmap (k,)
+    forM xs evaluatePair >>= toJSArray >>= js_mkObjectFromPairs
+    where
+      evaluatePair (k, v) = do
+        jv <- evaluateExpr argScope jsCallback v
+        return $ js_mkPair (textToJsString k) jv
 
   Dot obj prop -> do
     jobj <- evaluateExpr argScope jsCallback obj
@@ -290,6 +301,8 @@ jsvalToJsval jsval = do
         key <- textFromJsString <$> js_indexProp jtuple 0
         val <- jsvalToJsval =<< js_indexProp jtuple 1
         return (key, val)
+    _ ->
+      error "js_typeOf returned invalid type tag number"
   where
     jsTypeTag :: JSVal -> IO (Int, JSVal)
     jsTypeTag jsval = do
@@ -307,12 +320,14 @@ textToJsString :: Text -> JSVal
 textToJsString (Text (ByteArray byteArr) off len) =
   js_textToJsString byteArr off len
 
+bytestringToJsString :: ByteString -> JSVal
+bytestringToJsString (BS (ForeignPtr addr _) len) =
+  js_bytestringToJsString addr len
+
 foreign import javascript unsafe "(() => { return true; })"
   js_true :: JSVal
 foreign import javascript unsafe "(() => { return false; })"
   js_false :: JSVal
-foreign import javascript unsafe "(u8array => { throw new Error('js_byteStringToJSNumber'); })"
-  js_byteStringToJSNumber :: Addr# -> Int -> JSVal
 foreign import javascript unsafe "((obj, prop) => { return obj[prop]; })"
   js_getProp :: JSVal -> JSVal -> IO JSVal
 foreign import javascript unsafe "((obj, prop, val) => { obj[prop] = val; })"
@@ -513,6 +528,11 @@ foreign import javascript unsafe
   })"
   js_textToJsString :: ByteArray# -> Int -> Int -> JSVal
 foreign import javascript unsafe
+  "((addr, _, len) => {\
+    return (new TextDecoder('utf-8')).decode(addr.u8.subarray(0, len));\
+  })"
+  js_bytestringToJsString :: Addr# -> Int -> JSVal
+foreign import javascript unsafe
   "(val => {\
     if (val === null || val === undefined) { \
       return [0, null];\
@@ -539,5 +559,15 @@ foreign import javascript unsafe
   js_bool :: Any -> Any -> JSVal -> Any
 foreign import javascript unsafe "(str => { return str.length; })"
   js_strlen :: JSVal -> Int
+foreign import javascript unsafe "((a, b) => [a, b])"
+  js_mkPair :: JSVal -> JSVal -> JSVal
+foreign import javascript unsafe
+  "(pairs => pairs.reduce((obj, pair) => {\
+    obj[pair[0]] = pair[1];\
+    return obj;\
+  }, {}))"
+  js_mkObjectFromPairs :: JSVal -> IO JSVal
 foreign import javascript unsafe "(str => { console.log(str); })"
   js_consoleLog :: JSVal -> IO ()
+foreign import javascript unsafe "(str => { return Number(str); })"
+  js_Number :: JSVal -> JSVal

@@ -1,8 +1,8 @@
 import Data.Word
 import Foreign.Marshal.Alloc qualified as Alloc
 import Foreign.Ptr
-import HtmlT.JavaScriptBackend
+import HtmlT.Main.JavaScript
 
-import "this" JsmMain (jsmMain)
+import "this" JsMain (jsMain)
 
-main = jsReactorApp jsmMain
+main = jsReactorApp jsMain

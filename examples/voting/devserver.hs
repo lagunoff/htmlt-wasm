@@ -1,4 +1,4 @@
-import HtmlT.DevServer
+import HtmlT.Main.DevServer
 
 import "this" JsmMain (jsmMain)
 

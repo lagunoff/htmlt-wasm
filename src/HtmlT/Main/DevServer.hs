@@ -1,4 +1,4 @@
-module HtmlT.DevServer where
+module HtmlT.Main.DevServer where
 
 import Control.Concurrent
 import Control.Concurrent.Async

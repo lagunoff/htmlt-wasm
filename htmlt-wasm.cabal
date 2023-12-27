@@ -71,8 +71,8 @@ library
     HtmlT.Protocol.JSNumber
     HtmlT.Protocol.JSVal
     HtmlT.RJS
-    HtmlT.Reactor
-    HtmlT.JavaScriptBackend
+    HtmlT.Main.WebAssembly
+    HtmlT.Main.JavaScript
   build-depends:
     base,
     binary,
@@ -83,7 +83,7 @@ library
     text,
   if !arch(wasm32) && !arch(javascript)
     exposed-modules:
-      HtmlT.DevServer
+      HtmlT.Main.DevServer
     build-depends:
       async,
       foreign-store,
@@ -96,7 +96,6 @@ library
  
 executable voting
   import: common-config
-  ghc-options: -O3
   if arch(wasm32)
     ghc-options:
       -no-hs-main -optl-mexec-model=reactor -dlint -debug
@@ -123,7 +122,6 @@ executable voting
 
 executable todomvc
   import: common-config
-  ghc-options: -O3
   if arch(wasm32)
     ghc-options:
       -no-hs-main -optl-mexec-model=reactor -dlint -debug
@@ -151,34 +149,33 @@ executable todomvc
     mtl,
     text,
 
--- benchmark benchmark_01
---   import: common-config
---   type: exitcode-stdio-1.0
---   main-is: benchmark_01.hs
---   ghc-options: -O3 -funbox-strict-fields
---   hs-source-dirs: ./benchmarks ./examples/todomvc ./src
---   other-modules:
---     HtmlT
---     HtmlT.Base
---     HtmlT.DOM
---     HtmlT.Element
---     HtmlT.Event
---     HtmlT.Html
---     HtmlT.MVar
---     HtmlT.Property
---     HtmlT.Protocol
---     HtmlT.Protocol.JNumber
---     HtmlT.Protocol.JSVal
---     HtmlT.RJS
---     HtmlT.Reactor
---     TodoItem
---     TodoList
---   build-depends:
---     base,
---     binary,
---     bytestring,
---     containers,
---     exceptions,
---     gauge,
---     mtl,
---     text,
+benchmark benchmark_01
+  import: common-config
+  type: exitcode-stdio-1.0
+  main-is: benchmark_01.hs
+  ghc-options: -O3 -funbox-strict-fields
+  hs-source-dirs: ./benchmarks ./examples/todomvc ./src
+  other-modules:
+    HtmlT
+    HtmlT.Base
+    HtmlT.DOM
+    HtmlT.Element
+    HtmlT.Event
+    HtmlT.Html
+    HtmlT.MVar
+    HtmlT.Property
+    HtmlT.Protocol
+    HtmlT.Protocol.JSNumber
+    HtmlT.Protocol.JSVal
+    HtmlT.RJS
+    TodoItem
+    TodoList
+  build-depends:
+    base,
+    binary,
+    bytestring,
+    containers,
+    exceptions,
+    gauge,
+    mtl,
+    text,

@@ -1,4 +1,4 @@
-module JsmMain where
+module JsMain where
 
 import Control.Monad
 import Data.List qualified as List
@@ -50,8 +50,8 @@ update action old = case action of
       | x.language == l = x {votes = f x.votes} : xs
       | otherwise = x : overvote f l xs
 
-jsmMain :: StartFlags -> RJS ()
-jsmMain _ = attachToBody do
+jsMain :: StartFlags -> RJS ()
+jsMain _ = attachToBody do
   el "style" $ text styles
   votingListRef <- liftRJS $ newRef initialState
   main_ [class_ "wrapper"] do
