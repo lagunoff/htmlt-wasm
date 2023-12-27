@@ -72,7 +72,6 @@ library
     HtmlT.Protocol.JSVal
     HtmlT.RJS
     HtmlT.Main.WebAssembly
-    HtmlT.Main.JavaScript
   build-depends:
     base,
     binary,
@@ -93,6 +92,9 @@ library
       wai-websockets,
       warp,
       websockets,
+  if arch(javascript)
+    exposed-modules:
+      HtmlT.Main.JavaScript
  
 executable voting
   import: common-config
@@ -106,8 +108,8 @@ executable voting
   else
     if arch(javascript)
       main-is: jsreactor.hs
-  else
-    main-is: devserver.hs
+    else
+      main-is: devserver.hs
   hs-source-dirs: examples/voting
 
   build-depends:
@@ -132,8 +134,8 @@ executable todomvc
   else
     if arch(javascript)
       main-is: jsreactor.hs
-  else
-    main-is: devserver.hs
+    else
+      main-is: devserver.hs
   hs-source-dirs: examples/todomvc
   other-modules:
     Utils

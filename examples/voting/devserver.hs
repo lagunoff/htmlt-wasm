@@ -1,6 +1,6 @@
 import HtmlT.Main.DevServer
 
-import "this" JsmMain (jsmMain)
+import "this" JsMain (jsMain)
 
 main :: IO ()
-main = runDebugDefault 8002 $ const jsmMain
+main = runDebugDefault 8002 $ const jsMain
