@@ -11,4 +11,3 @@ import HtmlT.Protocol as Export
 import HtmlT.Protocol.JSNumber as Export (JSNumber(..))
 import HtmlT.Protocol.JSVal as Export
 import HtmlT.RJS as Export
-import HtmlT.Reactor as Export

@@ -1,4 +1,4 @@
-module JsmMain where
+module JsMain where
 
 import Data.Maybe
 import HtmlT
@@ -6,8 +6,8 @@ import HtmlT
 import "this" TodoList qualified as TodoList
 import "this" Utils
 
-jsmMain :: StartFlags -> RJS ()
-jsmMain _ = do
+jsMain :: StartFlags -> RJS ()
+jsMain _ = do
   items <- fromMaybe [] <$> readLocalStorage "todo-items"
   todoListStateRef <- TodoList.eval $ TodoList.InitAction items
   reactive $ installFinalizer $ CustomFinalizer do

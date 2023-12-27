@@ -57,6 +57,7 @@ common common-config
 library
   import: common-config
   hs-source-dirs: src
+  ghc-options: -O3
   exposed-modules:
     HtmlT
     HtmlT.Base
@@ -70,7 +71,8 @@ library
     HtmlT.Protocol.JSNumber
     HtmlT.Protocol.JSVal
     HtmlT.RJS
-    HtmlT.Reactor
+    HtmlT.Main.WebAssembly
+    HtmlT.Main.JavaScript
   build-depends:
     base,
     binary,
@@ -79,9 +81,9 @@ library
     exceptions,
     mtl,
     text,
-  if !arch(wasm32)
+  if !arch(wasm32) && !arch(javascript)
     exposed-modules:
-      HtmlT.DevServer
+      HtmlT.Main.DevServer
     build-depends:
       async,
       foreign-store,
@@ -101,6 +103,9 @@ executable voting
     c-sources: cbits/init_greadymem.c
     include-dirs: cbits
     main-is: reactor.hs
+  else
+    if arch(javascript)
+      main-is: jsreactor.hs
   else
     main-is: devserver.hs
   hs-source-dirs: examples/voting
@@ -124,6 +129,9 @@ executable todomvc
     c-sources: cbits/init_greadymem.c
     include-dirs: cbits
     main-is: reactor.hs
+  else
+    if arch(javascript)
+      main-is: jsreactor.hs
   else
     main-is: devserver.hs
   hs-source-dirs: examples/todomvc
@@ -157,10 +165,9 @@ benchmark benchmark_01
     HtmlT.MVar
     HtmlT.Property
     HtmlT.Protocol
-    HtmlT.Protocol.JNumber
+    HtmlT.Protocol.JSNumber
     HtmlT.Protocol.JSVal
     HtmlT.RJS
-    HtmlT.Reactor
     TodoItem
     TodoList
   build-depends:
