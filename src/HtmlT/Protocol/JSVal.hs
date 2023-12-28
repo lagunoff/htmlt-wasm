@@ -37,6 +37,9 @@ instance ToJSVal Int64 where
 instance ToJSVal Double where
   toJSVal d = Number (JSNumber.jsNumberFromDouble d)
 
+instance ToJSVal Char where
+  toJSVal c = String $ Text.cons c Text.empty
+
 instance ToJSVal Text where toJSVal = String
 
 instance ToJSVal a => ToJSVal [a] where toJSVal = Array . fmap toJSVal
@@ -68,6 +71,12 @@ instance FromJSVal Int64 where
 instance FromJSVal Double where
   fromJSVal = \case
     Number j -> Just (JSNumber.jsNumberToDouble j)
+    _ -> Nothing
+
+instance FromJSVal Char where
+  fromJSVal = \case
+    String a | Just (c, _) <- Text.uncons a -> Just c
+             | otherwise -> Nothing
     _ -> Nothing
 
 instance FromJSVal Text where
