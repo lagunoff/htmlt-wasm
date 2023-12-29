@@ -187,6 +187,32 @@ mapDyn fun dA = do
     defer eventId fire
   return $ Dynamic (readIORef latestB) updates
 
+mapDyn2
+  :: (a -> b -> c)
+  -> Dynamic a
+  -> Dynamic b
+  -> RJS (Dynamic c)
+mapDyn2 fun dA dB = do
+  initialA <- liftIO $ dA.sample
+  initialB <- liftIO $ dB.sample
+  latestA <- liftIO $ newIORef initialA
+  latestB <- liftIO $ newIORef initialB
+  latestC <- liftIO $ newIORef (fun initialA initialB)
+  eventId <- state nextQueueId
+  let
+    updates = Event (reactive_ . unsafeSubscribe (EventId eventId))
+    fire = defer eventId do
+      newC <- liftIO $ fun <$> (readIORef latestA) <*> (readIORef latestB)
+      liftIO $ writeIORef latestC newC
+      unsafeTrigger (EventId eventId) newC
+  dA.updates.subscribe \newA -> do
+    liftIO $ writeIORef latestA newA
+    defer eventId fire
+  dB.updates.subscribe \newB -> do
+    liftIO $ writeIORef latestB newB
+    defer eventId fire
+  return $ Dynamic (readIORef latestC) updates
+
 -- | Takes a list of Dynamics and a function to generate the
 -- output. The positions of elements in the list of [Any] received by
 -- the function always correspond to the positions of [Dynamic Any]
