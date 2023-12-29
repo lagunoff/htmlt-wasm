@@ -20,7 +20,7 @@ data JsMVar a = JsMVar
 
 newEmptyJsMVar :: RJS (JsMVar a)
 newEmptyJsMVar = do
-  callback_id <- CallbackId . unQueueId <$> state nextQueueId
+  callback_id <- CallbackId <$> state nextIntId
   mvar_value <- liftIO $ newIORef Nothing
   return JsMVar {callback_id, mvar_value}
 

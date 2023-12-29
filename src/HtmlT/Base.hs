@@ -111,7 +111,7 @@ handleClientMessage inst jsMain = \case
           Right _ -> return Done
   BrowserMessage (TriggerEventMsg arg callbackId) -> do
     let
-      eventId = EventId (QueueId callbackId.unCallbackId)
+      eventId = EventId callbackId.unCallbackId
       rjs = unsafeTrigger eventId arg
     result <- runUntillInterruption inst rootScope (dynStep rjs)
     case result of
@@ -119,7 +119,7 @@ handleClientMessage inst jsMain = \case
       Right _ -> return Done
   BrowserMessage (TriggerAnimationMsg arg callbackId) -> do
     let
-      eventId = EventId (QueueId callbackId.unCallbackId)
+      eventId = EventId callbackId.unCallbackId
       rjs = unsafeTrigger eventId arg
     result <- runUntillInterruption inst rootScope (dynStep rjs)
     case result of

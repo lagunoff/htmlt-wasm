@@ -142,12 +142,15 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
       return varStorage.get(exp.scopeId)?.get(exp.varId);
     }
     case ExprTag.FreeScope: {
-      return varStorage.delete(exp.scopeId);
+      varStorage.delete(exp.scopeId);
+      const scopeFinalizers = finalizers.get(exp.scopeId);
+      if (scopeFinalizers) scopeFinalizers.forEach(fn => fn ());
+      return null;
     }
     case ExprTag.InsertNode: {
       const parent = evalExpr(idenScope, argScope, hscb, exp.parent) as Element|Comment;
       const child = evalExpr(idenScope, argScope, hscb, exp.child) as Node;
-      domBuilder.insertIntoBuilder(parent, child);
+      domHelpers.insertIntoBuilder(parent, child);
       return null;
     }
     case ExprTag.WithDomBuilder: {
@@ -168,23 +171,28 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
     case ExprTag.ElementProp: {
       const parent = evalExpr(idenScope, argScope, hscb, exp.node) as Element|Comment;
       const propValue = evalExpr(idenScope, argScope, hscb, exp.propValue);
-      domBuilder.assignProperty(parent, exp.propName, propValue);
+      domHelpers.assignProperty(parent, exp.propName, propValue);
       return null;
     }
     case ExprTag.ElementAttr: {
       const parent = evalExpr(idenScope, argScope, hscb, exp.node) as Element|Comment;
-      domBuilder.assignAttribute(parent, exp.attrName, exp.attrValue);
+      domHelpers.assignAttribute(parent, exp.attrName, exp.attrValue);
       return null;
     }
     case ExprTag.AddEventListener: {
-      const parent = evalExpr(idenScope, argScope, hscb, exp.node) as Element|Comment;
+      const target = evalExpr(idenScope, argScope, hscb, exp.target) as Element|Comment;
+      const eventName = evalExpr(idenScope, argScope, hscb, exp.eventName) as string;
       const listener = evalExpr(idenScope, argScope, hscb, exp.listener) as EventListener;
-      domBuilder.addEventListener(parent, exp.eventName, listener);
+      domHelpers.addEventListener(target, eventName, listener);
+      const existingScope = finalizers.get(exp.reactiveScope);
+      const scopeFinalizers = existingScope ? existingScope : [];
+      if (!existingScope) finalizers.set(exp.reactiveScope, scopeFinalizers);
+      scopeFinalizers.push(() => domHelpers.removeEventListener(target, eventName, listener));
       return null;
     }
     case ExprTag.ToggleClass: {
       const parent = evalExpr(idenScope, argScope, hscb, exp.node) as Element|Comment;
-      domBuilder.toggleClass(parent, exp.className, Boolean(exp.enable));
+      domHelpers.toggleClass(parent, exp.className, Boolean(exp.enable));
       return null;
     }
     case ExprTag.AssignText: {
@@ -194,11 +202,11 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
     }
     case ExprTag.InsertBoundary: {
       const parent = evalExpr(idenScope, argScope, hscb, exp.parent) as Element|Comment;
-      return domBuilder.insertBoundary(parent);
+      return domHelpers.insertBoundary(parent);
     }
     case ExprTag.ClearBoundary: {
       const boundary = evalExpr(idenScope, argScope, hscb, exp.boundary) as Comment;
-      return domBuilder.clearBoundary(boundary, Boolean(exp.detach));
+      return domHelpers.clearBoundary(boundary, Boolean(exp.detach));
     }
     case ExprTag.RevSeq: {
       return exp.exprs.reduceRight<unknown>((_, e) => evalExpr(idenScope, argScope, hscb, e), null);
@@ -404,7 +412,7 @@ export type Expr =
   | { tag: ExprTag.CreateText, content: string }
   | { tag: ExprTag.ElementProp, node: Expr, propName: string, propValue: Expr }
   | { tag: ExprTag.ElementAttr, node: Expr, attrName: string, attrValue: string }
-  | { tag: ExprTag.AddEventListener, node: Expr, eventName: string, listener: Expr }
+  | { tag: ExprTag.AddEventListener, reactiveScope: number, target: Expr, eventName: Expr, listener: Expr }
   | { tag: ExprTag.ToggleClass, node: Expr, className: string, enable: number }
   | { tag: ExprTag.AssignText, node: Expr, content: string }
   | { tag: ExprTag.InsertBoundary, parent: Expr }
@@ -453,7 +461,7 @@ export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.CreateText]: b.record({ content: b.string }),
   [ExprTag.ElementProp]: b.record({ node: self, propName: b.string, propValue: self }),
   [ExprTag.ElementAttr]: b.record({ node: self, attrName: b.string, attrValue: b.string }),
-  [ExprTag.AddEventListener]: b.record({ node: self, eventName: b.string, listener: self }),
+  [ExprTag.AddEventListener]: b.record({ reactiveScope: b.int64, target: self, eventName: self, listener: self }),
   [ExprTag.ToggleClass]: b.record({ node: self, className: b.string, enable: b.int8 }),
   [ExprTag.AssignText]: b.record({ node: self, content: b.string }),
   [ExprTag.InsertBoundary]: b.record({ parent: self }),
@@ -502,7 +510,11 @@ export const javascriptMessage = b.discriminate({
 export type HaskellMessage = typeof haskellMessage['_A'];
 export type JavaScriptMessage = typeof javascriptMessage['_A'];
 
-export const varStorage = new Map<number, Map<number, unknown>>();
+export type ReactiveScope = number;
+export type VarId = number;
+
+export const varStorage = new Map<ReactiveScope, Map<VarId, unknown>>();
+export const finalizers = new Map<ReactiveScope, Array<Function>>;
 
 export function mkStartMessage(): JavaScriptMessage {
   const initial_url: StartLocation = {
@@ -522,7 +534,7 @@ export function mkStartMessage(): JavaScriptMessage {
   };
 }
 
-namespace domBuilder {
+namespace domHelpers {
   export function insertIntoBuilder(builder: Element|Comment, child: Node): void {
     if (builder instanceof Comment) {
       builder.parentElement!.insertBefore(child, builder);
@@ -547,6 +559,11 @@ namespace domBuilder {
   export function addEventListener(builder: Element|Comment, eventName: string, listener: EventListener): void {
     const element = domBuilderElement(builder);
     element.addEventListener(eventName, listener);
+  }
+
+  export function removeEventListener(builder: Element|Comment, eventName: string, listener: EventListener): void {
+    const element = domBuilderElement(builder);
+    element.removeEventListener(eventName, listener);
   }
 
   export function toggleClass(builder: Element|Comment, className: string, enable: boolean): void {

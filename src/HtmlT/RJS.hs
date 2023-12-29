@@ -38,7 +38,7 @@ data RjsState = RjsState
   { evaluation_queue :: [Expr]
   , subscriptions :: Map EventId [(SubscriptionId, Any -> RJS ())]
   , finalizers :: Map ReactiveScope (Map FinalizerKey FinalizerValue)
-  , id_supply :: QueueId
+  , id_supply :: Int64
   -- ^ Source of unique identifiers for EventId, SubscriptionId and
   -- VarId (potentially can lead to clashes if it overflows in a
   -- long-living application, TODO: is this a legitimate concern?)
@@ -57,15 +57,15 @@ emptyRjsState = RjsState
 newtype QueueId = QueueId { unQueueId :: Int64 }
   deriving newtype (Eq, Ord, Show, Num, Enum)
 
-newtype EventId = EventId { unEventId :: QueueId }
+newtype EventId = EventId { unEventId :: Int64 }
   deriving newtype (Eq, Ord, Show, Num, Enum)
 
-newtype SubscriptionId = SubscriptionId { unSubscriptionId :: QueueId }
+newtype SubscriptionId = SubscriptionId { unSubscriptionId :: Int64 }
   deriving newtype (Eq, Ord, Show, Num, Enum)
 
 data FinalizerKey
   = EventKey EventId
-  | CustomKey QueueId
+  | CustomKey Int64
   deriving (Eq, Ord, Generic)
 
 data FinalizerValue
@@ -74,21 +74,18 @@ data FinalizerValue
   | ScopeFinalizer ReactiveScope
   | ParentScope ReactiveScope
 
-newtype ReactiveScope = ReactiveScope {unReactiveScope :: QueueId}
-  deriving newtype (Eq, Ord, Num)
-
 newVar :: RJS VarId
 newVar = reactive \e s0 ->
   let
-    (newQueueId, s1) = nextQueueId s0
-    newVarId = VarId e.unReactiveScope.unQueueId newQueueId.unQueueId
+    (newQueueId, s1) = nextIntId s0
+    newVarId = VarId e.unReactiveScope newQueueId
   in
     (newVarId, s1)
 
 newScope :: RJS ReactiveScope
 newScope = reactive \e s0 ->
   let
-    (scopeId, s1) = nextQueueId s0
+    (scopeId, s1) = nextIntId s0
     finalizerKey = CustomKey scopeId
     scope = ReactiveScope scopeId
     finalizers = Map.alter
@@ -113,7 +110,7 @@ freeScope rscope = do
     in
       (removedList, s { subscriptions, finalizers })
   runCustomFinalizers removedList
-  enqueueExpr $ FreeScope rscope.unReactiveScope.unQueueId
+  enqueueExpr $ FreeScope rscope.unReactiveScope
   where
     unsubscribe :: [(FinalizerKey, FinalizerValue)] -> Subscriptions -> Subscriptions
     unsubscribe [] !s = s
@@ -125,7 +122,7 @@ freeScope rscope = do
     unlinkParentScope :: [(FinalizerKey, FinalizerValue)] -> Finalizers -> Finalizers
     unlinkParentScope [] !s = s
     unlinkParentScope ((_, ParentScope p) : _) !s = -- Expecting at most one ParentScope
-      Map.alter (fmap (Map.delete (CustomKey (unReactiveScope p)))) p s
+      Map.alter (fmap (Map.delete (CustomKey p.unReactiveScope))) p s
     unlinkParentScope (_ : xs) !s = unlinkParentScope xs s
 
     runCustomFinalizers :: [(FinalizerKey, FinalizerValue)] -> RJS ()
@@ -143,15 +140,15 @@ freeScope rscope = do
 newCallback :: (JSVal -> RJS ()) -> RJS CallbackId
 newCallback k = reactive \e s0 ->
   let
-    (queueId, s1) = nextQueueId s0
+    (queueId, s1) = nextIntId s0
     s2 = unsafeSubscribe (EventId queueId) k e s1
   in
-    (CallbackId queueId.unQueueId, s2)
+    (CallbackId queueId, s2)
 
 releaseCallback :: CallbackId -> RJS ()
 releaseCallback callbackId = modify \s ->
   let
-    eventId = EventId (QueueId (unCallbackId callbackId))
+    eventId = EventId callbackId.unCallbackId
     -- TODO: Does it makes sence to also remove all the finalizers
     -- associated with the eventId?
     subscriptions = Map.delete eventId s.subscriptions
@@ -182,14 +179,14 @@ flushQueue = do
 yield :: CallbackId -> RJS JSVal
 yield callbackId = RJS \_ s -> return (s, YieldResult callbackId)
 
-nextQueueId :: RjsState -> (QueueId, RjsState)
-nextQueueId s =
+nextIntId :: RjsState -> (Int64, RjsState)
+nextIntId s =
   (s.id_supply, s {id_supply = succ s.id_supply})
 
 unsafeSubscribe :: EventId -> (a -> RJS ()) -> ReactiveScope -> RjsState -> RjsState
 unsafeSubscribe eventId k e s0 =
   let
-    (subId, s1) = nextQueueId s0
+    (subId, s1) = nextIntId s0
     newSubscription = (SubscriptionId subId, k . unsafeCoerce)
     f (SubscriptionSet ss1) (SubscriptionSet ss2) = SubscriptionSet (ss1 <> ss2)
     -- Unreacheable because EventKey always should map into
@@ -207,7 +204,7 @@ unsafeSubscribe eventId k e s0 =
 installFinalizer :: FinalizerValue -> ReactiveScope -> RjsState -> (FinalizerKey, RjsState)
 installFinalizer fin e s0 =
   let
-    (finalizerId, s1) = nextQueueId s0
+    (finalizerId, s1) = nextIntId s0
     finalizerKey = CustomKey finalizerId
     insertFin = Just . Map.insert finalizerKey fin . fromMaybe Map.empty
     finalizers = Map.alter insertFin e s1.finalizers

@@ -51,7 +51,7 @@ globalAddEventListener :: forall hsCallback
 globalAddEventListener target args k = Html do
   reactiveScope <- ask
   let
-    mkExpr callbackId = AddEventListener target args.event_name
+    mkExpr callbackId = AddEventListener reactiveScope target (StringE args.event_name)
       (args.mk_js_callback args.listener_options callbackId)
   callbackId <- newCallback (local (const reactiveScope) . args.mk_hs_callback k)
   modify \s -> s {evaluation_queue = mkExpr callbackId : s.evaluation_queue}

@@ -49,7 +49,7 @@ newtype Modifier a = Modifier
   }
 
 unsafeTrigger :: EventId -> a -> RJS ()
-unsafeTrigger eventId a = defer (unEventId eventId) do
+unsafeTrigger eventId a = defer (QueueId eventId.unEventId) do
   callbacks <- gets $ fromMaybe [] .
     Map.lookup eventId . (.subscriptions)
   forM_ callbacks $ ($ unsafeCoerce @_ @Any a) . snd
@@ -64,7 +64,7 @@ defer k act = modify \s ->
 newEvent :: RJS (Event a, a -> RJS ())
 newEvent = state \s0 ->
   let
-    (eventId, s1) = nextQueueId s0
+    (eventId, s1) = nextIntId s0
     event = Event (reactive_ . unsafeSubscribe (EventId eventId))
     trig = unsafeTrigger (EventId eventId)
   in
@@ -175,16 +175,17 @@ mapDyn fun dA = do
   initialA <- liftIO $ dA.sample
   latestA <- liftIO $ newIORef initialA
   latestB <- liftIO $ newIORef (fun initialA)
-  eventId <- state nextQueueId
+  queueId <- QueueId <$> state nextIntId
   let
-    updates = Event (reactive_ . unsafeSubscribe (EventId eventId))
-    fire = defer eventId do
+    eventId = EventId queueId.unQueueId
+    updates = Event (reactive_ . unsafeSubscribe eventId)
+    fire = defer queueId do
       newB <- liftIO $ fun <$> readIORef latestA
       liftIO $ writeIORef latestB newB
-      unsafeTrigger (EventId eventId) newB
+      unsafeTrigger eventId newB
   dA.updates.subscribe \newA -> do
     liftIO $ writeIORef latestA newA
-    defer eventId fire
+    defer queueId fire
   return $ Dynamic (readIORef latestB) updates
 
 mapDyn2
@@ -198,19 +199,20 @@ mapDyn2 fun dA dB = do
   latestA <- liftIO $ newIORef initialA
   latestB <- liftIO $ newIORef initialB
   latestC <- liftIO $ newIORef (fun initialA initialB)
-  eventId <- state nextQueueId
+  queueId <- QueueId <$> state nextIntId
   let
-    updates = Event (reactive_ . unsafeSubscribe (EventId eventId))
-    fire = defer eventId do
+    eventId = EventId queueId.unQueueId
+    updates = Event (reactive_ . unsafeSubscribe eventId)
+    fire = defer queueId do
       newC <- liftIO $ fun <$> (readIORef latestA) <*> (readIORef latestB)
       liftIO $ writeIORef latestC newC
-      unsafeTrigger (EventId eventId) newC
+      unsafeTrigger eventId newC
   dA.updates.subscribe \newA -> do
     liftIO $ writeIORef latestA newA
-    defer eventId fire
+    defer queueId fire
   dB.updates.subscribe \newB -> do
     liftIO $ writeIORef latestB newB
-    defer eventId fire
+    defer queueId fire
   return $ Dynamic (readIORef latestC) updates
 
 -- | Takes a list of Dynamics and a function to generate the
@@ -232,20 +234,21 @@ unsafeMapDynN fun dyns = do
   initialOutput <- liftIO $ fun initialInputs
   latestInputsRef <- liftIO $ newIORef initialInputs
   latestOutputRef <- liftIO $ newIORef initialOutput
-  eventId <- state nextQueueId
+  queueId <- QueueId <$> state nextIntId
   let
-    fire = defer eventId do
+    eventId = EventId queueId.unQueueId
+    fire = defer queueId do
       newOutput <- liftIO $ fun =<< readIORef latestInputsRef
       liftIO $ writeIORef latestOutputRef newOutput
-      unsafeTrigger (EventId eventId) newOutput
-    updates = Event (reactive_ . unsafeSubscribe (EventId eventId))
+      unsafeTrigger eventId newOutput
+    updates = Event (reactive_ . unsafeSubscribe eventId)
     updateList _ _ [] = []
     updateList 0 a (_:xs) = a:xs
     updateList n a (x:xs) = x : updateList (pred n) a xs
   forM_ (zip [0..] dyns) \(i::Int, adyn) -> do
     adyn.updates.subscribe \newVal -> do
       liftIO $ modifyIORef latestInputsRef $ updateList i newVal
-      defer eventId fire
+      defer queueId fire
   return $ Dynamic (readIORef latestOutputRef) updates
 
 type Lens' s a = forall f. Functor f => (a -> f a) -> s -> f s
@@ -291,13 +294,13 @@ instance Applicative Dynamic where
     let
       updates = Event \k -> mdo
         let
-          fire newF newA = defer eventId do
+          fire newF newA = defer queueId do
             f <- liftIO $ maybe (readDyn df) pure newF
             a <- liftIO $ maybe (readDyn da) pure newA
             k (f a)
         df.updates.subscribe \f -> fire (Just f) Nothing
         da.updates.subscribe \a -> fire Nothing (Just a)
-        eventId <- state nextQueueId
+        queueId <- QueueId <$> state nextIntId
         return ()
       sample = liftA2 ($) df.sample da.sample
     in

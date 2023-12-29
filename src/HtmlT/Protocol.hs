@@ -140,7 +140,7 @@ data Expr
   | CreateText Text
   | ElementProp Expr Text Expr
   | ElementAttr Expr Text Text
-  | AddEventListener Expr Text Expr
+  | AddEventListener ReactiveScope Expr Expr Expr
   | ToggleClass Expr Text Bool
   | AssignText Expr Text
   | InsertBoundary Expr
@@ -198,4 +198,7 @@ data VarId = VarId
     deriving anyclass (Binary)
 
 newtype CallbackId = CallbackId { unCallbackId :: Int64 }
+  deriving newtype (Show, Num, Binary, Ord, Eq)
+
+newtype ReactiveScope = ReactiveScope { unReactiveScope :: Int64 }
   deriving newtype (Show, Num, Binary, Ord, Eq)
