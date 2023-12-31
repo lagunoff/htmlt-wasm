@@ -9,12 +9,11 @@ import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe
 import Data.Tuple
+import Debug.Trace hiding (traceEventWith)
 import GHC.Exts
 import Unsafe.Coerce
 
 import "this" HtmlT.RJS
-
-newtype Event a = Event { subscribe :: (a -> RJS ()) -> RJS () }
 
 -- | Contains a value that is subject to change over time. Provides
 -- operations for reading the current value ('readDyn') and
@@ -47,6 +46,35 @@ newtype Modifier a = Modifier
   -- cases when you know that all changes already been reflected in
   -- the DOM
   }
+
+newtype Event a = Event { subscribe :: (a -> RJS ()) -> RJS () }
+
+instance Functor Event where
+  fmap f (Event s) = Event \k -> s . (. f) $ k
+
+instance Functor Dynamic where
+  fmap f (Dynamic s u) = Dynamic (fmap f s) (fmap f u)
+
+instance Applicative Dynamic where
+  pure = constDyn
+  (<*>) = dynamicSplat
+
+dynamicSplat :: Dynamic (a -> b) -> Dynamic a -> Dynamic b
+dynamicSplat df da =
+  let
+    updates = Event \k -> mdo
+      let
+        fire newF newA = defer queueId do
+          f <- liftIO $ maybe (readDyn df) pure newF
+          a <- liftIO $ maybe (readDyn da) pure newA
+          k (f a)
+      df.updates.subscribe \f -> fire (Just f) Nothing
+      da.updates.subscribe \a -> fire Nothing (Just a)
+      queueId <- QueueId <$> state nextIntId
+      return ()
+    sample = liftA2 ($) df.sample da.sample
+  in
+    Dynamic {sample, updates}
 
 unsafeTrigger :: EventId -> a -> RJS ()
 unsafeTrigger eventId a = defer (QueueId eventId.unEventId) do
@@ -282,26 +310,39 @@ dynStep act = loop0 act where
         newAct
         loop1 =<< gets (.transaction_queue)
 
-instance Functor Event where
-  fmap f (Event s) = Event \k -> s . (. f) $ k
+-------------------
+-- DEBUG HELPERS --
+-------------------
 
-instance Functor Dynamic where
-  fmap f (Dynamic s u) = Dynamic (fmap f s) (fmap f u)
+-- | Print a debug message each time given event fires
+traceEvent :: Show a => String -> Event a -> Event a
+traceEvent tag = traceEventWith (((tag <> ": ") <>) . show)
 
-instance Applicative Dynamic where
-  pure = constDyn
-  (<*>) df da =
-    let
-      updates = Event \k -> mdo
-        let
-          fire newF newA = defer queueId do
-            f <- liftIO $ maybe (readDyn df) pure newF
-            a <- liftIO $ maybe (readDyn da) pure newA
-            k (f a)
-        df.updates.subscribe \f -> fire (Just f) Nothing
-        da.updates.subscribe \a -> fire Nothing (Just a)
-        queueId <- QueueId <$> state nextIntId
-        return ()
-      sample = liftA2 ($) df.sample da.sample
-    in
-      Dynamic {sample, updates}
+-- | Print a debug message when the event fires using given printing
+-- function
+traceEventWith :: (a -> String) -> Event a -> Event a
+traceEventWith showA (Event f) =
+  Event \c -> f (c . (\x -> trace (showA x) x))
+
+-- | Print a debug message when value inside the Dynamic changes
+traceDyn :: Show a => String -> Dynamic a -> Dynamic a
+traceDyn tag = traceDynWith (((tag <> ": ") <>) . show)
+
+-- | Print a debug message when value inside Dynamic changes using
+-- given printing function
+traceDynWith :: (a -> String) -> Dynamic a -> Dynamic a
+traceDynWith showA dyn = dyn
+  { updates = traceEventWith showA dyn.updates
+  }
+
+-- | Print a debug message when value inside the DynRef changes
+traceRef :: Show a => String -> DynRef a -> DynRef a
+traceRef tag ref = ref
+  { dynamic = traceDynWith (((tag <> ": ") <>) . show) ref.dynamic
+  }
+
+-- | Print a debug message when value inside the DynRef changes
+traceRefWith :: (a -> String) -> DynRef a -> DynRef a
+traceRefWith f ref = ref
+  { dynamic = traceDynWith f ref.dynamic
+  }
