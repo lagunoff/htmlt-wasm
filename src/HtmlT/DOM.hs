@@ -48,7 +48,7 @@ globalAddEventListener :: forall hsCallback
   -> AddEventListenerArgs hsCallback
   -> hsCallback
   -> Html ()
-globalAddEventListener target args k = Html do
+globalAddEventListener target args k = liftRJS do
   reactiveScope <- ask
   let
     mkExpr callbackId = AddEventListener reactiveScope target (StringE args.event_name)

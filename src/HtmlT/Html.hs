@@ -18,77 +18,76 @@ import "this" HtmlT.RJS
 import "this" HtmlT.Protocol.JSVal
 
 
-newtype Html a = Html { unHtml :: RJS a }
-
-data HtmlState = HtmlState
-  { element_var :: Maybe VarId
-  }
+newtype Html a = Html { unHtml :: StateT SavedNodeId RJS a }
 
 deriving newtype instance Functor Html
 deriving newtype instance Applicative Html
 deriving newtype instance Monad Html
 deriving newtype instance MonadReader ReactiveScope Html
-deriving newtype instance MonadState RjsState Html
+deriving newtype instance MonadState SavedNodeId Html
 deriving newtype instance MonadIO Html
 deriving newtype instance MonadFix Html
-deriving newtype instance MonadReactive Html
 
-instance MonadRJS Html where liftRJS = Html
+instance MonadRJS Html where
+  liftRJS rjs = Html $ lift rjs
 
 instance a ~ () => IsString (Html a) where
   fromString = text . Text.pack
 
+type SavedNodeId = Maybe VarId
+
+runHtml :: Html a -> RJS a
+runHtml = flip evalStateT Nothing . unHtml
+
 el :: Text -> Html a -> Html a
-el tagName (Html content) =
-  Html $ withDomBuilder (CreateElement tagName) content
+el tagName content =
+  liftRJS $ withDomBuilder (CreateElement tagName) $ runHtml content
 
 elns :: Text -> Text -> Html a -> Html a
-elns ns tagName (Html content) =
-  Html $ withDomBuilder (CreateElementNS ns tagName) content
+elns ns tagName content =
+  liftRJS $ withDomBuilder (CreateElementNS ns tagName) $ runHtml content
 
 prop :: ToJSVal v => Text -> v -> Html ()
-prop propName propVal = modify \s ->
+prop propName propVal = liftRJS $ modify \s ->
   let
     expr = ElementProp (Arg 0 0) propName (jsvalToExpr (toJSVal propVal))
   in
     s {evaluation_queue = expr : s.evaluation_queue }
 
 attr :: Text -> Text -> Html ()
-attr attrName attrVal = modify \s ->
+attr attrName attrVal = liftRJS $ modify \s ->
   let
     expr = ElementAttr (Arg 0 0) attrName attrVal
   in
     s {evaluation_queue = expr : s.evaluation_queue}
 
 dynProp :: (ToJSVal v, Eq v) => Text -> Dynamic v -> Html ()
-dynProp propName (holdUniqDyn -> valueDyn) = Html do
+dynProp propName (holdUniqDyn -> valueDyn) = do
   rscope <- ask
   initialVal <- readDyn valueDyn
-  currentNodeVar <- newVar
-  let
-    initProp = ElementProp (Arg 0 0) propName (jsvalToExpr (toJSVal initialVal))
-    saveNode = AssignVar currentNodeVar (Arg 0 0)
-  modify \s -> s {evaluation_queue = saveNode : initProp : s.evaluation_queue }
-  valueDyn.updates.subscribe $ enqueueIfAlive rscope .
-    ElementProp (Var currentNodeVar) propName . jsvalToExpr . toJSVal
+  currentNodeVar <- saveCurrentNode
+  let initProp = ElementProp (Arg 0 0) propName (jsvalToExpr (toJSVal initialVal))
+  liftRJS do
+    modify \s -> s {evaluation_queue = initProp : s.evaluation_queue }
+    valueDyn.updates.subscribe $ enqueueIfAlive rscope .
+      ElementProp (Var currentNodeVar) propName . jsvalToExpr . toJSVal
 
 dynAttr :: Text -> Dynamic Text -> Html ()
-dynAttr attrName (holdUniqDyn -> valueDyn) = Html do
+dynAttr attrName (holdUniqDyn -> valueDyn) = do
   rscope <- ask
   initialVal <- readDyn valueDyn
-  currentNodeVar <- newVar
-  let
-    initProp = ElementAttr (Arg 0 0) attrName initialVal
-    saveNode = AssignVar currentNodeVar (Arg 0 0)
-  modify \s -> s {evaluation_queue = saveNode : initProp : s.evaluation_queue }
-  valueDyn.updates.subscribe
-    $ enqueueIfAlive rscope
-    . ElementAttr (Var currentNodeVar) attrName
+  currentNodeVar <- saveCurrentNode
+  let initProp = ElementAttr (Arg 0 0) attrName initialVal
+  liftRJS do
+    modify \s -> s {evaluation_queue = initProp : s.evaluation_queue }
+    valueDyn.updates.subscribe
+      $ enqueueIfAlive rscope
+      . ElementAttr (Var currentNodeVar) attrName
 
 toggleClass :: Text -> Dynamic Bool -> Html ()
-toggleClass className enableDyn = Html do
+toggleClass className enableDyn = do
   reactiveScope <- ask
-  currentNodeVar <- newVar
+  currentNodeVar <- saveCurrentNode
   initVal <- liftIO enableDyn.sample
   let
     enableUniqDyn = holdUniqDyn enableDyn
@@ -96,19 +95,19 @@ toggleClass className enableDyn = Html do
     initCmd True queue = InsertClassList (Arg 0 0) [className] : queue
     updateCmd False queue = RemoveClassList (Var currentNodeVar) [className] : queue
     updateCmd True queue = InsertClassList (Var currentNodeVar) [className] : queue
-    saveNode = AssignVar currentNodeVar (Arg 0 0)
     modQueueIfAlive f = modify \s -> s
       { evaluation_queue =
         if Map.member reactiveScope s.finalizers
           then f s.evaluation_queue else s.evaluation_queue
       }
-  modify \s -> s {evaluation_queue = saveNode : initCmd initVal s.evaluation_queue}
-  enableUniqDyn.updates.subscribe $ modQueueIfAlive . updateCmd
+  liftRJS do
+    modify \s -> s {evaluation_queue = initCmd initVal s.evaluation_queue}
+    enableUniqDyn.updates.subscribe $ modQueueIfAlive . updateCmd
 
 dynClassList :: Dynamic [Text] -> Html ()
-dynClassList dynList = Html do
+dynClassList dynList = do
   reactiveScope <- ask
-  currentNodeVar <- newVar
+  currentNodeVar <- saveCurrentNode
   initVal <- liftIO dynList.sample
   let
     compareList as bs =
@@ -120,50 +119,51 @@ dynClassList dynList = Html do
         (added, removed) = compareList oldList newList
       in
         Just (added, removed, newList)
-  dynListDiff <- foldDynMaybe f ([], [], []) dynList
-  let
-    initCmd = InsertClassList (Arg 0 0) initVal
-    updateCmd ([], [], _) queue = queue
-    updateCmd (added, [], _) queue = InsertClassList (Var currentNodeVar) added : queue
-    updateCmd ([], removed, _) queue = RemoveClassList (Var currentNodeVar) removed : queue
-    updateCmd (added, removed, _) queue = RemoveClassList (Var currentNodeVar) removed : InsertClassList (Var currentNodeVar) added : queue
-    saveNode = AssignVar currentNodeVar (Arg 0 0)
-    modQueueIfAlive f = modify \s -> s
-      { evaluation_queue =
-        if Map.member reactiveScope s.finalizers
-          then f s.evaluation_queue else s.evaluation_queue
-      }
-  modify \s -> s {evaluation_queue = saveNode : initCmd : s.evaluation_queue}
-  dynListDiff.updates.subscribe $ modQueueIfAlive . updateCmd
+  liftRJS do
+    dynListDiff <- foldDynMaybe f ([], [], []) dynList
+    let
+      initCmd = InsertClassList (Arg 0 0) initVal
+      updateCmd ([], [], _) queue = queue
+      updateCmd (added, [], _) queue = InsertClassList (Var currentNodeVar) added : queue
+      updateCmd ([], removed, _) queue = RemoveClassList (Var currentNodeVar) removed : queue
+      updateCmd (added, removed, _) queue = RemoveClassList (Var currentNodeVar) removed : InsertClassList (Var currentNodeVar) added : queue
+      modQueueIfAlive f = modify \s -> s
+        { evaluation_queue =
+          if Map.member reactiveScope s.finalizers
+            then f s.evaluation_queue else s.evaluation_queue
+        }
+    modify \s -> s {evaluation_queue = initCmd : s.evaluation_queue}
+    dynListDiff.updates.subscribe $ modQueueIfAlive . updateCmd
 
 text :: Text -> Html ()
 text contents = do
   let expr = InsertNode (Arg 0 0) (CreateText contents)
-  modify \s -> s {evaluation_queue = expr : s.evaluation_queue}
+  liftRJS $ modify \s -> s {evaluation_queue = expr : s.evaluation_queue}
 
 dynText :: Dynamic Text -> Html ()
-dynText (holdUniqDyn -> dynContent) = Html do
+dynText (holdUniqDyn -> dynContent) = do
   rscope <- ask
   initialContent <- readDyn dynContent
-  textNodeVar <- newVar
+  textNodeVar <- saveCurrentNode
   let
     insertText = InsertNode (Arg 0 0)
       (AssignVar textNodeVar (CreateText initialContent))
-  modify \s -> s {evaluation_queue = insertText : s.evaluation_queue }
-  dynContent.updates.subscribe $
-    enqueueIfAlive rscope . AssignText (Var textNodeVar)
+  liftRJS do
+    modify \s -> s {evaluation_queue = insertText : s.evaluation_queue }
+    dynContent.updates.subscribe $
+      enqueueIfAlive rscope . AssignText (Var textNodeVar)
 
 dyn :: Dynamic (Html ()) -> Html ()
-dyn d = Html do
+dyn d = liftRJS do
   boundary <- insertBoundary
   initialScope <- newScope
   reactiveScopeRef <- liftIO $ newIORef initialScope
   initialVal <- readDyn d
   let
-    update html = Html do
-      clearBoundary boundary
-      html.unHtml
-  local (const initialScope) $ withDomBuilder (Var boundary) initialVal.unHtml
+    update html = do
+      liftRJS $ clearBoundary boundary
+      html
+  local (const initialScope) $ withDomBuilder (Var boundary) (runHtml initialVal)
   d.updates.subscribe \newVal -> do
     newReactiveScope <- newScope
     oldReactiveScope <- liftIO $ atomicModifyIORef reactiveScopeRef (newReactiveScope,)
@@ -184,7 +184,7 @@ simpleList
   -- ^ Function to build children widget. Accepts the index inside the
   -- collection and dynamic data for that particular element
   -> Html ()
-simpleList listDyn h = Html do
+simpleList listDyn h = liftRJS do
   internalStateRef <- liftIO $ newIORef ([] :: [ElemEnv a])
   boundary <- insertBoundary
   let
@@ -196,7 +196,7 @@ simpleList listDyn h = Html do
         newElem <- newElemEnv x
         withDomBuilder (Var newElem.elem_boundary)
           $ local (const newElem.reactive_scope)
-          $ (.unHtml)
+          $ runHtml
           $ h idx newElem.elem_state_ref
         fmap (newElem:) $ setup (idx + 1) xs []
       -- New list is shorter, delete the elements that no longer
@@ -219,12 +219,12 @@ simpleList listDyn h = Html do
     finalizeElems remove = mapM_ \ee -> do
       when remove $ destroyBoundary ee.elem_boundary
       freeScope ee.reactive_scope
-    updateList new = Html do
+    updateList new = liftRJS do
       eenvs <- liftIO $ readIORef internalStateRef
       newEenvs <- setup 0 new eenvs
       liftIO $ writeIORef internalStateRef newEenvs
   initialVal <- readDyn listDyn
-  withDomBuilder (Var boundary) . (.unHtml) $ updateList initialVal
+  withDomBuilder (Var boundary) . runHtml $ updateList initialVal
   listDyn.updates.subscribe $ attachHtml (Var boundary) . updateList
 
 insertBoundary :: RJS VarId
@@ -243,7 +243,7 @@ attachHtml :: Expr -> Html a -> RJS a
 attachHtml builder contents = do
   saveQueue <- state \s ->
     (s.evaluation_queue, s {evaluation_queue = []})
-  result <- contents.unHtml
+  result <- runHtml contents
   modify \s ->
     let
       attachExpr = WithDomBuilder builder (Lam (RevSeq s.evaluation_queue))
@@ -267,3 +267,14 @@ attachToBody = attachHtml (Id "document" `Dot` "body")
 blank :: Applicative m => m ()
 blank = pure ()
 {-# INLINE blank #-}
+
+saveCurrentNode :: Html VarId
+saveCurrentNode = do
+  alreadySaved <- get
+  case alreadySaved of
+    Nothing -> do
+      varId <- liftRJS newVar
+      put $ Just varId
+      liftRJS $ enqueueExpr $ AssignVar varId (Arg 0 0)
+      return varId
+    Just saved -> return saved
