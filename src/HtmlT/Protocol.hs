@@ -141,7 +141,8 @@ data Expr
   | ElementProp Expr Text Expr
   | ElementAttr Expr Text Text
   | AddEventListener ReactiveScope Expr Expr Expr
-  | ToggleClass Expr Text Bool
+  | InsertClassList Expr [Text]
+  | RemoveClassList Expr [Text]
   | AssignText Expr Text
   | InsertBoundary Expr
   | ClearBoundary Expr Bool

@@ -1,14 +1,16 @@
 module HtmlT.Html where
 
 import Control.Monad
+import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.State
-import Control.Monad.Fix
 import Data.IORef
+import Data.Map qualified as Map
 import Data.String
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.List qualified as List
 
 import "this" HtmlT.Event
 import "this" HtmlT.Protocol
@@ -17,6 +19,10 @@ import "this" HtmlT.Protocol.JSVal
 
 
 newtype Html a = Html { unHtml :: RJS a }
+
+data HtmlState = HtmlState
+  { element_var :: Maybe VarId
+  }
 
 deriving newtype instance Functor Html
 deriving newtype instance Applicative Html
@@ -80,16 +86,55 @@ dynAttr attrName (holdUniqDyn -> valueDyn) = Html do
     . ElementAttr (Var currentNodeVar) attrName
 
 toggleClass :: Text -> Dynamic Bool -> Html ()
-toggleClass className (holdUniqDyn -> enableDyn) = Html do
-  rscope <- ask
-  initialVal <- readDyn enableDyn
+toggleClass className enableDyn = Html do
+  reactiveScope <- ask
   currentNodeVar <- newVar
+  initVal <- liftIO enableDyn.sample
   let
-    initClass = ToggleClass (Arg 0 0) className initialVal
+    enableUniqDyn = holdUniqDyn enableDyn
+    initCmd False queue = queue
+    initCmd True queue = InsertClassList (Arg 0 0) [className] : queue
+    updateCmd False queue = RemoveClassList (Var currentNodeVar) [className] : queue
+    updateCmd True queue = InsertClassList (Var currentNodeVar) [className] : queue
     saveNode = AssignVar currentNodeVar (Arg 0 0)
-  modify \s -> s {evaluation_queue = saveNode : initClass : s.evaluation_queue }
-  enableDyn.updates.subscribe $
-    enqueueIfAlive rscope . ToggleClass (Var currentNodeVar) className
+    modQueueIfAlive f = modify \s -> s
+      { evaluation_queue =
+        if Map.member reactiveScope s.finalizers
+          then f s.evaluation_queue else s.evaluation_queue
+      }
+  modify \s -> s {evaluation_queue = saveNode : initCmd initVal s.evaluation_queue}
+  enableUniqDyn.updates.subscribe $ modQueueIfAlive . updateCmd
+
+dynClassList :: Dynamic [Text] -> Html ()
+dynClassList dynList = Html do
+  reactiveScope <- ask
+  currentNodeVar <- newVar
+  initVal <- liftIO dynList.sample
+  let
+    compareList as bs =
+      (diffList as bs, diffList bs as)
+    diffList as bs = List.foldl'
+      (\xs k -> if List.elem k as then xs else k:xs) [] bs
+    f newList (_, _, oldList) =
+      let
+        (added, removed) = compareList oldList newList
+      in
+        Just (added, removed, newList)
+  dynListDiff <- foldDynMaybe f ([], [], []) dynList
+  let
+    initCmd = InsertClassList (Arg 0 0) initVal
+    updateCmd ([], [], _) queue = queue
+    updateCmd (added, [], _) queue = InsertClassList (Var currentNodeVar) added : queue
+    updateCmd ([], removed, _) queue = RemoveClassList (Var currentNodeVar) removed : queue
+    updateCmd (added, removed, _) queue = RemoveClassList (Var currentNodeVar) removed : InsertClassList (Var currentNodeVar) added : queue
+    saveNode = AssignVar currentNodeVar (Arg 0 0)
+    modQueueIfAlive f = modify \s -> s
+      { evaluation_queue =
+        if Map.member reactiveScope s.finalizers
+          then f s.evaluation_queue else s.evaluation_queue
+      }
+  modify \s -> s {evaluation_queue = saveNode : initCmd : s.evaluation_queue}
+  dynListDiff.updates.subscribe $ modQueueIfAlive . updateCmd
 
 text :: Text -> Html ()
 text contents = do

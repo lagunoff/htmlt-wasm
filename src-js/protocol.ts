@@ -190,9 +190,16 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
       scopeFinalizers.push(() => domHelpers.removeEventListener(target, eventName, listener));
       return null;
     }
-    case ExprTag.ToggleClass: {
+    case ExprTag.InsertClassList: {
       const parent = evalExpr(idenScope, argScope, hscb, exp.node) as Element|Comment;
-      domHelpers.toggleClass(parent, exp.className, Boolean(exp.enable));
+      const element = domHelpers.domBuilderElement(parent);
+      exp.classList.forEach(className => element.classList.add(className));
+      return null;
+    }
+    case ExprTag.RemoveClassList: {
+      const parent = evalExpr(idenScope, argScope, hscb, exp.node) as Element|Comment;
+      const element = domHelpers.domBuilderElement(parent);
+      exp.classList.forEach(className => element.classList.remove(className));
       return null;
     }
     case ExprTag.AssignText: {
@@ -364,7 +371,8 @@ export enum ExprTag {
   ElementProp,
   ElementAttr,
   AddEventListener,
-  ToggleClass,
+  InsertClassList,
+  RemoveClassList,
   AssignText,
   InsertBoundary,
   ClearBoundary,
@@ -413,7 +421,8 @@ export type Expr =
   | { tag: ExprTag.ElementProp, node: Expr, propName: string, propValue: Expr }
   | { tag: ExprTag.ElementAttr, node: Expr, attrName: string, attrValue: string }
   | { tag: ExprTag.AddEventListener, reactiveScope: number, target: Expr, eventName: Expr, listener: Expr }
-  | { tag: ExprTag.ToggleClass, node: Expr, className: string, enable: number }
+  | { tag: ExprTag.InsertClassList, node: Expr, classList: string[] }
+  | { tag: ExprTag.RemoveClassList, node: Expr, classList: string[] }
   | { tag: ExprTag.AssignText, node: Expr, content: string }
   | { tag: ExprTag.InsertBoundary, parent: Expr }
   | { tag: ExprTag.ClearBoundary, boundary: Expr, detach: number }
@@ -462,7 +471,8 @@ export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.ElementProp]: b.record({ node: self, propName: b.string, propValue: self }),
   [ExprTag.ElementAttr]: b.record({ node: self, attrName: b.string, attrValue: b.string }),
   [ExprTag.AddEventListener]: b.record({ reactiveScope: b.int64, target: self, eventName: self, listener: self }),
-  [ExprTag.ToggleClass]: b.record({ node: self, className: b.string, enable: b.int8 }),
+  [ExprTag.InsertClassList]: b.record({ node: self, classList: b.array(b.string) }),
+  [ExprTag.RemoveClassList]: b.record({ node: self, classList: b.array(b.string) }),
   [ExprTag.AssignText]: b.record({ node: self, content: b.string }),
   [ExprTag.InsertBoundary]: b.record({ parent: self }),
   [ExprTag.ClearBoundary]: b.record({ boundary: self, detach: b.int8 }),
@@ -566,15 +576,6 @@ namespace domHelpers {
     element.removeEventListener(eventName, listener);
   }
 
-  export function toggleClass(builder: Element|Comment, className: string, enable: boolean): void {
-    const element = domBuilderElement(builder);
-    if (enable) {
-      element.classList.add(className);
-    } else {
-      element.classList.remove(className);
-    }
-  }
-
   export function insertBoundary(builder: Element|Comment): Comment {
     const begin = document.createComment('ContentBoundary {{');
     const end = document.createComment('}}');
@@ -600,7 +601,7 @@ namespace domHelpers {
     }
   }
 
-  function domBuilderElement(builder: Element|Comment): Element {
+  export function domBuilderElement(builder: Element|Comment): Element {
     if (builder instanceof Comment) {
       return builder.parentElement!;
     }

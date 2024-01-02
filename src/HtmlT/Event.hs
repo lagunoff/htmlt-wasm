@@ -173,34 +173,45 @@ holdUniqDyn :: Eq a => Dynamic a -> Dynamic a
 holdUniqDyn = holdUniqDynBy (==)
 {-# INLINE holdUniqDyn #-}
 
--- TODO: holdUniqDynBy could be a misleading name, because it won't
--- hold the dynamic for the whole Dynamic, instead it will perform the
--- comparison for each subscription
+-- TODO: The name could be mesleading because it works differently
+-- compare to the holdUniqDynBy function in reflex. Unlike the
+-- original this version will perform comparisons equal to
+-- @number_of_updates × number_of_subscriptions@ as opposed to once
+-- per update in reflex (I could be wrong in my understanding of
+-- 'holdUniqDynBy' in Reflex)
 -- | Same as 'holdUniqDyn' but accepts arbitrary equality test
 -- function
 holdUniqDynBy :: (a -> a -> Bool) -> Dynamic a -> Dynamic a
-holdUniqDynBy equalFn dA =
+holdUniqDynBy equalFn da =
   let
     updates = Event \k -> do
-      old <- liftIO dA.sample
-      oldRef <- liftIO (newIORef old)
-      dA.updates.subscribe \new -> do
+      old <- liftIO da.sample
+      oldRef <- liftIO $ newIORef old
+      da.updates.subscribe \new -> do
         old <- liftIO $ atomicModifyIORef' oldRef (new,)
         unless (old `equalFn` new) $ k new
   in
-    Dynamic {sample = dA.sample, updates}
+    Dynamic {sample = da.sample, updates}
+
+-- | Produce a new Dynamic by applying a function to both the source
+-- (Dynamic a) and previous value of itself
+foldDynMaybe :: (a -> b -> Maybe b) -> b -> Dynamic a -> RJS (Dynamic b)
+foldDynMaybe f initB dynA = do
+  initA <- liftIO dynA.sample
+  refB <- newRef $ fromMaybe initB $ f initA initB
+  dynA.updates.subscribe \newA -> do
+    oldB <- liftIO refB.dynamic.sample
+    forM_ (f newA oldB) $ writeRef refB
+  return refB.dynamic
 
 -- | Alternative version if 'fmap' where given function will only be
 -- called once every time 'Dynamic a' value changes, whereas in 'fmap'
 -- it would be called once for each subscription per change event. As
 -- a general guideline, if the function @f! is inexpensive, choose
 -- @fmap f@. Otherwise, consider using @mapDyn f@.
-mapDyn
-  :: (a -> b)
-  -> Dynamic a
-  -> RJS (Dynamic b)
-mapDyn fun dA = do
-  initialA <- liftIO $ dA.sample
+mapDyn :: (a -> b) -> Dynamic a -> RJS (Dynamic b)
+mapDyn fun da = do
+  initialA <- liftIO $ da.sample
   latestA <- liftIO $ newIORef initialA
   latestB <- liftIO $ newIORef (fun initialA)
   queueId <- QueueId <$> state nextIntId
@@ -211,19 +222,15 @@ mapDyn fun dA = do
       newB <- liftIO $ fun <$> readIORef latestA
       liftIO $ writeIORef latestB newB
       unsafeTrigger eventId newB
-  dA.updates.subscribe \newA -> do
+  da.updates.subscribe \newA -> do
     liftIO $ writeIORef latestA newA
     defer queueId fire
   return $ Dynamic (readIORef latestB) updates
 
-mapDyn2
-  :: (a -> b -> c)
-  -> Dynamic a
-  -> Dynamic b
-  -> RJS (Dynamic c)
-mapDyn2 fun dA dB = do
-  initialA <- liftIO $ dA.sample
-  initialB <- liftIO $ dB.sample
+mapDyn2 :: (a -> b -> c) -> Dynamic a -> Dynamic b -> RJS (Dynamic c)
+mapDyn2 fun da db = do
+  initialA <- liftIO $ da.sample
+  initialB <- liftIO $ db.sample
   latestA <- liftIO $ newIORef initialA
   latestB <- liftIO $ newIORef initialB
   latestC <- liftIO $ newIORef (fun initialA initialB)
@@ -235,10 +242,10 @@ mapDyn2 fun dA dB = do
       newC <- liftIO $ fun <$> (readIORef latestA) <*> (readIORef latestB)
       liftIO $ writeIORef latestC newC
       unsafeTrigger eventId newC
-  dA.updates.subscribe \newA -> do
+  da.updates.subscribe \newA -> do
     liftIO $ writeIORef latestA newA
     defer queueId fire
-  dB.updates.subscribe \newB -> do
+  db.updates.subscribe \newB -> do
     liftIO $ writeIORef latestB newB
     defer queueId fire
   return $ Dynamic (readIORef latestC) updates

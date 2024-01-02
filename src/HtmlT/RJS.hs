@@ -166,7 +166,7 @@ enqueueIfAlive :: ReactiveScope -> Expr -> RJS ()
 enqueueIfAlive rscope e = modify \s ->
   let
     evaluation_queue =
-      if isJust (Map.lookup rscope s.finalizers)
+      if Map.member rscope s.finalizers
         then e : s.evaluation_queue else s.evaluation_queue
   in
     s {evaluation_queue}
