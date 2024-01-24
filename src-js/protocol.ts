@@ -1,5 +1,5 @@
 import * as b from './binary';
-import { absurd } from './lib';
+import { absurd, IntMap } from './lib';
 
 export type JSFunctionName = string;
 
@@ -179,17 +179,6 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
       domHelpers.assignAttribute(parent, exp.attrName, exp.attrValue);
       return null;
     }
-    case ExprTag.AddEventListener: {
-      const target = evalExpr(idenScope, argScope, hscb, exp.target) as Element|Comment;
-      const eventName = evalExpr(idenScope, argScope, hscb, exp.eventName) as string;
-      const listener = evalExpr(idenScope, argScope, hscb, exp.listener) as EventListener;
-      domHelpers.addEventListener(target, eventName, listener);
-      const existingScope = finalizers.get(exp.reactiveScope);
-      const scopeFinalizers = existingScope ? existingScope : [];
-      if (!existingScope) finalizers.set(exp.reactiveScope, scopeFinalizers);
-      scopeFinalizers.push(() => domHelpers.removeEventListener(target, eventName, listener));
-      return null;
-    }
     case ExprTag.InsertClassList: {
       const parent = evalExpr(idenScope, argScope, hscb, exp.node) as Element|Comment;
       const element = domHelpers.domBuilderElement(parent);
@@ -214,6 +203,48 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
     case ExprTag.ClearBoundary: {
       const boundary = evalExpr(idenScope, argScope, hscb, exp.boundary) as Comment;
       return domHelpers.clearBoundary(boundary, Boolean(exp.detach));
+    }
+    case ExprTag.AddEventListener: {
+      const target = evalExpr(idenScope, argScope, hscb, exp.target) as Element|Comment;
+      const eventName = evalExpr(idenScope, argScope, hscb, exp.eventName) as string;
+      const listener = evalExpr(idenScope, argScope, hscb, exp.listener) as EventListener;
+      domHelpers.addEventListener(target, eventName, listener);
+      const existingScope = finalizers.get(exp.reactiveScope);
+      const scopeFinalizers = existingScope ? existingScope : new IntMap<Function>();
+      if (!existingScope) finalizers.set(exp.reactiveScope, scopeFinalizers);
+      return scopeFinalizers.push(() => domHelpers.removeEventListener(target, eventName, listener));
+    }
+    case ExprTag.RemoveEventListener: {
+      const existingScope = finalizers.get(exp.reactiveScope);
+      if (!existingScope) return false;
+      const cancellerFn = existingScope.get(exp.listenerId);
+      if (!cancellerFn) return false;
+      existingScope.delete(exp.listenerId);
+      cancellerFn();
+      return true;
+    }
+    case ExprTag.SetTimeout: {
+      const callback = evalExpr(idenScope, argScope, hscb, exp.callback) as Function;
+      const existingScope = finalizers.get(exp.reactiveScope);
+      const scopeFinalizers = existingScope ? existingScope : new IntMap<Function>();
+      if (!existingScope) finalizers.set(exp.reactiveScope, scopeFinalizers);
+      let timeoutId: NodeJS.Timeout|null = null;
+      const finalizerId = scopeFinalizers.push(() => timeoutId && clearTimeout(timeoutId));
+      timeoutId = setTimeout(() => {
+        scopeFinalizers.delete(finalizerId);
+        timeoutId = null;
+        callback();
+      }, exp.timeout);
+      return finalizerId;
+    }
+    case ExprTag.ClearTimeout: {
+      const existingScope = finalizers.get(exp.reactiveScope);
+      if (!existingScope) return false;
+      const cancellerFn = existingScope.get(exp.timeoutId);
+      if (!cancellerFn) return false;
+      existingScope.delete(exp.timeoutId);
+      cancellerFn();
+      return true;
     }
     case ExprTag.RevSeq: {
       return exp.exprs.reduceRight<unknown>((_, e) => evalExpr(idenScope, argScope, hscb, e), null);
@@ -370,12 +401,16 @@ export enum ExprTag {
   CreateText,
   ElementProp,
   ElementAttr,
-  AddEventListener,
   InsertClassList,
   RemoveClassList,
   AssignText,
   InsertBoundary,
   ClearBoundary,
+
+  AddEventListener,
+  RemoveEventListener,
+  SetTimeout,
+  ClearTimeout,
 
   RevSeq,
   Eval,
@@ -420,12 +455,16 @@ export type Expr =
   | { tag: ExprTag.CreateText, content: string }
   | { tag: ExprTag.ElementProp, node: Expr, propName: string, propValue: Expr }
   | { tag: ExprTag.ElementAttr, node: Expr, attrName: string, attrValue: string }
-  | { tag: ExprTag.AddEventListener, reactiveScope: number, target: Expr, eventName: Expr, listener: Expr }
   | { tag: ExprTag.InsertClassList, node: Expr, classList: string[] }
   | { tag: ExprTag.RemoveClassList, node: Expr, classList: string[] }
   | { tag: ExprTag.AssignText, node: Expr, content: string }
   | { tag: ExprTag.InsertBoundary, parent: Expr }
   | { tag: ExprTag.ClearBoundary, boundary: Expr, detach: number }
+
+  | { tag: ExprTag.AddEventListener, reactiveScope: number, target: Expr, eventName: Expr, listener: Expr }
+  | { tag: ExprTag.RemoveEventListener, reactiveScope: number, listenerId: number }
+  | { tag: ExprTag.SetTimeout, reactiveScope: number, callback: Expr, timeout: number }
+  | { tag: ExprTag.ClearTimeout, reactiveScope: number, timeoutId: number }
 
   | { tag: ExprTag.RevSeq, exprs: Expr[] }
   | { tag: ExprTag.Eval, rawJavaScript: string }
@@ -470,12 +509,16 @@ export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.CreateText]: b.record({ content: b.string }),
   [ExprTag.ElementProp]: b.record({ node: self, propName: b.string, propValue: self }),
   [ExprTag.ElementAttr]: b.record({ node: self, attrName: b.string, attrValue: b.string }),
-  [ExprTag.AddEventListener]: b.record({ reactiveScope: b.int64, target: self, eventName: self, listener: self }),
   [ExprTag.InsertClassList]: b.record({ node: self, classList: b.array(b.string) }),
   [ExprTag.RemoveClassList]: b.record({ node: self, classList: b.array(b.string) }),
   [ExprTag.AssignText]: b.record({ node: self, content: b.string }),
   [ExprTag.InsertBoundary]: b.record({ parent: self }),
   [ExprTag.ClearBoundary]: b.record({ boundary: self, detach: b.int8 }),
+
+  [ExprTag.AddEventListener]: b.record({ reactiveScope: b.int64, target: self, eventName: self, listener: self }),
+  [ExprTag.RemoveEventListener]: b.record({ reactiveScope: b.int64, listenerId: b.int64 }),
+  [ExprTag.SetTimeout]: b.record({ reactiveScope: b.int64, callback: self, timeout: b.int64 }),
+  [ExprTag.ClearTimeout]: b.record({ reactiveScope: b.int64, timeoutId: b.int64 }),
 
   [ExprTag.RevSeq]: b.record({ exprs: b.array(self) }),
   [ExprTag.Eval]: b.record({ rawJavaScript: b.string }),
@@ -524,7 +567,7 @@ export type ReactiveScope = number;
 export type VarId = number;
 
 export const varStorage = new Map<ReactiveScope, Map<VarId, unknown>>();
-export const finalizers = new Map<ReactiveScope, Array<Function>>;
+export const finalizers = new Map<ReactiveScope, IntMap<Function>>;
 
 export function mkStartMessage(): JavaScriptMessage {
   const initial_url: StartLocation = {

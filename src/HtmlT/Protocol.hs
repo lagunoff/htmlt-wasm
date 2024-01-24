@@ -140,12 +140,24 @@ data Expr
   | CreateText Text
   | ElementProp Expr Text Expr
   | ElementAttr Expr Text Text
-  | AddEventListener ReactiveScope Expr Expr Expr
   | InsertClassList Expr [Text]
   | RemoveClassList Expr [Text]
   | AssignText Expr Text
   | InsertBoundary Expr
   | ClearBoundary Expr Bool
+
+  | AddEventListener ReactiveScope Expr Expr Expr
+  -- ^ @AddEventListener rscope target eventName listener@ is
+  -- equivalent to @target.addEventListener(eventName, listener)@ it
+  -- returns @ListenerId@ integer identifier that can be used in
+  -- 'RemoveEventListener', but calling 'RemoveEventListener' is not
+  -- required, it'll be called authomatically when given ReactiveScope
+  -- will be freed with 'FreeScope'
+  | RemoveEventListener ReactiveScope ListenerId
+  -- ^ Turn off listener, previously initialized with 'AddEventListener'
+  | SetTimeout ReactiveScope Expr Expr
+  -- ^ Returns TimeoutId
+  | ClearTimeout ReactiveScope TimeoutId
 
   | RevSeq [Expr]
   -- ^ Sequence of the expressions in reverse order. It will be
@@ -202,4 +214,10 @@ newtype CallbackId = CallbackId { unCallbackId :: Int64 }
   deriving newtype (Show, Num, Binary, Ord, Eq)
 
 newtype ReactiveScope = ReactiveScope { unReactiveScope :: Int64 }
+  deriving newtype (Show, Num, Binary, Ord, Eq)
+
+newtype ListenerId = ListenerId { unListenerId :: Int64 }
+  deriving newtype (Show, Num, Binary, Ord, Eq)
+
+newtype TimeoutId = TimeoutId { unTimeoutId :: Int64 }
   deriving newtype (Show, Num, Binary, Ord, Eq)
