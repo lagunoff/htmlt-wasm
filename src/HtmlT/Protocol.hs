@@ -130,8 +130,8 @@ data Expr
   -- ^ Free a variable allocated with @AssignVar@
   | Var VarId
   -- ^ Retrieve the value of the variable
-  | FreeScope Int64
-  -- ^ Free a variable allocated with @AssignVar@
+  | FreeScope ReactiveScope
+  -- ^ Free all the resources assosiated with the given ReactiveScope
 
   | InsertNode Expr Expr
   | WithDomBuilder Expr Expr
@@ -149,15 +149,14 @@ data Expr
   | AddEventListener ReactiveScope Expr Expr Expr
   -- ^ @AddEventListener rscope target eventName listener@ is
   -- equivalent to @target.addEventListener(eventName, listener)@ it
-  -- returns @ListenerId@ integer identifier that can be used in
+  -- returns @FinalizerId@ integer identifier that can be used in
   -- 'RemoveEventListener', but calling 'RemoveEventListener' is not
   -- required, it'll be called authomatically when given ReactiveScope
   -- will be freed with 'FreeScope'
-  | RemoveEventListener ReactiveScope ListenerId
-  -- ^ Turn off listener, previously initialized with 'AddEventListener'
-  | SetTimeout ReactiveScope Expr Expr
-  -- ^ Returns TimeoutId
-  | ClearTimeout ReactiveScope TimeoutId
+  | SetTimeout ReactiveScope Expr Int64
+  -- ^ Returns FinalizerId
+  | ApplyFinalizer ReactiveScope FinalizerId
+  -- ^ Actuate given finalizer before the ReactiveScope is freed
 
   | RevSeq [Expr]
   -- ^ Sequence of the expressions in reverse order. It will be
@@ -216,8 +215,5 @@ newtype CallbackId = CallbackId { unCallbackId :: Int64 }
 newtype ReactiveScope = ReactiveScope { unReactiveScope :: Int64 }
   deriving newtype (Show, Num, Binary, Ord, Eq)
 
-newtype ListenerId = ListenerId { unListenerId :: Int64 }
-  deriving newtype (Show, Num, Binary, Ord, Eq)
-
-newtype TimeoutId = TimeoutId { unTimeoutId :: Int64 }
+newtype FinalizerId = FinalizerId { unFinalizerId :: Int64 }
   deriving newtype (Show, Num, Binary, Ord, Eq)

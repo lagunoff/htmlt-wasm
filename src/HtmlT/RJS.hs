@@ -110,7 +110,7 @@ freeScope rscope = do
     in
       (removedList, s { subscriptions, finalizers })
   runCustomFinalizers removedList
-  enqueueExpr $ FreeScope rscope.unReactiveScope
+  enqueueExpr $ FreeScope rscope
   where
     unsubscribe :: [(FinalizerKey, FinalizerValue)] -> Subscriptions -> Subscriptions
     unsubscribe [] !s = s

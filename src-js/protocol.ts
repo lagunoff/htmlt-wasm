@@ -214,15 +214,6 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
       if (!existingScope) finalizers.set(exp.reactiveScope, scopeFinalizers);
       return scopeFinalizers.push(() => domHelpers.removeEventListener(target, eventName, listener));
     }
-    case ExprTag.RemoveEventListener: {
-      const existingScope = finalizers.get(exp.reactiveScope);
-      if (!existingScope) return false;
-      const cancellerFn = existingScope.get(exp.listenerId);
-      if (!cancellerFn) return false;
-      existingScope.delete(exp.listenerId);
-      cancellerFn();
-      return true;
-    }
     case ExprTag.SetTimeout: {
       const callback = evalExpr(idenScope, argScope, hscb, exp.callback) as Function;
       const existingScope = finalizers.get(exp.reactiveScope);
@@ -237,12 +228,12 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
       }, exp.timeout);
       return finalizerId;
     }
-    case ExprTag.ClearTimeout: {
+    case ExprTag.ApplyFinalizer: {
       const existingScope = finalizers.get(exp.reactiveScope);
       if (!existingScope) return false;
-      const cancellerFn = existingScope.get(exp.timeoutId);
+      const cancellerFn = existingScope.get(exp.finalizerId);
       if (!cancellerFn) return false;
-      existingScope.delete(exp.timeoutId);
+      existingScope.delete(exp.finalizerId);
       cancellerFn();
       return true;
     }
@@ -408,9 +399,8 @@ export enum ExprTag {
   ClearBoundary,
 
   AddEventListener,
-  RemoveEventListener,
   SetTimeout,
-  ClearTimeout,
+  ApplyFinalizer,
 
   RevSeq,
   Eval,
@@ -462,9 +452,8 @@ export type Expr =
   | { tag: ExprTag.ClearBoundary, boundary: Expr, detach: number }
 
   | { tag: ExprTag.AddEventListener, reactiveScope: number, target: Expr, eventName: Expr, listener: Expr }
-  | { tag: ExprTag.RemoveEventListener, reactiveScope: number, listenerId: number }
   | { tag: ExprTag.SetTimeout, reactiveScope: number, callback: Expr, timeout: number }
-  | { tag: ExprTag.ClearTimeout, reactiveScope: number, timeoutId: number }
+  | { tag: ExprTag.ApplyFinalizer, reactiveScope: number, finalizerId: number }
 
   | { tag: ExprTag.RevSeq, exprs: Expr[] }
   | { tag: ExprTag.Eval, rawJavaScript: string }
@@ -516,9 +505,8 @@ export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.ClearBoundary]: b.record({ boundary: self, detach: b.int8 }),
 
   [ExprTag.AddEventListener]: b.record({ reactiveScope: b.int64, target: self, eventName: self, listener: self }),
-  [ExprTag.RemoveEventListener]: b.record({ reactiveScope: b.int64, listenerId: b.int64 }),
   [ExprTag.SetTimeout]: b.record({ reactiveScope: b.int64, callback: self, timeout: b.int64 }),
-  [ExprTag.ClearTimeout]: b.record({ reactiveScope: b.int64, timeoutId: b.int64 }),
+  [ExprTag.ApplyFinalizer]: b.record({ reactiveScope: b.int64, finalizerId: b.int64 }),
 
   [ExprTag.RevSeq]: b.record({ exprs: b.array(self) }),
   [ExprTag.Eval]: b.record({ rawJavaScript: b.string }),
