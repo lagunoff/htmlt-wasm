@@ -1,6 +1,7 @@
 module HtmlT.Protocol where
 
 import Data.Binary (Binary)
+import Data.ByteString (ByteString)
 import Data.Int
 import Data.Text (Text)
 import Data.Word
@@ -78,6 +79,8 @@ data Expr
   -- ^ JavaScript array
   | ObjectE [(Text, Expr)]
   -- ^ JavaScript object
+  | Uint8ArrayE ByteString
+  -- ^ Raw byte array
 
   | Dot Expr Text
   -- ^ Read string property of an object. @(Dot (Id "document")
@@ -202,6 +205,7 @@ jsvalToExpr = \case
   JSVal.String a -> StringE a
   JSVal.Array xs -> ArrayE $ fmap jsvalToExpr xs
   JSVal.Object kv -> ObjectE $ fmap (\(k, v) -> (k, jsvalToExpr v)) kv
+  JSVal.Uint8Array a -> Uint8ArrayE a
 
 data VarId = VarId
   { scope :: Int64

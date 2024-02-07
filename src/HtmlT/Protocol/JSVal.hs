@@ -1,6 +1,7 @@
 module HtmlT.Protocol.JSVal where
 
 import Data.Binary
+import Data.ByteString
 import Data.Kind
 import Data.List qualified as List
 import Data.Maybe
@@ -13,12 +14,13 @@ import "this" HtmlT.Protocol.JSNumber (JSNumber(..))
 import "this" HtmlT.Protocol.JSNumber qualified as JSNumber
 
 data JSVal
-  = Object [(Text, JSVal)]
-  | Array [JSVal]
-  | String Text
-  | Number JSNumber
+  = Null
   | Bool Bool
-  | Null
+  | Number JSNumber
+  | String Text
+  | Array [JSVal]
+  | Object [(Text, JSVal)]
+  | Uint8Array ByteString
   deriving stock (Generic, Show)
   deriving anyclass (Binary)
 

@@ -33,17 +33,20 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
     case ExprTag.Boolean: {
        return exp[0] != 0;
     }
-    case ExprTag.Num: {
+    case ExprTag.Number: {
       return Number(exp.decimal);
     }
-    case ExprTag.Str: {
+    case ExprTag.String: {
       return exp[0];
     }
-    case ExprTag.Arr: {
+    case ExprTag.Array: {
       return exp[0].map(evalExpr.bind(undefined, idenScope, argScope, hscb));
     }
-    case ExprTag.Obj: {
+    case ExprTag.Object: {
       return Object.fromEntries(exp[0].map(([k, e]) => [k, evalExpr(idenScope, argScope, hscb, e)]));
+    }
+    case ExprTag.Uint8Array: {
+      return exp[0];
     }
     case ExprTag.Dot: {
       const lhs = evalExpr(idenScope, argScope, hscb, exp[0]) as any;
@@ -279,54 +282,60 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
 
 export function unknownToJValue(inp: unknown): JValue {
   if (typeof(inp) === 'boolean') {
-    return { tag: JValueTag.JBool, 0: inp ? 1 : 0 };
+    return { tag: JValueTag.Boolean, 0: inp ? 1 : 0 };
   }
   if (typeof(inp) === 'number') {
     const decimal = inp.toString();
-    return { tag: JValueTag.JNum, decimal };
+    return { tag: JValueTag.Number, decimal };
   }
   if (typeof(inp) === 'string') {
-    return { tag: JValueTag.JStr, 0: inp };
+    return { tag: JValueTag.String, 0: inp };
   }
   if (Array.isArray(inp)) {
-    return { tag: JValueTag.JArr, 0: inp.map(unknownToJValue) };
+    return { tag: JValueTag.Array, 0: inp.map(unknownToJValue) };
+  }
+  if (inp instanceof Uint8Array) {
+    return { tag: JValueTag.Uint8Array, 0: inp };
   }
   if (inp === null || inp === undefined) {
-    return { tag: JValueTag.JNull };
+    return { tag: JValueTag.Null };
   }
   const entries = Object.entries(inp)
     .map(([k, v]) => [k, unknownToJValue(v)] as KV);
 
-  return { tag: JValueTag.JObj, 0: entries }
+  return { tag: JValueTag.Object, 0: entries }
 
   type KV = [string, JValue];
 }
 
 export enum JValueTag {
-  JObj,
-  JArr,
-  JStr,
-  JNum,
-  JBool,
-  JNull,
+  Null,
+  Boolean,
+  Number,
+  String,
+  Array,
+  Object,
+  Uint8Array,
 }
 
 export type JValue =
-  | { tag: JValueTag.JObj, 0: [string, JValue][] }
-  | { tag: JValueTag.JArr, 0: JValue[] }
-  | { tag: JValueTag.JStr, 0: string }
-  | { tag: JValueTag.JNum, decimal: string }
-  | { tag: JValueTag.JBool, 0: number }
-  | { tag: JValueTag.JNull }
+  | { tag: JValueTag.Null }
+  | { tag: JValueTag.Boolean, 0: number }
+  | { tag: JValueTag.Number, decimal: string }
+  | { tag: JValueTag.String, 0: string }
+  | { tag: JValueTag.Array, 0: JValue[] }
+  | { tag: JValueTag.Object, 0: [string, JValue][] }
+  | { tag: JValueTag.Uint8Array, 0: Uint8Array }
 ;
 
 export const jvalue = b.recursive<JValue>(self => b.discriminate({
-  [JValueTag.JObj]: b.record({ 0: b.array(b.tuple(b.string, self)) }),
-  [JValueTag.JArr]: b.record({ 0: b.array(self) }),
-  [JValueTag.JStr]: b.record({ 0: b.string }),
-  [JValueTag.JNum]: b.record({ decimal: b.string }),
-  [JValueTag.JBool]: b.record({ 0: b.int8 }),
-  [JValueTag.JNull]: b.record({ }),
+  [JValueTag.Null]: b.record({ }),
+  [JValueTag.Boolean]: b.record({ 0: b.int8 }),
+  [JValueTag.Number]: b.record({ decimal: b.string }),
+  [JValueTag.String]: b.record({ 0: b.string }),
+  [JValueTag.Array]: b.record({ 0: b.array(self) }),
+  [JValueTag.Object]: b.record({ 0: b.array(b.tuple(b.string, self)) }),
+  [JValueTag.Uint8Array]: b.record({ 0: b.u8array }),
 }));
 
 export type StartLocation = {
@@ -360,10 +369,11 @@ export const startFlags: b.Decoder<StartFlags> = b.record({
 export enum ExprTag {
   Null,
   Boolean,
-  Num,
-  Str,
-  Arr,
-  Obj,
+  Number,
+  String,
+  Array,
+  Object,
+  Uint8Array,
 
   Dot,
   AssignProp,
@@ -413,10 +423,11 @@ export enum ExprTag {
 export type Expr =
   | { tag: ExprTag.Null }
   | { tag: ExprTag.Boolean, 0: number }
-  | { tag: ExprTag.Num, decimal: string }
-  | { tag: ExprTag.Str, 0: string }
-  | { tag: ExprTag.Arr, 0: Expr[] }
-  | { tag: ExprTag.Obj, 0: [string, Expr][] }
+  | { tag: ExprTag.Number, decimal: string }
+  | { tag: ExprTag.String, 0: string }
+  | { tag: ExprTag.Array, 0: Expr[] }
+  | { tag: ExprTag.Object, 0: [string, Expr][] }
+  | { tag: ExprTag.Uint8Array, 0: Uint8Array }
 
   | { tag: ExprTag.Dot, 0: Expr, 1: string }
   | { tag: ExprTag.AssignProp, 0: Expr, 1: string, 2: Expr }
@@ -466,10 +477,10 @@ export type Expr =
 export const expr = b.recursive<Expr>(self => b.discriminate({
   [ExprTag.Null]: b.record({}),
   [ExprTag.Boolean]: b.record({ 0: b.int8 }),
-  [ExprTag.Num]: b.record({ decimal: b.string }),
-  [ExprTag.Str]: b.record({ 0: b.string }),
-  [ExprTag.Arr]: b.record({ 0: b.array(self) }),
-  [ExprTag.Obj]: b.record({ 0: b.array(b.tuple(b.string, self)) }),
+  [ExprTag.Number]: b.record({ decimal: b.string }),
+  [ExprTag.String]: b.record({ 0: b.string }),
+  [ExprTag.Array]: b.record({ 0: b.array(self) }),
+  [ExprTag.Object]: b.record({ 0: b.array(b.tuple(b.string, self)) }),
 
   [ExprTag.Dot]: b.record({ 0: self, 1: b.string }),
   [ExprTag.AssignProp]: b.record({ 0: self, 1: b.string, 2: self }),

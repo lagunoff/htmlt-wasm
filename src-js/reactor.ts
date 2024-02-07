@@ -6,9 +6,8 @@ import { HaskellMessage, JavaScriptMessage, JavaScriptMessageTag, HaskellMessage
 export type HaskellPointer = number;
 
 export type HaskellExports = {
-  init_greadymem: () => void;
-  init_debug: () => void;
   _initialize: () => void;
+  hs_init: () => void;
   hs_malloc: (size: number) => HaskellPointer;
   hs_free: (ptr: HaskellPointer) => void;
   app: (input: HaskellPointer) => HaskellPointer;
@@ -85,7 +84,7 @@ function interactWithHaskell(inst: HaskellIstance, down: JavaScriptMessage): Has
 }
 
 export type StartReactorOptions = {
-  greedyMem?: boolean;
+  // No options so far
 };
 
 export async function startReactor(wasmUri: string, opt: StartReactorOptions = {}): Promise<void> {
@@ -101,13 +100,9 @@ export async function startReactor(wasmUri: string, opt: StartReactorOptions = {
   const inst = await WebAssembly.instantiate(wasm, {
     "wasi_snapshot_preview1": wasi.wasiImport
   }) as HaskellIstance;
-  wasi.inst = inst;
-  inst.exports._initialize();
-  if (opt.greedyMem) {
-    inst.exports.init_greadymem();
-  } else {
-    inst.exports.init_debug();
-  }
+
+  wasi.initialize(inst);
+  inst.exports.hs_init();
 
   window.addEventListener("beforeunload", () => haskellApp(inst, { tag: JavaScriptMessageTag.BeforeUnload }));
 

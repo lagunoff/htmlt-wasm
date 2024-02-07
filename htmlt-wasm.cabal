@@ -100,10 +100,8 @@ executable voting
   import: common-config
   if arch(wasm32)
     ghc-options:
-      -no-hs-main -optl-mexec-model=reactor -dlint -debug
-      -optl-Wl,--export=init_greadymem,--export=init_debug,--export=app,--export=hs_malloc,--export=hs_free
-    c-sources: cbits/init_greadymem.c
-    include-dirs: cbits
+      -no-hs-main -optl-mexec-model=reactor
+      -optl-Wl,--export=hs_init,--export=app,--export=hs_malloc,--export=hs_free
     main-is: reactor.hs
   else
     if arch(javascript)
@@ -126,10 +124,8 @@ executable todomvc
   import: common-config
   if arch(wasm32)
     ghc-options:
-      -no-hs-main -optl-mexec-model=reactor -dlint -debug
-      -optl-Wl,--export=init_greadymem,--export=init_debug,--export=app,--export=hs_malloc,--export=hs_free
-    c-sources: cbits/init_greadymem.c
-    include-dirs: cbits
+      -no-hs-main -optl-mexec-model=reactor
+      -optl-Wl,--export=hs_init,--export=app,--export=hs_malloc,--export=hs_free
     main-is: reactor.hs
   else
     if arch(javascript)
