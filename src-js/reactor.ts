@@ -8,6 +8,7 @@ export type HaskellPointer = number;
 export type HaskellExports = {
   init_greadymem: () => void;
   init_debug: () => void;
+  _initialize: () => void;
   hs_malloc: (size: number) => HaskellPointer;
   hs_free: (ptr: HaskellPointer) => void;
   app: (input: HaskellPointer) => HaskellPointer;
@@ -101,7 +102,7 @@ export async function startReactor(wasmUri: string, opt: StartReactorOptions = {
     "wasi_snapshot_preview1": wasi.wasiImport
   }) as HaskellIstance;
   wasi.inst = inst;
-
+  inst.exports._initialize();
   if (opt.greedyMem) {
     inst.exports.init_greadymem();
   } else {

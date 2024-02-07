@@ -30,10 +30,6 @@ The choice of binary commands to interface with JavaScript has following drawbac
 The key benefit of htmlt-wasm is that is has much fewer dependencies and much fewer lines in actual implementation, providing similar value. Also the code is much more understandable. This is my personal opinion of course and other people will have different perspectives, I admit it's far from being ideal at the time of writing, but I'll try my best to cleanup the code abd provide documentation as the codebase matures. Also if you use `JSaddle` with `GHCJS` you might noticed an annoying fact that you have to write two versions of FFI for `GHCJS` and `JSaddle` that can potentially diverge and can lead to production bugs. In contrast htmlt-wasm you don't have this distinction it works similar way to `JSaddle` either throught websockets (on a devserver) or throught WASM shared memory (in production) using the same protocol. This protocol also optimized to minimize round-trips resulting in faster hot-reloading experience compared to `JSaddle`.
 
 
-# 🐞 WebAssembly Backend Bug
-
-Unfortunately I encountered a bug in WebAssembly Backend — reactor module crashes after several GC sweeps. To counteract that I tweak RTS options (greadymem examples) that prolong application lifetime in exchange for high memory consumption. Hopefully the bug will be addressed in near future
-
 # 🛠️How to build examples
 
 First thing you'll need is [nix](https://nixos.org/download.html) package manager. The last thing you need — is to have any server for hosting static files for WebAssembly examples
@@ -78,9 +74,6 @@ yarn run webpack --mode production
       <td>
         <a href=https://lagunoff.github.io/htmlt-wasm/examples/voting.html target=_blank>open</a>
       </td>
-      <td>
-        <a href=https://lagunoff.github.io/htmlt-wasm/examples/voting-greedymem.html target=_blank>greadymem hack</a>
-      </td>
     </tr>
     <tr>
       <td>TodoMVC</td>
@@ -88,16 +81,12 @@ yarn run webpack --mode production
       <td>
         <a href=https://lagunoff.github.io/htmlt-wasm/examples/todomvc.html target=_blank>open</a>
       </td>
-      <td>
-        <a href=https://lagunoff.github.io/htmlt-wasm/examples/todomvc-greedymem.html target=_blank>greadymem hack</a>
-      </td>
     </tr>
   </tbody>
 </table>
 
 # ✅ TODOs
 
- - [ ] Gather data for the WebAssembly Backend bug report, make an isolated counterexample
  - [x] Add Benchmarks
  - [ ] <s>Decouple RJS's built-in reactive capabilities into a separate ReactiveT transformer</s>. Tried it, didn't work, polymorphic ReactiveT quickly became overly complex, so I'm keeping it all concreete and straightforward inside a single RJS monad
  - [ ] Improve messaging protocol (make a version that is readable JSON and another compact and fast binary version)
