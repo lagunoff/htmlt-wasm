@@ -144,7 +144,7 @@ dynText :: Dynamic Text -> Html ()
 dynText (holdUniqDyn -> dynContent) = do
   rscope <- ask
   initialContent <- readDyn dynContent
-  textNodeVar <- saveCurrentNode
+  textNodeVar <- liftRJS newVar
   let
     insertText = InsertNode (Arg 0 0)
       (AssignVar textNodeVar (CreateText initialContent))
