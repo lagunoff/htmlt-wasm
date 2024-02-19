@@ -1,4 +1,5 @@
 import * as b from './binary';
+import { Maybe, MaybeTag } from './binary';
 import { absurd, IntMap } from './lib';
 
 export type JSFunctionName = string;
@@ -359,11 +360,13 @@ export const startLocation: b.Decoder<StartLocation> = b.record({
 export type StartFlags = {
   initial_url: StartLocation;
   window_inner_size: [number, number];
+  devserver_connection_id: Maybe<number>;
 };
 
 export const startFlags: b.Decoder<StartFlags> = b.record({
   initial_url: startLocation,
   window_inner_size: b.tuple(b.int64, b.int64),
+  devserver_connection_id: b.maybe(b.int64),
 });
 
 export enum ExprTag {
@@ -581,7 +584,8 @@ export function mkStartMessage(): JavaScriptMessage {
     tag: JavaScriptMessageTag.Start,
     startFlags: {
       initial_url,
-      window_inner_size: [window.innerWidth, window.innerHeight]
+      window_inner_size: [window.innerWidth, window.innerHeight],
+      devserver_connection_id: { tag: MaybeTag.Nothing },
     }
   };
 }

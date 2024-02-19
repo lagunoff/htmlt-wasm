@@ -357,3 +357,16 @@ export function recursive<A>(f: (self: Decoder<any>) => Decoder<A>): Decoder<A> 
   self._self = result;
   return result;
 }
+
+export type Maybe<A>
+  = { tag: MaybeTag.Nothing }
+  | { tag: MaybeTag.Just, 0: A };
+
+export enum MaybeTag { Nothing, Just };
+
+export function maybe<A>(decoder: Decoder<A>): Decoder<Maybe<A>> {
+  return discriminate({
+    [MaybeTag.Nothing]: record({}),
+    [MaybeTag.Just]: record({ 0: decoder })
+  });
+}
