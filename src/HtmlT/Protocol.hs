@@ -159,7 +159,7 @@ data Expr
   -- will be freed with 'FreeScope'
   | SetTimeout ReactiveScope Expr Int64
   -- ^ Returns FinalizerId
-  | ApplyFinalizer ReactiveScope FinalizerId
+  | ApplyFinalizer ReactiveScope Expr
   -- ^ Actuate given finalizer before the ReactiveScope is freed
 
   | RevSeq [Expr]

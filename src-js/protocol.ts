@@ -234,10 +234,11 @@ export function evalExpr(idenScope: List<Bindings>, argScope: List<IArguments>, 
     }
     case ExprTag.ApplyFinalizer: {
       const existingScope = finalizers.get(exp.reactiveScope);
+      const finalizerId = evalExpr(idenScope, argScope, hscb, exp.finalizerId) as number;
       if (!existingScope) return false;
-      const cancellerFn = existingScope.get(exp.finalizerId);
+      const cancellerFn = existingScope.get(finalizerId);
       if (!cancellerFn) return false;
-      existingScope.delete(exp.finalizerId);
+      existingScope.delete(finalizerId);
       cancellerFn();
       return true;
     }
@@ -467,7 +468,7 @@ export type Expr =
 
   | { tag: ExprTag.AddEventListener, reactiveScope: number, target: Expr, eventName: Expr, listener: Expr }
   | { tag: ExprTag.SetTimeout, reactiveScope: number, callback: Expr, timeout: number }
-  | { tag: ExprTag.ApplyFinalizer, reactiveScope: number, finalizerId: number }
+  | { tag: ExprTag.ApplyFinalizer, reactiveScope: number, finalizerId: Expr }
 
   | { tag: ExprTag.RevSeq, exprs: Expr[] }
   | { tag: ExprTag.Eval, rawJavaScript: string }
@@ -520,7 +521,7 @@ export const expr = b.recursive<Expr>(self => b.discriminate({
 
   [ExprTag.AddEventListener]: b.record({ reactiveScope: b.int64, target: self, eventName: self, listener: self }),
   [ExprTag.SetTimeout]: b.record({ reactiveScope: b.int64, callback: self, timeout: b.int64 }),
-  [ExprTag.ApplyFinalizer]: b.record({ reactiveScope: b.int64, finalizerId: b.int64 }),
+  [ExprTag.ApplyFinalizer]: b.record({ reactiveScope: b.int64, finalizerId: self }),
 
   [ExprTag.RevSeq]: b.record({ exprs: b.array(self) }),
   [ExprTag.Eval]: b.record({ rawJavaScript: b.string }),
